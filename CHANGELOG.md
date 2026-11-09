@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.0 — 2026-11-09
+
+Menu UX (user-tested feedback): csl-style terminal-native theme (ansi_default surfaces,
+rounded `ansi_bright_black` panels, text-only highlights) and a visible
+"Back to main menu (no save)" action on every submenu plus b/esc/q keys.
+Also: `python -m motion_pipeline` launches the menu from the CLI.
+
 ## v0.1.3 — 2026-11-09
 
 `__version__` drifted from pyproject (brew run printed 0.1.0 on a 0.1.2 install) —
