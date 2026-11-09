@@ -165,7 +165,7 @@ overflow:hidden;height:{line_h}px}}
 font-size:{int(H / 8)}px;font-weight:{roles['headline']['weight']};color:{palette['text']};
 background:{palette['background_dark']};opacity:0}}
 </style></head><body>
-<div id="root" data-composition-id="{card_id}" data-duration="{duration:.3f}">
+<div id="root" data-composition-id="{card_id}" data-width="{W}" data-height="{H}" data-fps="{pj['fps']}" data-duration="{duration:.3f}">
 <canvas id="bg" width="{W}" height="{H}"></canvas>
 <div id="{card_id}">{sec['name']}</div>
 {chr(10).join(line_html)}

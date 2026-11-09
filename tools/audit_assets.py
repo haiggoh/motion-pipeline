@@ -41,6 +41,8 @@ def main(argv=None):
     for path in r.stdout.splitlines():
         if any(path.startswith(s) or f'/{s}/' in path for s in SKIP_DIRS):
             continue
+        if path.endswith('audit_assets.py'):
+            continue  # its own pattern literals would self-match
         for pat, label in PATH_PATTERNS:
             if pat.search(path):
                 print(f'{path}: {label}')
