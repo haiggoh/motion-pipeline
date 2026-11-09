@@ -10,6 +10,9 @@ Derivation rules (documented per G3):
   highlight_bar   = accent
   label_tint      = mix(accent, background_dark, 0.35)   (in OKLab)
   secondary_text  = mix(text, background_dark, 0.30)     (dimmed body text)
+  particle_colour = mix(accent, background_dark, 0.60)   (dots stay close to the background
+                                                         chroma — a full-accent dot edge would
+                                                         band in the chroma gate, measured)
 Contrast floors (fail loudly, naming the pair): text on background_dark >= 4.5:1,
 accent on background_dark >= 3.0:1 (WCAG relative luminance).
 """
@@ -109,7 +112,7 @@ def derive_palette(scheme):
         'background_dark': dark, 'background_light': light, 'accent': accent, 'text': text,
         'secondary_text': mix(text, dark, 0.30),
         'label_tint': mix(accent, dark, 0.35),
-        'particle_colour': accent,
+        'particle_colour': mix(accent, dark, 0.60),
         'highlight_bar': accent,
         'gradient_stops': [dark, light],
     }

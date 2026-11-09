@@ -16,8 +16,8 @@ def test_palette_has_exactly_the_pinned_keys():
     p = derive_palette(DARK)
     assert set(p.keys()) == set(PALETTE_KEYS)
     assert p['gradient_stops'] == [DARK['background_dark'], DARK['background_light']]
-    assert p['particle_colour'] == DARK['accent']
     assert p['highlight_bar'] == DARK['accent']
+    assert p['particle_colour'] == '#635955'  # accent mixed toward the background
 
 
 def test_golden_dark_scheme():
@@ -25,7 +25,7 @@ def test_golden_dark_scheme():
     assert p == {
         'background_dark': '#0b1a4c', 'background_light': '#1251a6', 'accent': '#ffb400',
         'text': '#f5f7ff', 'secondary_text': '#a6b0c8', 'label_tint': '#a17f4e',
-        'particle_colour': '#ffb400', 'highlight_bar': '#ffb400',
+        'particle_colour': '#635955', 'highlight_bar': '#ffb400',
         'gradient_stops': ['#0b1a4c', '#1251a6'],
     }
 
@@ -35,7 +35,7 @@ def test_golden_light_scheme():
     assert p == {
         'background_dark': '#f4f6fb', 'background_light': '#c9d6f2', 'accent': '#0b3d91',
         'text': '#101828', 'secondary_text': '#4b5261', 'label_tint': '#5c7eb8',
-        'particle_colour': '#0b3d91', 'highlight_bar': '#0b3d91',
+        'particle_colour': '#94abd3', 'highlight_bar': '#0b3d91',
         'gradient_stops': ['#f4f6fb', '#c9d6f2'],
     }
     # light scheme must pass the same contrast floors (design §8a)
