@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.2 — 2026-11-09
+
+Homebrew launcher fix (caught by `brew install` + first run): python@3.14 is keg-only,
+so the wrapper must call `python3.14`, and it now runs the shipped package via PYTHONPATH
+instead of pip-installing it (avoids requiring the uv_build backend at install time).
+Also wires `python -m motion_pipeline` to launch the interactive menu.
+
 ## v0.1.1 — 2026-11-09
 
 Fix-forward from dogfooding the v0.1.0 tarball: de-brand the changelog (the asset
