@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.0 — 2026-11-09
+
+Custom paths + output affordances (user requests): every submenu that asks for
+files or writes output has a path field (drag a file/folder from Finder into the
+terminal input to paste its path); render and background-test screens take a
+custom output directory (`render_scene.sh --out DIR`) and on completion show the
+output directory as a clickable OSC-8 `file://` link (cmd+click opens Finder) plus
+an "Open output in Finder" button. The background test render now shows the
+rendered test frame inline in the terminal below the buttons (ANSI half-block image).
+
 ## v0.2.0 — 2026-11-09
 
 Menu UX (user-tested feedback): csl-style terminal-native theme (ansi_default surfaces,
