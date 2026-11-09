@@ -1,0 +1,19 @@
+[build-system]
+requires = ["uv_build>=0.8"]
+build-backend = "uv_build"
+
+[project]
+name = "motion-pipeline"
+version = "0.1.0"
+description = "Reusable, publishable kinetic-typography render pipeline with a no-code project menu (CI colours + font + transcript + optional VO in, 10-bit masters out)"
+requires-python = ">=3.11"
+dependencies = [
+    "textual>=0.80",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+motion-pipeline = "motion_pipeline.__main__:main"

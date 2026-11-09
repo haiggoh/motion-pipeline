@@ -1,0 +1,16 @@
+# virtualenv
+.venv/
+
+# python
+__pycache__/
+*.pyc
+
+# per-project runtime output (projects live under projects/<name>/)
+projects/*/renders/
+projects/*/scratch/
+# client fonts are NEVER committed to this repo (decide-question 2, user-approved default)
+projects/*/fonts/
+
+# top-level equivalents when running in-repo
+renders/
+scratch/
