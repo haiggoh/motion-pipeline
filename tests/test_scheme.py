@@ -32,8 +32,12 @@ def test_golden_dark_scheme():
 
 def test_golden_light_scheme():
     p = derive_palette(LIGHT)
-    assert p['background_dark'] == '#f4f6fb'
-    assert p['gradient_stops'] == ['#f4f6fb', '#c9d6f2']
+    assert p == {
+        'background_dark': '#f4f6fb', 'background_light': '#c9d6f2', 'accent': '#0b3d91',
+        'text': '#101828', 'secondary_text': '#4b5261', 'label_tint': '#5c7eb8',
+        'particle_colour': '#0b3d91', 'highlight_bar': '#0b3d91',
+        'gradient_stops': ['#f4f6fb', '#c9d6f2'],
+    }
     # light scheme must pass the same contrast floors (design §8a)
     assert contrast(p['text'], p['background_dark']) >= 4.5
 
@@ -42,6 +46,19 @@ def test_contrast_floor_violation_names_the_pair():
     bad = dict(DARK, text='#0b1a4c')  # dark text on dark background
     with pytest.raises(ValueError, match=r'contrast text on background_dark.*#0b1a4c'):
         derive_palette(bad)
+
+
+def test_accent_contrast_floor_is_enforced():
+    bad = dict(DARK, accent='#1a2a6c')  # low-contrast accent on the dark background
+    with pytest.raises(ValueError, match=r'contrast accent on background_dark.*3\.0'):
+        derive_palette(bad)
+
+
+def test_save_refuses_contrast_violation(tmp_path):
+    p = tmp_path / 'scheme.json'
+    with pytest.raises(ValueError, match='contrast'):
+        save_scheme(str(p), dict(DARK, text='#0b1a4c'))
+    assert not p.exists()
 
 
 def test_invalid_hex_fails_loudly():

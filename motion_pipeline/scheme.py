@@ -122,6 +122,7 @@ def load_scheme(path):
 
 def save_scheme(path, scheme):
     validate_scheme(scheme)
+    derive_palette(scheme)  # enforces the contrast floors: a set-but-invalid scheme fails loudly
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + '.tmp'
     with open(tmp, 'w') as f:
