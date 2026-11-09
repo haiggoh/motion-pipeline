@@ -3,7 +3,7 @@
 ## v0.1.0 — 2026-11-09
 
 First public release of the reusable, publishable kinetic-typography render pipeline
-with a no-code project menu (extracted from the P&G Cube One explainer pipeline).
+with a no-code project menu (extracted from a client explainer project's pipeline).
 
 - Textual menu (steps 1–6): CI colours (OKLab-derived palette, contrast floors, light/dark
   schemes, variants), font family + role mapping (bundled OFL; client fonts gitignored with
