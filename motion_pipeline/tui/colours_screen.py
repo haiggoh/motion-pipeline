@@ -7,12 +7,12 @@ re-editable in the menu").
 """
 import os
 
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Input, Label, ListItem, ListView, Static
 
 from .. import scheme as scheme_mod
+from .base import MenuAppBase, SubmenuScreen
 
 PROJECTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'projects')
 
@@ -21,8 +21,8 @@ def scheme_path(project_name):
     return os.path.join(PROJECTS, project_name, 'scheme.json')
 
 
-class ColoursScreen(Screen):
-    def compose(self) -> ComposeResult:
+class ColoursScreen(SubmenuScreen):
+    def compose_body(self):
         with Horizontal():
             with Vertical(id='scheme-list'):
                 yield Label('Saved schemes (click to re-edit)')
@@ -88,7 +88,7 @@ class ColoursScreen(Screen):
             self.query_one(f'#{k}', Input).value = s[k]
 
 
-class MotionPipelineApp(App):
+class MotionPipelineApp(MenuAppBase):
     """The project menu (Task 5 extends this with the remaining screens)."""
 
     def on_mount(self) -> None:

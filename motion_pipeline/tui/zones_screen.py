@@ -7,10 +7,10 @@ import json
 import os
 
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Input, Label, ListItem, ListView, Static
 
 from .. import project as project_mod
+from .base import SubmenuScreen
 from .colours_screen import PROJECTS
 
 
@@ -19,8 +19,8 @@ def _load(name):
     return json.loads(open(path).read()) if os.path.isfile(path) else project_mod.default_project(name)
 
 
-class ZonesScreen(Screen):
-    def compose(self):
+class ZonesScreen(SubmenuScreen):
+    def compose_body(self):
         with Horizontal():
             with Vertical(id='zonelist'):
                 yield Label('Keep-out zones (click to edit)')

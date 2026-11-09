@@ -8,10 +8,10 @@ import json
 import os
 
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Input, Label, Select, Static
 
 from .. import fonts as fonts_mod
+from .base import SubmenuScreen
 from .colours_screen import PROJECTS
 
 
@@ -19,15 +19,15 @@ def project_json_path(project_name):
     return os.path.join(PROJECTS, project_name, 'project.json')
 
 
-class FontsScreen(Screen):
+class FontsScreen(SubmenuScreen):
     def __init__(self, extra_families=()):
         super().__init__()
         self.extra_families = list(extra_families)
 
-    def compose(self):
+    def compose_body(self):
         families = fonts_mod.bundled_families() + [f for f in self.extra_families
                                                     if f not in fonts_mod.bundled_families()]
-        with Vertical():
+        with Vertical(classes='panel'):
             yield Label('Project name')
             yield Input(id='name', placeholder='my-project')
             yield Label('Font family')

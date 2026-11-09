@@ -4,10 +4,12 @@ Screens: menu (step list), colours (Task 2), fonts (Task 3), zones (§8a), backg
 inputs (transcript/VO), render. Long jobs run via jobs.run_command as workers with progress
 in a Log — the menu stays responsive and jobs can be cancelled (G2).
 """
-from textual.app import App, ComposeResult
-from textual.screen import Screen
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Vertical
 from textual.widgets import Button, Footer, Header, Label, ListItem, ListView, Log, Static
 
+from .base import MenuAppBase, SubmenuScreen
 from .jobs import run_command
 
 STEPS = [
@@ -20,27 +22,32 @@ STEPS = [
 ]
 
 
-class MenuScreen(Screen):
-    def compose(self) -> ComposeResult:
-        yield Header()
+class MenuScreen(SubmenuScreen):
+    BINDINGS = [Binding('q', 'quit_app', 'Quit', priority=True)]  # on the main menu, b == q
+
+    def compose_body(self):
         yield Label('motion-pipeline — project menu (pick a step)')
         yield ListView(*[ListItem(Label(t), id=f'step-{k}') for t, k in STEPS])
-        yield Footer()
+        yield Static('q quit', id='hint')
+
+    def action_back(self):
+        self.app.exit()  # on the main menu, back == quit
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         key = event.item.id.removeprefix('step-')
         self.app.push_screen(self.app.SCREENS[key]())
 
 
-class BgTestScreen(Screen):
+class BgTestScreen(SubmenuScreen):
     """Background test — runs the SAME render path as the full render (anti-goal)."""
 
-    def compose(self) -> ComposeResult:
-        yield Label('Background test render (same code path as the full render)')
-        yield Button('Run test render', id='run', variant='primary')
-        yield Button('Cancel', id='cancel')
-        yield Log(id='log')
-        yield Static('', id='status')
+    def compose_body(self):
+        with Vertical():
+            yield Label('Background test render (same code path as the full render)')
+            yield Button('Run test render', id='run', variant='primary')
+            yield Button('Cancel', id='cancel')
+            yield Log(id='log')
+            yield Static('', id='status')
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == 'run':
@@ -51,17 +58,18 @@ class BgTestScreen(Screen):
             self.query_one('#status', Static).update('cancelled')
 
 
-class InputsScreen(Screen):
-    def compose(self) -> ComposeResult:
-        yield Label('Project inputs')
+class InputsScreen(SubmenuScreen):
+    def compose_body(self):
         from textual.widgets import Input
-        yield Label('transcript.txt path')
-        yield Input(id='transcript', value='transcript.txt')
-        yield Label('voiceover file (optional)')
-        yield Input(id='vo', placeholder='audio/vo.wav')
-        yield Button('Save inputs', id='save', variant='primary')
-        yield Static('', id='status')
-        yield Static('', id='error')
+        with Vertical():
+            yield Label('Project inputs')
+            yield Label('transcript.txt path')
+            yield Input(id='transcript', value='transcript.txt')
+            yield Label('voiceover file (optional)')
+            yield Input(id='vo', placeholder='audio/vo.wav')
+            yield Button('Save inputs', id='save', variant='primary')
+            yield Static('', id='status')
+            yield Static('', id='error')
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id != 'save':
@@ -85,13 +93,15 @@ class InputsScreen(Screen):
             self.query_one('#error', Static).update(f'error: {e}')
 
 
-class RenderScreen(Screen):
-    def compose(self) -> ComposeResult:
-        yield Label('Full render (all variants)')
-        yield Button('Render', id='run', variant='primary')
-        yield Button('Cancel', id='cancel')
-        yield Log(id='log')
-        yield Static('', id='status')
+class RenderScreen(SubmenuScreen):
+    def compose_body(self):
+        from textual.containers import Vertical
+        with Vertical():
+            yield Label('Full render (all variants)')
+            yield Button('Render', id='run', variant='primary')
+            yield Button('Cancel', id='cancel')
+            yield Log(id='log')
+            yield Static('', id='status')
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == 'run':
@@ -102,7 +112,7 @@ class RenderScreen(Screen):
             self.query_one('#status', Static).update('cancelled')
 
 
-class MenuApp(App):
+class MenuApp(MenuAppBase):
     SCREENS = {}  # filled in on_mount to avoid import cycles
 
     def __init__(self, test_render_cmd=None, full_render_cmd=None):
