@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1 — 2026-11-09
+
+Fix-forward from dogfooding the v0.1.0 tarball: de-brand the changelog (the asset
+audit gate flagged the source-project name) and add pytest-asyncio to the dev extra
+(fresh venvs errored on the TUI tests without it).
+
 ## v0.1.0 — 2026-11-09
 
 First public release of the reusable, publishable kinetic-typography render pipeline
