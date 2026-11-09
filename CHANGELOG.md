@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.3 — 2026-11-09
+
+`__version__` drifted from pyproject (brew run printed 0.1.0 on a 0.1.2 install) —
+bumped and pinned with a test asserting the two agree.
+
 ## v0.1.2 — 2026-11-09
 
 Homebrew launcher fix (caught by `brew install` + first run): python@3.14 is keg-only,

@@ -23,6 +23,16 @@ def test_unknown_flag_exit_2_with_usage_on_stderr():
     assert 'usage' in r.stderr.lower()
 
 
+def test_version_matches_pyproject():
+    import re
+    import motion_pipeline
+    pyproject = open(os.path.join(ROOT, 'pyproject.toml')).read()
+    m = re.search(r'^version = "([^"]+)"', pyproject, re.M)
+    assert m, 'pyproject has no version'
+    assert motion_pipeline.__version__ == m.group(1), \
+        f'__version__ {motion_pipeline.__version__} != pyproject {m.group(1)}'
+
+
 def test_gitignore_covers_project_fonts_renders_scratch_venv():
     with open(os.path.join(ROOT, '.gitignore')) as f:
         lines = {line.strip() for line in f if line.strip() and not line.startswith('#')}
