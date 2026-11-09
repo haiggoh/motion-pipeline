@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.1 — 2026-11-09
+
+Regression fixes for v0.4.0 (caught by user testing, reproduced with screenshot/region
+tests, not just widget-existence checks):
+- colour editor laid out vertically and compact, so swatch + hex + H/S/L fields all
+  fit in a 100-column terminal (they were rendered off-screen before)
+- hover highlight uses the class selector Textual actually applies — text recolours,
+  no more filled block
+- Homebrew launcher installs ALL pyproject dependencies (was a hardcoded subset;
+  the font menu crashed with ModuleNotFoundError: PIL)
+
 ## v0.4.0 — 2026-11-09
 
 Menu UX iteration (user-tested):
