@@ -35,9 +35,10 @@ def validate(p):
     if p['aspect'] not in ASPECTS:
         raise ValueError(f"invalid aspect {p['aspect']!r} (want one of {sorted(ASPECTS)})")
     w, h = p['resolution']
-    if [w, h] != list(ASPECTS[p['aspect']]) and [w, h] != list(UHD):
+    ar = {'16:9': (16, 9), '9:16': (9, 16), '1:1': (1, 1), '4:5': (4, 5)}[p['aspect']]
+    if w * ar[1] != h * ar[0]:
         raise ValueError(f"invalid resolution {p['resolution']} for aspect {p['aspect']} "
-                         f"(want {list(ASPECTS[p['aspect']])}, or {list(UHD)} UHD for 16:9)")
+                         f"(want {ar[0]}:{ar[1]}, e.g. {list(ASPECTS[p['aspect']])} or {list(UHD)} UHD)")
     if p['fps'] not in FPS_CHOICES:
         raise ValueError(f"invalid fps {p['fps']!r} (want one of {list(FPS_CHOICES)})")
     if not isinstance(p['variants'], list) or not p['variants']:

@@ -11,7 +11,7 @@
   this repo; a project may reference one from its own gitignored `fonts/` folder (the
   menu shows a licence warning).
 - **Map data** (sample project globe): Natural Earth 110m (public domain) via world-atlas
-  (ISC), converted with the same approach as P&G Cube One's `tools/geo/topo2flat.py`.
+  (ISC), converted with the same approach as the source explainer project's geo tool.
 - **Never published:** any client logos, copy, voiceover, SFX, or a client brand's
-  measured gradient constants — `tools/audit_assets.py` (Task 12) fails the build if any
+  measured background constants — `tools/audit_assets.py` (Task 12) fails the build if any
   tracked file matches those patterns.

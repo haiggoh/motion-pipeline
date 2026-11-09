@@ -26,7 +26,9 @@ def test_invalid_values_fail_naming_the_key():
     with pytest.raises(ValueError, match="invalid fps 24"):
         project.validate(bad)
     bad = project.default_project('d')
-    bad['resolution'] = [1280, 720]
+    bad['resolution'] = [1280, 720]  # 16:9, valid ratio but not a preset — now allowed
+    assert project.validate(bad)  # any resolution matching the aspect is a valid setting
+    bad['resolution'] = [1000, 1000]
     with pytest.raises(ValueError, match='invalid resolution'):
         project.validate(bad)
     bad = project.default_project('d')

@@ -110,3 +110,54 @@ def generate_background_page(palette, width=1920, height=1080, sample_text='Samp
         BANDED='true' if banded else 'false',
         SAMPLE=sample_text,
     )
+
+
+def background_js(palette, width, height):
+    """JS snippet painting the animated background onto a <canvas id="bg"> at the page's
+    current time T (performance.now based) — embedded into every generated scene page,
+    so the menu's background test and the full render share this one code path."""
+    return """
+{oklab}
+const BW={w}, BH={h}, STOPS={stops}, PARTICLE={particle}, SAT=1.15,
+      GLOW={{cx:0.5, cy:0.42, sx:0.45, sy:0.9}};
+function hex(h){{ return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }}
+function mixHex(a,b,t){{ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }}
+const stops=STOPS.map(hex), particle=hex(PARTICLE);
+const field=new Float32Array(BW*BH*3);
+for(let y=0;y<BH;y++){{ const Y=(y+.5)/BH, dy=(Y-GLOW.cy)*0.5625/GLOW.sy;
+  for(let x=0;x<BW;x++){{ const X=(x+.5)/BW, dx=(X-GLOW.cx)/GLOW.sx,
+    g=Math.exp(-0.5*(dx*dx+dy*dy)), o=(y*BW+x)*3;
+    const n=stops.length-1, ft=Math.min(Math.max(X,0),1)*n, i=Math.floor(ft);
+    const base=mixHex(stops[Math.min(i,n)], stops[Math.min(i+1,n)], ft-i);
+    const c=base.map((v,k)=> v + (stops[n][k]-v)*0.85*g);
+    const [L,A,B]=toOklab(c[0],c[1],c[2]), c1=fromOklab(L,A*SAT,B*SAT);
+    const d=0.2126*(c[0]-c1[0])+0.7152*(c[1]-c1[1])+0.0722*(c[2]-c1[2]);
+    for(let k=0;k<3;k++) field[o+k]=c1[k]+d; }} }}
+function paintBg(T){{
+  const cv=document.getElementById('bg'); if(!cv) return;
+  const ctx=cv.getContext('2d'), img=ctx.createImageData(BW,BH);
+  const rnd=mulberry32(Math.round(T*60)*2654435761>>>0), S16=1/65536, A=2.0, C=0.35;
+  const BW2=BW>>1, NB=new Float32Array(Math.max(1,BW2*(BH>>1)));
+  for(let i=0;i<NB.length;i++){{ const r=rnd(); NB[i]=A*C*((r&0xFFFF)-(r>>>16))*S16; }}
+  let BCB=null, BCR=null;
+  if(window.__BANDED){{  // known-bad (gate discriminant, test-only): 4:2:0-style chroma —
+    BCB=new Float32Array(BW2*(BH>>1)); BCR=new Float32Array(BW2*(BH>>1));   // 2x2 block average,
+    for(let by=0;by<(BH>>1);by++) for(let bx=0;bx<BW2;bx++){{               // quantised to even 8-bit
+      let R=0,G=0,B=0;
+      for(let dy=0;dy<2;dy++) for(let dx=0;dx<2;dx++){{ const o=((by*2+dy)*BW+(bx*2+dx))*3; R+=field[o]; G+=field[o+1]; B+=field[o+2]; }}
+      R/=4; G/=4; B/=4;
+      BCB[by*BW2+bx]=Math.round((128-0.1179*R-0.2864*G+0.4043*B)/2)*2;
+      BCR[by*BW2+bx]=Math.round((128+0.4043*R-0.3390*G-0.0653*B)/2)*2; }}
+  }}
+  for(let y=0,p=0;y<BH;y++){{ const br=(y>>1)*BW2;
+    for(let x=0;x<BW;x++,p++){{ const o=p*3,q=p*4;
+      const r=rnd(), n=A*(1-C)*((r&0xFFFF)-(r>>>16))*S16 + NB[br+(x>>1)];
+      let R=field[o]+n, G=field[o+1]+n, B=field[o+2]+n;
+      if(window.__BANDED){{ const Y=0.2126*R+0.7152*G+0.0722*B, bi=br+(x>>1);
+        R=Y+1.5748*(BCR[bi]-128); G=Y-0.1873*(BCB[bi]-128)-0.4681*(BCR[bi]-128); B=Y+1.8556*(BCB[bi]-128); }}
+      img.data[q]=R; img.data[q+1]=G; img.data[q+2]=B; img.data[q+3]=255; }} }}
+  ctx.putImageData(img,0,0); }}
+function bgTick(){{ paintBg(performance.now()/1000); }}
+if (window.gsap && gsap.ticker) {{ gsap.ticker.add(bgTick); }} else {{ const loop=()=>{{ bgTick(); requestAnimationFrame(loop); }}; loop(); }}
+""".format(oklab=OKLAB_JS, w=width, h=height, stops=json.dumps(palette['gradient_stops']),
+           particle=json.dumps(palette['particle_colour']))

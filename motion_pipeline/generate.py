@@ -99,7 +99,9 @@ def generate(project_path, _variant='default'):
     aspect = pj['aspect']
     from .scheme import derive_palette
     from .fonts import font_gate
+    from .background import background_js
     palette = derive_palette(scheme)
+    bg_js = background_js(palette, W, H)
     roles = font_gate(project_path, pj)
     font_px = int(H / 12 * ASPECT_FONT_SCALE.get(aspect, 1.0))
     line_h = int(font_px * 1.25)
@@ -109,6 +111,25 @@ def generate(project_path, _variant='default'):
     element_ids = {}
     written = []
     timings_by_id = {w['id']: w for w in timing['words']}
+    graphics_html = ''
+    for g in pj.get('graphics', []):
+        if g == 'globe':
+            import shutil
+            gdir = os.path.join(os.path.dirname(__file__), 'graphics')
+            for f in ('globe.js', 'land-110m.js'):
+                shutil.copy(os.path.join(gdir, f), os.path.join(out_dir, f))
+            written.extend([f'src/{f}' for f in ('globe.js', 'land-110m.js')])
+            R = int(min(W, H) * 0.30)
+            graphics_html += (
+                '<div id="globe"></div>\n'
+                f'<script src="land-110m.js"></script><script src="globe.js"></script>\n'
+                f'<script>const G = GLOBE.create({{cx: {int(W * 0.78)}, cy: {int(H * 0.30)}, R: {R}, '
+                f"colors: {{ocean0: '{palette['background_light']}', ocean1: '{palette['background_dark']}', "
+                f"land: '{palette['particle_colour']}', coast: '{palette['label_tint']}'}}}}); "
+                'document.getElementById("globe").appendChild(G.el); '
+                'const gt = () => G.draw(performance.now() / 1000 * 12); '
+                'if (window.gsap && gsap.ticker) { gsap.ticker.add(gt); } '
+                'else { const loop = () => { gt(); requestAnimationFrame(loop); }; loop(); }</script>\n')
     for sec in tr['sections']:
         words = [w for w in tr['words'] if w['section'] == sec['name']]
         if not words:
@@ -130,9 +151,12 @@ def generate(project_path, _variant='default'):
         element_ids[sec['name']] = card_id
         tj = json.dumps({w['id']: {'start': timings_by_id[w['id']]['start'],
                                     'end': timings_by_id[w['id']]['end']} for w in words})
+        duration = max(t['end'] for t in timings_by_id.values()) + 1.6
         page = f"""<!doctype html><html><head><meta charset="utf-8"><style>
-body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:{palette['gradient_stops'][0]};
+body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;
 font-family:'{roles['body']['family']}';color:{palette['text']}}}
+#root{{position:absolute;width:{W}px;height:{H}px;overflow:hidden}}
+#bg{{position:absolute;inset:0}}
 .line{{position:absolute;font-weight:{roles['body']['weight']};white-space:nowrap;
 overflow:hidden;height:{line_h}px}}
 .line span{{display:inline-block;transform:translateY(110%);opacity:0}}
@@ -141,10 +165,15 @@ overflow:hidden;height:{line_h}px}}
 font-size:{int(H / 8)}px;font-weight:{roles['headline']['weight']};color:{palette['text']};
 background:{palette['background_dark']};opacity:0}}
 </style></head><body>
+<div id="root" data-composition-id="{card_id}" data-duration="{duration:.3f}">
+<canvas id="bg" width="{W}" height="{H}"></canvas>
 <div id="{card_id}">{sec['name']}</div>
 {chr(10).join(line_html)}
+</div>
 <script src="gsap.min.js"></script>
+{graphics_html}
 <script>
+{bg_js}
 const T = {tj};
 const card = document.getElementById('{card_id}');
 gsap.to(card, {{duration: 0.6, opacity: 1, ease: 'power2.out'}});
