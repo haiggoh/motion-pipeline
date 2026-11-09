@@ -64,5 +64,19 @@ r=$(python3 "$TOOLS/audit_assets.py" --root "$tmp" 2>&1); rc=$?
 [ $rc = 1 ] && echo "$r" | grep -q 'client brand' && ok "planted client-asset fixture -> exit 1" || bad "planted fixture (rc=$rc): $r"
 rm -rf "$tmp"
 
+echo "== (q) fast pytest suite green, 0 unexpected skips (e2e render test excluded — slow)"
+PY="$ROOT/.venv/bin/python"; [ -x "$PY" ] || PY=python3
+pr=$("$PY" -m pytest "$ROOT/tests" -q -rs --deselect tests/test_sample_e2e.py::test_real_test_render_and_chroma_gate 2>&1)
+echo "$pr" | tail -1 | sed 's/^/  /'
+echo "$pr" | grep -qE '[0-9]+ passed' || bad "pytest fast suite not green"
+if echo "$pr" | grep -qE 'SKIPPED|XFAIL'; then bad "unexpected skip/xfail in fast suite"; else ok "0 unexpected skips"; fi
+
+echo "== (r) README structure (approved direction): CI inputs + VO timing lead, 10-bit section, output options, free-agents link"
+rmiss=0
+for pat in 'CI inputs' 'Voiceover timing workflow' '10-bit' 'Output options' 'works out of the box' 'free-agents' 'github.com/haiggoh/free-agents'; do
+  grep -q -- "$pat" "$ROOT/README.md" || { bad "README missing: $pat"; rmiss=1; }
+done
+[ $rmiss = 0 ] && ok "README sections present"
+
 [ $FAIL = 0 ] && echo "== PORTABLE" || echo "== NOT PORTABLE" >&2
 exit $FAIL
