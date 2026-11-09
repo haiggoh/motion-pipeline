@@ -17,14 +17,24 @@ CSL_CSS = """
 Screen { layout: vertical; background: ansi_default; color: ansi_default; }
 Static, Label { background: ansi_default; color: ansi_default; }
 ListView { background: ansi_default; color: ansi_default; border: none; }
+/* hover works like csl: soft-blue text on hover AND on keyboard highlight, never a filled block */
+ListView > ListItem:hover { background: ansi_default; color: ansi_bright_blue; }
 ListView > .list-item--highlighted { background: ansi_default; color: ansi_bright_blue; text-style: bold; }
-Input { background: ansi_default; color: ansi_default; border: round ansi_bright_black; }
-Button { background: ansi_default; color: ansi_default; border: round ansi_bright_black; }
+/* home menu: one empty line between all items */
+#menu-list > ListItem { margin: 0 0 1 0; }
+/* rounded frames surround the TEXT FIELDS only (inputs + dropdowns), not the window */
+Input, Select { background: ansi_default; color: ansi_default; border: round ansi_bright_black; }
+Select:focus { border: round ansi_bright_blue; }
+Button { background: ansi_default; color: ansi_default; border: none; }
 Button:focus { background: ansi_default; color: ansi_bright_blue; text-style: bold; }
+Button:hover { background: ansi_default; color: ansi_bright_blue; }
 Log { background: ansi_default; color: ansi_default; border: none; }
 Header, Footer { background: ansi_default; color: ansi_bright_black; }
-/* csl-style rounded text panels (ConfirmPanel #cp-box / #info use the same round frame) */
-.panel { border: round ansi_bright_black; padding: 0 1; background: ansi_default; height: auto; }
+.panel { padding: 0 1; background: ansi_default; height: auto; }
+#back { margin-top: 1; }
+.swatch { width: 4; height: 1; }
+.colour-row { height: auto; }
+.hsl { width: 7; }
 """
 
 
@@ -70,8 +80,8 @@ class SubmenuScreen(Screen):
 
     def compose(self):
         with Vertical(classes='panel'):
+            yield Button('0 · Back to main menu (no save)  [b/esc]', id='back')
             yield from self.compose_body()
-        yield Button('0 · Back to main menu (no save)', id='back')
 
     def compose_body(self):
         raise NotImplementedError

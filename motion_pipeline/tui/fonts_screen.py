@@ -1,81 +1,125 @@
-"""FontsScreen — font family + role->weight mapping (Task 3, design G4).
+"""FontsScreen — font family with live search over system-installed fonts + bundled OFL
+(Task 3, G4; user request 2026-11-09: search and choose any font installed on the system).
 
-Pick a bundled OFL family or a project-local client font (from the project's gitignored
-fonts/ dir); map the four roles to weights; non-OFL client fonts show a licence warning
-(decide-question 2). Save writes fonts config into projects/<name>/project.json.
+Type in the filter to search all fonts found in /Library/Fonts, ~/Library/Fonts and
+/System/Library/Fonts (family names read from the font files via PIL). Bundled OFL
+families are always listed first. Choosing a system (client) font copies the face file
+into the project's gitignored fonts/ folder (never committed to this repo) and shows the
+licence warning (decide-question 2). Role->weight selects + save into project.json.
 """
-import json
+import glob
 import os
+import shutil
 
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Input, Label, Select, Static
+from textual.widgets import Button, Input, Label, ListItem, ListView, Select, Static
 
 from .. import fonts as fonts_mod
 from .base import SubmenuScreen
-from .colours_screen import PROJECTS
+
+PROJECTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'projects')
+FONT_DIRS = ['/Library/Fonts', os.path.expanduser('~/Library/Fonts'), '/System/Library/Fonts']
 
 
-def project_json_path(project_name):
-    return os.path.join(PROJECTS, project_name, 'project.json')
+def system_fonts():
+    """{family: path} of every font file in the system font dirs (family read via PIL)."""
+    from PIL import ImageFont
+    out = {}
+    for d in FONT_DIRS:
+        for f in glob.glob(os.path.join(d, '*')):
+            if not f.lower().endswith(('.ttf', '.otf', '.ttc', '.dfont')):
+                continue
+            try:
+                name = ImageFont.truetype(f, 12).getname()[0]
+            except Exception:
+                continue
+            out.setdefault(name, f)
+    return out
+
+
+def project_json_path(project_dir):
+    return os.path.join(project_dir, 'project.json')
 
 
 class FontsScreen(SubmenuScreen):
-    def __init__(self, extra_families=()):
-        super().__init__()
-        self.extra_families = list(extra_families)
-
     def compose_body(self):
-        families = fonts_mod.bundled_families() + [f for f in self.extra_families
-                                                    if f not in fonts_mod.bundled_families()]
-        with Vertical(classes='panel'):
-            yield Label('Project name')
-            yield Input(id='name', placeholder='my-project')
-            yield Label('Font family')
-            yield Select([(f, f) for f in families], id='family',
-                         prompt='bundled OFL family…')
-            for role in fonts_mod.ROLES:
-                yield Label(f'{role} weight')
-                yield Select([(str(w), w) for w in (400, 600, 700, 900)],
-                             id=f'role-{role}', value=fonts_mod.DEFAULT_WEIGHTS[role])
-            with Horizontal():
-                yield Button('Save font config', id='save', variant='primary')
-            yield Static('', id='licence-warning')
-            yield Static('', id='status')
-            yield Static('', id='error')
+        with Horizontal():
+            with Vertical(id='fontlist'):
+                yield Label('Search fonts (type to filter; bundled OFL first):')
+                yield Input(id='font-search', placeholder='type to filter…')
+                yield ListView(id='fonts')
+            with Vertical(id='editor'):
+                yield Label('Selected family')
+                yield Static('(none)', id='family')
+                for role in fonts_mod.ROLES:
+                    yield Label(f'{role} weight')
+                    yield Select([(str(w), w) for w in (400, 600, 700, 900)],
+                                 id=f'role-{role}', value=fonts_mod.DEFAULT_WEIGHTS[role])
+                with Horizontal():
+                    yield Button('Save font config', id='save', variant='primary')
+                yield Static('', id='licence-warning')
+                yield Static('', id='status')
+                yield Static('', id='error')
 
     def on_mount(self):
-        self._refresh_warning()
+        self._all = {f: None for f in fonts_mod.bundled_families()}  # bundled OFL wins over system copies
+        for fam, path in system_fonts().items():
+            self._all.setdefault(fam, path)
+        self._all = dict(sorted(self._all.items(), key=lambda kv: (kv[1] is not None, kv[0])))
+        self._refresh_list('')
 
-    def _selected_family(self):
-        sel = self.query_one('#family', Select)
-        return sel.value if sel.value != Select.BLANK else None
+    def _refresh_list(self, query):
+        lv = self.query_one('#fonts', ListView)
+        lv.clear()
+        q = query.strip().lower()
+        self._shown = []
+        for fam, path in self._all.items():
+            if q and q not in fam.lower():
+                continue
+            tag = ' (OFL bundled)' if path is None else ''
+            # unique ever-increasing ids: lv.clear() is async, so re-using font-0 would
+            # raise DuplicateIds (same trap as the scheme list earlier)
+            self._seq = getattr(self, '_seq', 0) + 1
+            lv.append(ListItem(Label(fam + tag), id=f'font-{self._seq}'))
+            self._shown.append((fam, path, self._seq))
 
-    def _refresh_warning(self):
-        fam = self._selected_family()
+    def on_input_changed(self, event):
+        if event.input.id == 'font-search':
+            self._refresh_list(event.value)
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        seq = int(event.item.id.removeprefix('font-'))
+        fam, _src, _seq = next(s for s in self._shown if s[2] == seq)
+        path = self._all[fam]
+        self._selected = fam
+        self.query_one('#family', Static).update(fam)
+        path = self._all.get(fam)
         warn = self.query_one('#licence-warning', Static)
-        if fam and not any(fam == b for b in fonts_mod.bundled_families()):
-            warn.update(f'LICENCE WARNING: {fam} is a client font (non-OFL). It lives only in the '
-                        f'project\'s gitignored fonts/ and is never committed to this repo.')
-        else:
+        if path is None:
             warn.update('')
+        else:
+            # copy the client/system font into the project's gitignored fonts/ (decide-question 2)
+            pdir = getattr(self.app, 'project_dir', PROJECTS)
+            os.makedirs(os.path.join(pdir, 'fonts'), exist_ok=True)
+            dst = os.path.join(pdir, 'fonts', os.path.basename(path))
+            if not os.path.isfile(dst):
+                shutil.copy(path, dst)
+            warn.update(f'LICENCE WARNING: {fam} is a system/client font (licence not OFL-verified). '
+                        f'Copied to the project\'s gitignored fonts/ ({dst}); never committed to this repo.')
 
-    def on_select_changed(self, _event):
-        self._refresh_warning()
-
-    def on_button_pressed(self, event):
+    def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id != 'save':
             return
+        import json
         err = self.query_one('#error', Static)
         err.update('')
         try:
-            name = self.query_one('#name', Input).value.strip()
-            fam = self._selected_family()
-            if not name:
-                raise ValueError('project name is empty')
+            fam = getattr(self, '_selected', None)
             if not fam:
-                raise ValueError('pick a font family')
+                raise ValueError('pick a font family from the list')
             roles = {role: self.query_one(f'#role-{role}', Select).value for role in fonts_mod.ROLES}
-            path = project_json_path(name)
+            pdir = getattr(self.app, 'project_dir', PROJECTS)
+            path = project_json_path(pdir)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             cfg = {}
             if os.path.isfile(path):
@@ -86,8 +130,7 @@ class FontsScreen(SubmenuScreen):
                 json.dump(cfg, f, indent=2)
                 f.write('\n')
             os.replace(tmp, path)
-            # gate must pass for the bundled families
-            fonts_mod.font_gate(os.path.dirname(path), cfg)
+            fonts_mod.font_gate(pdir, cfg)
             self.query_one('#status', Static).update(f'saved {path}')
-        except ValueError as e:
+        except (ValueError, json.JSONDecodeError) as e:
             err.update(f'error: {e}')

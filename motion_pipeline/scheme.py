@@ -34,6 +34,24 @@ def _hex_to_srgb(h):
     return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
 
 
+def hex_to_hsl(h):
+    """#rrggbb -> (h 0-360, s 0-100, l 0-100)."""
+    import colorsys
+    r, g, b = _hex_to_srgb(h)
+    hh, ll, ss = colorsys.rgb_to_hls(r, g, b)
+    return (round(hh * 360), round(ss * 100), round(ll * 100))
+
+
+def hsl_to_hex(h, s, l):
+    """(h 0-360, s 0-100, l 0-100) -> #rrggbb. Raises on out-of-range."""
+    import colorsys
+    h = float(h) % 360
+    s = min(max(float(s), 0.0), 100.0) / 100.0
+    li = min(max(float(l), 0.0), 100.0) / 100.0
+    r, g, b = colorsys.hls_to_rgb(h / 360.0, li, s)
+    return _srgb_to_hex((r, g, b))
+
+
 def _srgb_to_hex(rgb):
     return '#' + ''.join(f'{round(min(max(c, 0.0), 1.0) * 255):02x}' for c in rgb)
 

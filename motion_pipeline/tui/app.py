@@ -4,13 +4,17 @@ Screens: menu (step list), colours (Task 2), fonts (Task 3), zones (§8a), backg
 inputs (transcript/VO), render. Long jobs run via jobs.run_command as workers with progress
 in a Log — the menu stays responsive and jobs can be cancelled (G2).
 """
+import os
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
-from textual.widgets import Button, Footer, Header, Label, ListItem, ListView, Log, Static
+from textual.widgets import Button, Label, ListItem, ListView, Log, Static
 
 from .base import MenuAppBase, SubmenuScreen
 from .jobs import run_command
+
+ROOT_PROJECTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'projects')
 
 
 def render_ansi_image(path, max_w=160, max_h=90):
@@ -37,6 +41,7 @@ def render_ansi_image(path, max_w=160, max_h=90):
     return out
 
 STEPS = [
+    ('0. New / load project', 'project'),
     ('1. CI colours', 'colours'),
     ('2. Font', 'fonts'),
     ('3. Keep-out zones', 'zones'),
@@ -51,7 +56,8 @@ class MenuScreen(SubmenuScreen):
 
     def compose_body(self):
         yield Label('motion-pipeline — project menu (pick a step)')
-        yield ListView(*[ListItem(Label(t), id=f'step-{k}') for t, k in STEPS])
+        yield ListView(*[ListItem(Label(t), id=f'step-{k}') for t, k in STEPS],
+                       id='menu-list')
         yield Static('q quit', id='hint')
 
     def action_back(self):
@@ -221,8 +227,11 @@ class MenuApp(MenuAppBase):
     def on_mount(self) -> None:
         from .colours_screen import ColoursScreen
         from .fonts_screen import FontsScreen
+        from .project_screen import ProjectScreen
         from .zones_screen import ZonesScreen
-        self.SCREENS = {'menu': MenuScreen, 'colours': ColoursScreen, 'fonts': FontsScreen,
-                        'zones': ZonesScreen, 'bgtest': BgTestScreen, 'inputs': InputsScreen,
-                        'render': RenderScreen}
+        self.SCREENS = {'menu': MenuScreen, 'project': ProjectScreen, 'colours': ColoursScreen,
+                        'fonts': FontsScreen, 'zones': ZonesScreen, 'bgtest': BgTestScreen,
+                        'inputs': InputsScreen, 'render': RenderScreen}
+        if not getattr(self, 'project_dir', None):
+            self.project_dir = os.path.join(ROOT_PROJECTS, 'default')
         self.push_screen(MenuScreen())

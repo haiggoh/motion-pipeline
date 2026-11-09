@@ -10,9 +10,13 @@ def test_csl_style_no_painted_background_and_round_panels():
     # the terminal's own background shows through: every surface is ansi_default
     assert 'background: ansi_default' in CSL_CSS
     assert 'background: $surface' not in CSL_CSS and 'background: grey' not in CSL_CSS.lower()
-    # csl's rounded text panel borders
-    assert 'border: round ansi_bright_black' in CSL_CSS
-    assert '.panel' in CSL_CSS
+    # rounded frames on the TEXT FIELDS (inputs + dropdown selects), not the window
+    assert 'Input, Select' in CSL_CSS and 'border: round ansi_bright_black' in CSL_CSS
+    assert '.panel {' in CSL_CSS and 'border' not in CSL_CSS.split('.panel {')[1].split('}')[0]
+    # hover works like csl: soft-blue text on hover and on highlight, never a filled block
+    assert 'ListItem:hover' in CSL_CSS and 'ansi_bright_blue' in CSL_CSS
+    # home menu: one empty line between items
+    assert '#menu-list > ListItem { margin: 0 0 1 0; }' in CSL_CSS
     app = MenuApp()
     assert app.ansi_color is True
     assert 'ansi_default' in app.CSS
@@ -45,12 +49,29 @@ async def test_every_submenu_has_back_binding_and_pops_without_saving(tmp_path, 
 
 
 @pytest.mark.asyncio
-async def test_menu_screens_have_panel():
+async def test_menu_screens_have_panel_and_visible_back_button():
     app = MenuApp()
     async with app.run_test() as pilot:
         for _, key in STEPS:
             app.push_screen(app.SCREENS[key]())
             await pilot.pause()
             assert app.screen.query('.panel'), f'{key} has no .panel'
+            # the back button lives INSIDE the panel (top), so it is visible without scrolling
+            panel = app.screen.query_one('.panel')
+            back = app.screen.query_one('#back')
+            assert back in panel.children, f'{key}: back button not inside the panel'
             app.pop_screen()
             await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_step_zero_is_project_create_or_load():
+    app = MenuApp()
+    async with app.run_test() as pilot:
+        assert STEPS[0][1] == 'project', STEPS[0]
+        app.push_screen(app.SCREENS['project']())
+        await pilot.pause()
+        scr = app.screen
+        from textual.widgets import Button, Input
+        assert scr.query_one('#name', Input) and scr.query_one('#dir', Input)
+        assert scr.query_one('#create', Button) and scr.query_one('#load', Button)
