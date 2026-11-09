@@ -1,6 +1,7 @@
-"""motion_pipeline CLI entry point — currently the menu placeholder (Task 5 builds the TUI).
+"""motion_pipeline CLI entry point — launches the interactive project menu (Textual TUI).
 
 usage: python3 -m motion_pipeline [--help] [--version]
+  (no args)   launch the interactive menu
   --help      print this usage, exit 0
   --version   print the package version, exit 0
   anything else: usage on stderr, exit 2
@@ -18,8 +19,8 @@ def main(argv=None):
                                  epilog=USAGE, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--version', action='version', version=f'motion_pipeline {__version__}')
     ap.parse_args(argv)
-    # no subcommand yet: print usage and exit 0 (menu lands in Task 5)
-    print('motion_pipeline', __version__, '— the project menu lands in Task 5; see README.md')
+    from .tui.app import MenuApp
+    MenuApp().run()
     return 0
 
 
