@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.0 — 2026-11-09
+
+Menu UX iteration (user-tested):
+- hover highlights like csl (soft-blue text on hover + keyboard highlight, never a filled block)
+- rounded `ansi_bright_black` frames on the text fields (inputs + dropdowns) only, not the window
+- visible "0 - Back to main menu (no save)" button at the top of every submenu (b/esc/q keys too)
+- home menu items separated by an empty line
+- new step 0: create or load the project directory; everything entered afterwards is stored there
+- CI colours: live swatch per colour + separate H/S/L fields, two-way synced with the hex field
+- font menu: live search over all system-installed fonts (133 families); choosing a system font
+  copies it into the project's gitignored fonts/ with a licence warning; bundled OFL first
+
 ## v0.3.0 — 2026-11-09
 
 Custom paths + output affordances (user requests): every submenu that asks for

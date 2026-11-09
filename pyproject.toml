@@ -8,7 +8,7 @@ module-root = ""
 
 [project]
 name = "motion-pipeline"
-version = "0.3.0"
+version = "0.4.0"
 description = "Reusable, publishable kinetic-typography render pipeline with a no-code project menu (CI colours + font + transcript + optional VO in, 10-bit masters out)"
 requires-python = ">=3.11"
 dependencies = [
