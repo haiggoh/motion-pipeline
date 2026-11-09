@@ -2,7 +2,8 @@
 # render_scene.sh — generic 10-bit render backend (Task 9): one config-driven backend for
 # every project. Renders the generated scene pages (src/scene_*.html) of a project+variant.
 #
-#   usage: tools/render_scene.sh --project DIR --variant NAME --mode test|full [--frames S-E] [--dry-run] [--fresh]
+#   usage: tools/render_scene.sh --project DIR --variant NAME --mode test|full [--frames S-E] [--out DIR] [--dry-run] [--fresh]
+#   --out DIR: custom render output directory (default <project>/renders/<variant>/)
 #
 #   --project DIR    project folder (holds project.json, src/, renders/)
 #   --variant NAME   scheme variant name (must be in project.json variants[])
@@ -27,16 +28,17 @@ TOOLS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$TOOLS")"
 INTERMEDIATE="ffv1-bgr0"
 
-PROJECT=""; VARIANT=""; MODE=""; FRAMES=""; DRY=0; FRESH=0; BANDED=0
+PROJECT=""; VARIANT=""; MODE=""; FRAMES=""; DRY=0; FRESH=0; BANDED=0; OUT=""
 while [ $# -gt 0 ]; do case "$1" in
   --project) PROJECT="${2:?}"; shift 2;; --project=*) PROJECT="${1#*=}"; shift;;
   --variant) VARIANT="${2:?}"; shift 2;; --variant=*) VARIANT="${1#*=}"; shift;;
   --mode) MODE="${2:?}"; shift 2;; --mode=*) MODE="${1#*=}"; shift;;
   --frames) FRAMES="${2:?}"; shift 2;; --frames=*) FRAMES="${1#*=}"; shift;;
+  --out) OUT="${2:?}"; shift 2;; --out=*) OUT="${1#*=}"; shift;;
   --dry-run) DRY=1; shift;; --fresh) FRESH=1; shift;;
   --banded) BANDED=1; shift;;  # known-bad mode for the chroma gate's discriminant (tests only)
-  -h|--help) sed -n '2,20p' "$0"; exit 0;;
-  *) echo "usage: $0 --project DIR --variant NAME --mode test|full [--frames S-E] [--dry-run] [--fresh] [--banded]  (unknown: $1)" >&2; exit 2;;
+  -h|--help) sed -n '2,24p' "$0"; exit 0;;
+  *) echo "usage: $0 --project DIR --variant NAME --mode test|full [--frames S-E] [--out DIR] [--dry-run] [--fresh] [--banded]  (unknown: $1)" >&2; exit 2;;
 esac; done
 [ -n "$PROJECT" ] && [ -n "$VARIANT" ] && [ -n "$MODE" ] || { echo "usage: $0 --project DIR --variant NAME --mode test|full [--frames S-E] [--dry-run] [--fresh]  (missing --project/--variant/--mode)" >&2; exit 2; }
 case "$MODE" in test|full) ;; *) echo "bad --mode $MODE (want test|full)" >&2; exit 2;; esac
@@ -50,15 +52,17 @@ if sys.argv[2] not in p.get('variants', []):
     sys.exit(1)
 PY
 
-OUT="$PROJECT/renders/$VARIANT"
+OUT="${OUT:-$PROJECT/renders/$VARIANT}"   # --out DIR: custom render output directory
 mkdir -p "$OUT"
-command -v hyperframes >/dev/null 2>&1 || { echo "hyperframes not on PATH (source tools/env.sh)" >&2; exit 3; }
-HFV="$(hyperframes --version 2>/dev/null | tail -1)"
+if [ $DRY = 0 ]; then
+  command -v hyperframes >/dev/null 2>&1 || { echo "hyperframes not on PATH (source tools/env.sh)" >&2; exit 3; }
+  HFV="$(hyperframes --version 2>/dev/null | tail -1)"
+fi
 
 # resume refusal: an existing render_info.json without the intermediate marker (or with
 # another value) must refuse — old 8-bit-pipeline intermediates would be spliced in as complete
-if [ -f "$OUT/render_info.json" ]; then
-  python3 "$TOOLS/render_info.py" check --dir "$OUT" --rev "$VARIANT" --arm pinned --hf "$HFV" --intermediate "$INTERMEDIATE" || exit 4
+if [ -f "$OUT/render_info.json" ] && [ $DRY = 0 ]; then
+  python3 "$TOOLS/render_info.py" check --dir "$OUT" --rev "$VARIANT" --arm pinned --hf "${HFV:-0.8.31}" --intermediate "$INTERMEDIATE" || exit 4
 fi
 if [ $FRESH = 1 ]; then
   if ls "$OUT"/*.mp4 >/dev/null 2>&1; then echo "--fresh: masters exist in $OUT — move them away first (never deleted here)" >&2; exit 4; fi
