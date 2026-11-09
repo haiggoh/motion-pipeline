@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # env.sh — pinned motion-pipeline toolchain for macOS (Apple Silicon), ported from the
-# P&G Cube One 10-bit pipeline.
+# source explainer project's measured 10-bit pipeline.
 #
 # Source me (bash):   source tools/env.sh
 # Run me for usage:   bash tools/env.sh --help

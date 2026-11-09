@@ -12,7 +12,7 @@
 #   --dry-run        print the plan, render nothing
 #   --fresh          clear intermediates + render_info.json first (refuses while masters exist)
 #
-# Pipeline (10-bit, measured on P&G Cube One 2026-11-08): hyperframes --format png-sequence
+# Pipeline (10-bit, measured on the source explainer project 2026-11-08): hyperframes --format png-sequence
 # (lossless RGB capture, 1-based frame_%06d.png — naming pinned by a file-exists check) ->
 # FFV1 -pix_fmt bgr0 .mkv (lossless packed RGB) -> master encode libx264 High 4:2:2
 # yuv422p10le with scale=out_color_matrix=bt709:out_range=tv:flags=accurate_rnd+full_chroma_int,format=yuv422p10le
