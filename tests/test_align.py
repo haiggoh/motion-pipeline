@@ -35,6 +35,27 @@ def test_align_deterministic_byte_equal(tmp_path):
     align.validate_timing(d1)
 
 
+def test_align_deterministic_across_processes(tmp_path):
+    """PYTHONHASHSEED differs per process — same audio+transcript must still give
+    byte-equal output when the aligner runs in two separate interpreters."""
+    import sys
+    wav = tmp_path / 'vo.wav'
+    make_wav(wav, [(0.5, 0.2), (0.5, 0.0)])
+    trj = tmp_path / 'tr.json'
+    trj.write_text(json.dumps(TR))
+    code = ("import json,sys; sys.path.insert(0, '.'); from motion_pipeline import align; "
+            "print(json.dumps(align.align(sys.argv[1], json.load(open(sys.argv[2])))))")
+    outs = []
+    for seed in ('0', '12345'):
+        r = subprocess.run([sys.executable, '-c', code, str(wav), str(trj)],
+                           capture_output=True, text=True,
+                           env={'PYTHONHASHSEED': seed, 'PATH': '/usr/bin:/bin:/opt/homebrew/bin',
+                                'HOME': '/Users/bra0002h'})
+        assert r.returncode == 0, r.stderr[-300:]
+        outs.append(r.stdout)
+    assert outs[0] == outs[1], 'aligner output differs across PYTHONHASHSEED values'
+
+
 def test_align_output_schema_and_ids(tmp_path):
     wav = tmp_path / 'vo.wav'
     make_wav(wav, [(0.5, 0.2), (0.5, 0.2), (0.4, 0.0)])
