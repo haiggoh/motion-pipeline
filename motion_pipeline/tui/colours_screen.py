@@ -1,7 +1,8 @@
 """ColoursScreen — CI colour setup (design §2 step 1, G3), with live swatches + HSL fields.
 
-Each main colour has: a hex field, a live swatch that updates as you type, and separate
-H/S/L text fields — editing either side updates the other and the swatch immediately.
+Layout is vertical and compact so everything stays on screen in a normal terminal:
+per colour one row = [swatch][hex field (12)][H][S][L fields (7 each)]. Each hex field
+live-updates its swatch and HSL fields; editing HSL updates the hex + swatch.
 """
 import os
 
@@ -21,28 +22,26 @@ def scheme_path(project_dir):
 
 class ColoursScreen(SubmenuScreen):
     def compose_body(self):
-        with Horizontal():
-            with Vertical(id='scheme-list'):
-                yield Label('Saved schemes (click to re-edit)')
-                yield ListView(id='schemes')
-            with Vertical(id='editor'):
-                yield Label('Project name')
-                yield Input(id='name', placeholder='my-project')
-                for key in COLOUR_KEYS:
-                    with Horizontal(classes='colour-row'):
-                        yield Static('  ', id=f'swatch-{key}', classes='swatch')
-                        yield Input(id=key, placeholder='#rrggbb')
-                        yield Label('H')
-                        yield Input(id=f'h-{key}', placeholder='0-360', classes='hsl')
-                        yield Label('S')
-                        yield Input(id=f's-{key}', placeholder='0-100', classes='hsl')
-                        yield Label('L')
-                        yield Input(id=f'l-{key}', placeholder='0-100', classes='hsl')
-                with Horizontal():
-                    yield Button('Derive & preview', id='derive')
-                    yield Button('Save scheme', id='save', variant='primary')
-                yield Static('', id='preview')
-                yield Static('', id='error')
+        with Vertical():
+            yield Label('Project name')
+            yield Input(id='name', placeholder='my-project')
+            for key in COLOUR_KEYS:
+                with Horizontal(classes='colour-row'):
+                    yield Static('  ', id=f'swatch-{key}', classes='swatch')
+                    yield Input(id=key, placeholder='#rrggbb', classes='hexfield')
+                    yield Label('H')
+                    yield Input(id=f'h-{key}', placeholder='0-360', classes='hsl')
+                    yield Label('S')
+                    yield Input(id=f's-{key}', placeholder='0-100', classes='hsl')
+                    yield Label('L')
+                    yield Input(id=f'l-{key}', placeholder='0-100', classes='hsl')
+            with Horizontal():
+                yield Button('Derive & preview', id='derive')
+                yield Button('Save scheme', id='save', variant='primary')
+            yield Static('', id='preview')
+            yield Static('', id='error')
+            yield Label('Saved schemes (click to re-edit)')
+            yield ListView(id='schemes')
 
     def on_mount(self) -> None:
         self.refresh_scheme_list()
@@ -69,9 +68,9 @@ class ColoursScreen(SubmenuScreen):
         return {'name': name, **vals}
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Live two-way sync: hex <-> HSL <-> swatch for the edited colour. An HSL change
-        that exactly matches the current hex (i.e. it is just the hex->hsl sync echo) is
-        not written back, so the hex never degrades through a lossy round-trip."""
+        """Live two-way sync: hex <-> HSL <-> swatch. An HSL change that exactly matches the
+        current hex (the hex->hsl sync echo) is not written back, so the hex never degrades
+        through a lossy round-trip."""
         wid = event.input.id
         if wid in COLOUR_KEYS:  # hex edited
             hexv = event.value.strip()
@@ -94,7 +93,7 @@ class ColoursScreen(SubmenuScreen):
                 cur = self.query_one(f'#{key}', Input).value.strip()
                 ch, cs, cl = scheme_mod.hex_to_hsl(cur) if cur else (0, 0, 0)
                 if (round(hh), round(ss), round(ll)) == (ch, cs, cl):
-                    return  # sync echo, not a user edit — don't rewrite the hex
+                    return  # sync echo, not a user edit
                 hexv = scheme_mod.hsl_to_hex(hh, ss, ll)
                 self.query_one(f'#{key}', Input).value = hexv
                 self._set_swatch(key, hexv)
@@ -132,8 +131,8 @@ class ColoursScreen(SubmenuScreen):
         for k in COLOUR_KEYS:
             hexv = s[k]
             self.query_one(f'#{k}', Input).value = hexv
-            h, ss, ll = scheme_mod.hex_to_hsl(hexv)
-            self.query_one(f'#h-{k}', Input).value = str(h)
+            hh, ss, ll = scheme_mod.hex_to_hsl(hexv)
+            self.query_one(f'#h-{k}', Input).value = str(hh)
             self.query_one(f'#s-{k}', Input).value = str(ss)
             self.query_one(f'#l-{k}', Input).value = str(ll)
             self._set_swatch(k, hexv)

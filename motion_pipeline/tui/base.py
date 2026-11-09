@@ -18,7 +18,9 @@ Screen { layout: vertical; background: ansi_default; color: ansi_default; }
 Static, Label { background: ansi_default; color: ansi_default; }
 ListView { background: ansi_default; color: ansi_default; border: none; }
 /* hover works like csl: soft-blue text on hover AND on keyboard highlight, never a filled block */
-ListView > ListItem:hover { background: ansi_default; color: ansi_bright_blue; }
+/* class selectors beat Textual's default type selectors, so hover/highlight keep the
+   terminal background and only recolour the text (no filled block) */
+ListView > .list-item:hover { background: ansi_default; color: ansi_bright_blue; }
 ListView > .list-item--highlighted { background: ansi_default; color: ansi_bright_blue; text-style: bold; }
 /* home menu: one empty line between all items */
 #menu-list > ListItem { margin: 0 0 1 0; }
@@ -33,7 +35,8 @@ Header, Footer { background: ansi_default; color: ansi_bright_black; }
 .panel { padding: 0 1; background: ansi_default; height: auto; }
 #back { margin-top: 1; }
 .swatch { width: 4; height: 1; }
-.colour-row { height: auto; }
+.colour-row { height: 3; }
+.hexfield { width: 12; }
 .hsl { width: 7; }
 """
 
