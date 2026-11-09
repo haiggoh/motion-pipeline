@@ -46,6 +46,8 @@ class ColoursScreen(Screen):
         self.refresh_scheme_list()
 
     def refresh_scheme_list(self) -> None:
+        if not self.query('#schemes'):
+            return  # DOM not composed yet
         lv = self.query_one('#schemes', ListView)
         existing = {getattr(c, 'id', '') for c in lv.children}
         if not os.path.isdir(PROJECTS):
