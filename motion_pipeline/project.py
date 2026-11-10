@@ -16,6 +16,10 @@ ASPECTS = {'16:9': (1920, 1080), '9:16': (1080, 1920), '1:1': (1080, 1080), '4:5
 UHD = (3840, 2160)
 FPS_CHOICES = (25, 30, 50, 60)
 REQUIRED_KEYS = ('name', 'aspect', 'resolution', 'fps', 'variants')
+# every key the menu owns in project.json. Anything else is refused by validate(): AI
+# additions belong in ai_graphics/ (ai_layer.py), never in the menu's files (0.5.0 Task 4d).
+OWNED_KEYS = REQUIRED_KEYS + ('zones', 'fonts', 'transcript', 'vo', 'graphics')
+AGENTS_TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'project_AGENTS.md')
 
 
 def default_project(name, aspect='16:9', fps=60, uhd=False):
@@ -32,6 +36,11 @@ def validate(p):
     for k in REQUIRED_KEYS:
         if k not in p:
             raise ValueError(f'project.json missing key {k!r}')
+    foreign = sorted(set(p) - set(OWNED_KEYS))
+    if foreign:
+        raise ValueError(f'project.json has keys the menu does not own: {foreign} — additions '
+                         'belong in ai_graphics/ (see AGENTS.md); move them there, the menu '
+                         'will not rewrite this file while they are present')
     if p['aspect'] not in ASPECTS:
         raise ValueError(f"invalid aspect {p['aspect']!r} (want one of {sorted(ASPECTS)})")
     w, h = p['resolution']
@@ -74,3 +83,13 @@ def save(project_path, p):
         json.dump(p, f, indent=2)
         f.write('\n')
     os.replace(tmp, pj)
+    write_agents_md(os.path.dirname(pj))
+
+
+def write_agents_md(project_path):
+    """(Re)write the project's AGENTS.md — the three-zone contract for anyone (AI or human)
+    adding graphics. Written on EVERY save, so it is current for every project."""
+    with open(AGENTS_TEMPLATE) as f:
+        text = f.read()
+    with open(os.path.join(project_path, 'AGENTS.md'), 'w') as f:
+        f.write(text)

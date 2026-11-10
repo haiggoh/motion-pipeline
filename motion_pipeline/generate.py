@@ -110,6 +110,17 @@ def generate(project_path, variant='default'):
     zones = [z for z in pj.get('zones', [])]
     out_dir = os.path.join(project_path, 'src')
     os.makedirs(out_dir, exist_ok=True)
+    # AI-owned layer (ai_layer.py): validated BEFORE anything is written, copied into
+    # src/ai_graphics/ (src/ is ours to rebuild; ai_graphics/ itself is only ever read)
+    from . import ai_layer
+    import shutil as _sh
+    ai = ai_layer.load_manifest(project_path, tr['words'])
+    ai_out = os.path.join(out_dir, 'ai_graphics')
+    _sh.rmtree(ai_out, ignore_errors=True)
+    for g in ai:
+        dst = os.path.join(ai_out, g['file'])
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        _sh.copy2(os.path.join(project_path, ai_layer.DIR, g['file']), dst)
     element_ids = {}
     written = []
     timings_by_id = {w['id']: w for w in timing['words']}
@@ -145,7 +156,9 @@ def generate(project_path, variant='default'):
             spans = []
             for w, piece, _is_last in ln:
                 emph = ' class="emph"' if w['emphasized'] else ''
-                spans.append(f'<span data-id="{w["id"]}"{emph}>{piece}</span>')
+                # the published id (element_ids.json) must exist on the element — v0.1-0.4
+                # published el-<id> but only set data-id, so an AI layer found nothing
+                spans.append(f'<span id="el-{w["id"]}" data-id="{w["id"]}"{emph}>{piece}</span>')
                 element_ids[w['id']] = f'el-{w["id"]}'
             line_html.append(f'<div class="line" style="left:{x}px;top:{y + li * line_h}px;'
                              f'font-size:{font_px}px">{ " ".join(spans) }</div>')
@@ -154,22 +167,37 @@ def generate(project_path, variant='default'):
         tj = json.dumps({w['id']: {'start': timings_by_id[w['id']]['start'],
                                     'end': timings_by_id[w['id']]['end']} for w in words})
         duration = max(t['end'] for t in timings_by_id.values()) + 1.6
+        mine = [g for g in ai if g['section'] == sec['name']]
+        ai_html = ''.join(
+            f'<div class="ai-graphic ai-{g["layer"]}" data-ai-id="{g["id"]}" data-anchor="{g["element"]}">'
+            f'{open(os.path.join(project_path, ai_layer.DIR, g["file"])).read()}</div>\n'
+            for g in mine if g['file'].endswith('.html'))
+        ai_js = ''.join(f'<script src="ai_graphics/{g["file"]}" data-ai-id="{g["id"]}" '
+                        f'data-anchor="{g["element"]}"></script>\n'
+                        for g in mine if g['file'].endswith('.js'))
+        layers = sorted({g['layer'] for g in mine if g['file'].endswith('.html')})
+        ai_css = ('.ai-graphic{position:absolute;inset:0;pointer-events:none}\n' if layers else '') + \
+            ''.join(f".ai-{l}{{z-index:{1 if l == 'below' else 3}}}\n" for l in layers)
+        ai_anchors = json.dumps({g['id']: {'element': g['element'], 'layer': g['layer'],
+                                           **({'start': timings_by_id[g['anchor']['word']]['start']}
+                                              if 'word' in g['anchor'] else {})} for g in mine})
         page = f"""<!doctype html><html><head><meta charset="utf-8"><style>
 body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;
 font-family:'{roles['body']['family']}';color:{palette['text']}}}
 #root{{position:absolute;width:{W}px;height:{H}px;overflow:hidden}}
 #bg{{position:absolute;inset:0}}
-.line{{position:absolute;font-weight:{roles['body']['weight']};white-space:nowrap;
+.line{{position:absolute;z-index:2;font-weight:{roles['body']['weight']};white-space:nowrap;
 overflow:hidden;height:{line_h}px}}
-.line span{{display:inline-block;transform:translateY(110%);opacity:0}}
+{ai_css}.line span{{display:inline-block;transform:translateY(110%);opacity:0}}
 .line span.emph{{font-weight:{roles['emphasis']['weight']};color:{palette['accent']}}}
-#card{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+.card{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
 font-size:{int(H / 8)}px;font-weight:{roles['headline']['weight']};color:{palette['text']};
 background:{palette['background_dark']};opacity:0}}
 </style></head><body>
 <div id="root" data-composition-id="{card_id}" data-width="{W}" data-height="{H}" data-fps="{pj['fps']}" data-duration="{duration:.3f}">
 <canvas id="bg" width="{W}" height="{H}"></canvas>
-<div id="{card_id}">{sec['name']}</div>
+<div id="{card_id}" class="card">{sec['name']}</div>
+{ai_html}
 {chr(10).join(line_html)}
 </div>
 <script src="gsap.min.js"></script>
@@ -177,6 +205,7 @@ background:{palette['background_dark']};opacity:0}}
 <script>
 {bg_js}
 const T = {tj};
+window.MP = {{timings: T, anchors: {ai_anchors}}};
 const card = document.getElementById('{card_id}');
 gsap.to(card, {{duration: 0.6, opacity: 1, ease: 'power2.out'}});
 gsap.to(card, {{duration: 0.4, opacity: 0, delay: 1.2, ease: 'power2.in'}});
@@ -184,7 +213,8 @@ for (const el of document.querySelectorAll('.line span')) {{
   const t = T[el.dataset.id];
   gsap.to(el, {{duration: 0.35, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'}});
 }}
-</script></body></html>
+</script>
+{ai_js}</body></html>
 """
         name = f'scene_{sec["name"]}.html'
         with open(os.path.join(out_dir, name), 'w') as f:
