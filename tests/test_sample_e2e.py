@@ -56,6 +56,9 @@ def test_zone_gate_on_sample(sample_project):
                     reason='hyperframes not installed')
 @pytest.mark.slow
 def test_real_test_render_and_chroma_gate(sample_project):
+    # frames 120-149 (2.0-2.5 s): the section's unit-heading card (a full-frame flat panel,
+    # fading in/out over 0-1.6 s) is gone, so the gate measures the gradient background —
+    # v0.1-0.4 sampled frame 15 only because the card's CSS was a dead selector (fixed 0.5.0)
     # drop the globe for the render test (its vector strokes are graphics, not gradient;
     # the globe render path is covered by the generate test) — plain bg+text at 1080p
     import json as _json
@@ -67,7 +70,7 @@ def test_real_test_render_and_chroma_gate(sample_project):
     env['PATH'] = f"{ROOT}/.venv/bin:{ROOT}/node_modules/.bin:{env['PATH']}"
     r = subprocess.run(['bash', os.path.join(ROOT, 'tools', 'render_scene.sh'),
                         '--project', sample_project, '--variant', 'default', '--mode', 'test',
-                        '--frames', '0-29'],
+                        '--frames', '120-149'],
                        capture_output=True, text=True, timeout=560, env=env)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-1000:]
     import glob
