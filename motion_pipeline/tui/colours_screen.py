@@ -7,7 +7,7 @@ live-updates its swatch and HSL fields; editing HSL updates the hex + swatch.
 import os
 
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Input, Label, ListItem, ListView, Static
+from textual.widgets import Input, Label, ListItem, ListView, Static
 
 from .. import scheme as scheme_mod
 from .base import SubmenuScreen
@@ -21,6 +21,9 @@ def scheme_path(project_dir):
 
 
 class ColoursScreen(SubmenuScreen):
+    TITLE = 'CI colours'
+    ACTIONS = [('derive', 'Derive & preview'), ('save', 'Save scheme')]
+
     def compose_body(self):
         with Vertical():
             yield Label('Project name')
@@ -35,9 +38,6 @@ class ColoursScreen(SubmenuScreen):
                     yield Input(id=f's-{key}', placeholder='0-100', classes='hsl')
                     yield Label('L')
                     yield Input(id=f'l-{key}', placeholder='0-100', classes='hsl')
-            with Horizontal():
-                yield Button('Derive & preview', id='derive')
-                yield Button('Save scheme', id='save', variant='primary')
             yield Static('', id='preview')
             yield Static('', id='error')
             yield Label('Saved schemes (click to re-edit)')
@@ -105,17 +105,17 @@ class ColoursScreen(SubmenuScreen):
         sw.update('  ')
         sw.styles.background = hexv if hexv else 'ansi_default'
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    def on_action(self, action_id):
         err = self.query_one('#error', Static)
         err.update('')
         try:
             s = scheme_mod.validate_scheme(self.current_scheme())
-            if event.button.id == 'derive':
+            if action_id == 'derive':
                 p = scheme_mod.derive_palette(s)
                 lines = [f'{k}: {v}' for k, v in p.items() if k != 'gradient_stops']
                 lines.append('gradient_stops: ' + ' -> '.join(p['gradient_stops']))
                 self.query_one('#preview', Static).update('\n'.join(lines))
-            elif event.button.id == 'save':
+            elif action_id == 'save':
                 if not s['name']:
                     raise ValueError('project name is empty')
                 scheme_mod.save_scheme(scheme_path(os.path.join(self.project_dir(), s['name'])), s)

@@ -2,6 +2,7 @@
 import pytest
 from textual.widgets import Button, Log, Static
 
+from tui_probe import choose
 from motion_pipeline.tui.app import MenuApp, STEPS
 
 
@@ -9,7 +10,7 @@ from motion_pipeline.tui.app import MenuApp, STEPS
 async def test_all_menu_screens_mount():
     app = MenuApp()
     async with app.run_test() as pilot:
-        for _, key in STEPS:
+        for key, _ in STEPS:
             screen = app.SCREENS[key]()
             app.push_screen(screen)
             await pilot.pause()
@@ -25,13 +26,13 @@ async def test_worker_streams_progress_and_stays_responsive_and_cancellable():
     async with app.run_test() as pilot:
         app.push_screen(app.SCREENS['bgtest']())
         await pilot.pause()
-        app.screen.query_one('#run', Button).press()
+        await choose(pilot, app.screen, 'run')
         await pilot.pause()
         # responsiveness: the app answers queries while the worker runs
         assert app.screen.query_one('#status', Static) is not None
         await pilot.pause()
         # cancel mid-run
-        app.screen.query_one('#cancel', Button).press()
+        await choose(pilot, app.screen, 'cancel')
         await pilot.pause()
         await pilot.pause()
         lines = [str(entry) for entry in app.screen.query_one('#log', Log).lines]

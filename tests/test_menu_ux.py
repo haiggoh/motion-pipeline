@@ -4,7 +4,8 @@ import os
 import pytest
 from textual.widgets import Input
 
-from motion_pipeline.tui.app import MenuApp, STEPS
+from motion_pipeline.tui.app import MenuApp, MenuScreen, STEPS
+from tui_probe import choose, on_screen
 from motion_pipeline.tui.base import CSL_CSS, SubmenuScreen
 
 
@@ -17,53 +18,81 @@ def test_csl_style_no_painted_background_and_round_panels():
     assert '.panel {' in CSL_CSS and 'border' not in CSL_CSS.split('.panel {')[1].split('}')[0]
     # hover/highlight: proven by COMPUTED style in tests/test_hover_csl.py (the CSS-text
     # assertion that used to live here passed on a selector that matched nothing)
-    # home menu: one empty line between items
-    assert '#menu-list > ListItem { margin: 0 0 1 0; }' in CSL_CSS
+    # home menu spacing: proven by test_main_menu_is_csl_style_quit_last_no_back
     app = MenuApp()
     assert app.ansi_color is True
     assert 'ansi_default' in app.CSS
 
 
 @pytest.mark.asyncio
-async def test_every_submenu_has_back_binding_and_pops_without_saving(tmp_path, monkeypatch):
+async def test_every_submenu_back_is_last_row_and_pops_without_saving(tmp_path, monkeypatch):
     monkeypatch.setattr('motion_pipeline.tui.colours_screen.PROJECTS', str(tmp_path))
     monkeypatch.setattr('motion_pipeline.tui.fonts_screen.PROJECTS', str(tmp_path))
     app = MenuApp()
-    async with app.run_test() as pilot:
-        for _, key in STEPS:
-            screen = app.SCREENS[key]()
-            assert isinstance(screen, SubmenuScreen), key
-            assert any(b.key == 'b' for b in screen.BINDINGS), key
-            app.push_screen(screen)
+    app.project_dir = str(tmp_path / 'proj')
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        for key, _ in STEPS:
+            app.push_screen(app.SCREENS[key]())
             await pilot.pause()
-            # type something but DON'T save, then use the visible Back action
+            scr = app.screen
+            assert isinstance(scr, SubmenuScreen), key
+            menu = scr.query_one('#actions')
+            last = menu.get_option_at_index(menu.option_count - 1)
+            assert last.id == 'back' and str(last.prompt) == 'Back', (key, last.prompt)
+            assert on_screen(app, menu), f'{key}: action rows not fully on-screen at 80x24'
+            assert menu.max_scroll_y == 0, f'{key}: action rows scroll, Back hidden'
             if key == 'colours':
-                app.screen.query_one('#name', Input).value = 'should-not-save'
-            await pilot.pause()
-            from textual.widgets import Button
-            assert app.screen.query('#back'), f'{key} has no back button'
-            app.screen.query_one('#back', Button).press()
-            await pilot.pause()
-            await pilot.pause()
-            assert isinstance(app.screen, type(app.SCREENS['menu']())), key
-        # nothing was saved by going back
+                scr.query_one('#name', Input).value = 'should-not-save'
+            await choose(pilot, scr, 'back')
+            assert isinstance(app.screen, MenuScreen), key
         assert not (tmp_path / 'should-not-save').exists()
+        assert not (tmp_path / 'proj').exists()  # Back wrote nothing
 
 
 @pytest.mark.asyncio
-async def test_menu_screens_have_panel_and_visible_back_button():
+async def test_main_menu_is_csl_style_quit_last_no_back():
     app = MenuApp()
-    async with app.run_test() as pilot:
-        for _, key in STEPS:
-            app.push_screen(app.SCREENS[key]())
-            await pilot.pause()
-            assert app.screen.query('.panel'), f'{key} has no .panel'
-            # the back button lives INSIDE the panel (top), so it is visible without scrolling
-            panel = app.screen.query_one('.panel')
-            back = app.screen.query_one('#back')
-            assert back in panel.children, f'{key}: back button not inside the panel'
-            app.pop_screen()
-            await pilot.pause()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        scr = app.screen
+        assert isinstance(scr, MenuScreen) and not isinstance(scr, SubmenuScreen)
+        menu = scr.query_one('#actions')
+        ids = [menu.get_option_at_index(i).id for i in range(menu.option_count)]
+        assert 'back' not in ids
+        last = menu.get_option_at_index(menu.option_count - 1)
+        assert last.id == 'quit' and str(last.prompt) == 'Quit'
+        prompts = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
+        assert prompts[0] == '0) New / load project' and '6) Render' in prompts
+        # a blank row between EVERY pair of real rows
+        for i in range(1, menu.option_count, 2):
+            assert prompts[i].strip() == '' and menu.get_option_at_index(i).disabled, prompts
+        assert on_screen(app, menu)
+        assert menu.max_scroll_y == 0, 'main menu scrolls: the last rows (Quit) are hidden'
+        # `b` on the main menu must not pop it (v0.4.x left an empty screen)
+        await pilot.press('b'); await pilot.pause()
+        assert isinstance(app.screen, MenuScreen)
+        # digit selects a step; Back returns
+        await pilot.press('2'); await pilot.pause(0.3)
+        assert type(app.screen).__name__ == 'FontsScreen'
+        await pilot.press('escape'); await pilot.pause()
+        assert isinstance(app.screen, MenuScreen)
+
+
+@pytest.mark.asyncio
+async def test_digit_runs_submenu_action_but_types_into_a_focused_field(tmp_path):
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(app.SCREENS['project']()); await pilot.pause()
+        scr = app.screen
+        name = scr.query_one('#name', Input)
+        name.focus(); await pilot.press('1'); await pilot.pause()
+        assert name.value == '1' and isinstance(app.screen, type(scr))   # typed, not an action
+        scr.query_one('#actions').focus(); await pilot.pause()
+        await pilot.press('1'); await pilot.pause()                       # 1) Create new project
+        assert 'created' in str(scr.query_one('#status').render())
 
 
 @pytest.mark.asyncio
@@ -90,6 +119,7 @@ async def test_colours_swatches_and_hsl_fields_are_on_screen(tmp_path):
         assert '255, 0, 0' in str(scr.query_one('#swatch-background_dark', Static).styles.background)
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_brew_launcher_runs_menu_and_fonts_without_crash(tmp_path):
     """Simulate the Homebrew launcher: PYTHONPATH=libexec + a venv holding ONLY the
@@ -125,10 +155,10 @@ async def test_brew_launcher_runs_menu_and_fonts_without_crash(tmp_path):
 async def test_step_zero_is_project_create_or_load():
     app = MenuApp()
     async with app.run_test() as pilot:
-        assert STEPS[0][1] == 'project', STEPS[0]
+        assert STEPS[0][0] == 'project', STEPS[0]
         app.push_screen(app.SCREENS['project']())
         await pilot.pause()
         scr = app.screen
-        from textual.widgets import Button, Input
         assert scr.query_one('#name', Input) and scr.query_one('#dir', Input)
-        assert scr.query_one('#create', Button) and scr.query_one('#load', Button)
+        menu = scr.query_one('#actions')
+        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'load', 'back']

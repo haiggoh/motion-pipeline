@@ -7,11 +7,11 @@ in a Log — the menu stays responsive and jobs can be cancelled (G2).
 import os
 
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical
-from textual.widgets import Button, Label, ListItem, ListView, Log, Static
+from textual.screen import Screen
+from textual.widgets import Label, Log, Static
 
-from .base import MenuAppBase, SubmenuScreen
+from .base import ActionMenu, MenuAppBase, SubmenuScreen
 from .jobs import run_command
 
 ROOT_PROJECTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'projects')
@@ -41,81 +41,117 @@ def render_ansi_image(path, max_w=160, max_h=90):
     return out
 
 STEPS = [
-    ('0. New / load project', 'project'),
-    ('1. CI colours', 'colours'),
-    ('2. Font', 'fonts'),
-    ('3. Keep-out zones', 'zones'),
-    ('4. Background test', 'bgtest'),
-    ('5. Transcript + voiceover', 'inputs'),
-    ('6. Render', 'render'),
+    ('project', 'New / load project'),
+    ('colours', 'CI colours'),
+    ('fonts', 'Font'),
+    ('zones', 'Keep-out zones'),
+    ('bgtest', 'Background test'),
+    ('inputs', 'Transcript + voiceover'),
+    ('render', 'Render'),
 ]
 
 
-class MenuScreen(SubmenuScreen):
-    BINDINGS = [Binding('q', 'quit_app', 'Quit', priority=True)]  # on the main menu, b == q
+class MenuScreen(Screen):
+    """Home menu, csl layout: bold title, cyan subheadline, `N) step` rows with a blank line
+    between every row (user 2026-11-09), plain `Quit` last (no Back here), key hint, version."""
 
-    def compose_body(self):
-        yield Label('motion-pipeline — project menu (pick a step)')
-        yield ListView(*[ListItem(Label(t), id=f'step-{k}') for t, k in STEPS],
-                       id='menu-list')
-        yield Static('q quit', id='hint')
+    def compose(self):
+        from .. import __version__
+        with Vertical(classes='panel'):
+            yield Static('motion-pipeline — Project Menu', classes='title')
+            yield Static(self.subtitle(), classes='subtitle', id='subtitle')
+            yield ActionMenu(STEPS + [('quit', 'Quit')], spaced=True, first_number=0, id='actions')
+            yield Static('', classes='spacer')
+            yield Static('↑↓ move · Enter/click select · 0-6 step · q quit', classes='hint')
+            yield Static(f'motion-pipeline v{__version__}', classes='version')
 
-    def action_back(self):
-        self.app.exit()  # on the main menu, back == quit
+    def subtitle(self):
+        pd = getattr(self.app, 'project_dir', None)
+        return f'no-code motion graphics · project: {os.path.basename(pd) if pd else "(none)"}'
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        key = event.item.id.removeprefix('step-')
-        self.app.push_screen(self.app.SCREENS[key]())
+    def on_screen_resume(self):
+        self.query_one('#subtitle', Static).update(self.subtitle())
+
+    def on_action_menu_chosen(self, event):
+        if event.action_id == 'quit':
+            self.app.exit()
+        else:
+            self.app.push_screen(self.app.SCREENS[event.action_id]())
+
+    def on_key(self, event):
+        menu = self.query_one('#actions', ActionMenu)
+        if event.key in menu.numbers:
+            self.app.push_screen(self.app.SCREENS[menu.numbers[event.key]]())
+            event.stop()
 
 
-class BgTestScreen(SubmenuScreen):
-    """Background test — runs the SAME render path as the full render (anti-goal)."""
+class _RenderScreenBase(SubmenuScreen):
+    """Shared by the background test and the full render: output dir field, actions
+    (run / cancel / open in Finder), then — BELOW the actions — the log, status, link, image."""
+
+    ACTIONS = [('run', 'Run'), ('cancel', 'Cancel'), ('open', 'Open output in Finder')]
+    OUT_PLACEHOLDER = '<project>/renders/default'
 
     def compose_body(self):
         from textual.widgets import Input
-        with Vertical():
-            yield Label('Background test render (same code path as the full render)')
-            yield Label('Output directory (drop a folder from Finder to paste its path)')
-            yield Input(id='outdir', placeholder='<project>/renders/default')
-            yield Button('Run test render', id='run', variant='primary')
-            yield Button('Cancel', id='cancel')
-            yield Button('Open output in Finder', id='open', disabled=True)
-            yield Log(id='log')
-            yield Static('', id='status')
-            yield Static('', id='link')
-            yield Static('', id='image')
+        yield Label('Output directory (drop a folder from Finder to paste its path)')
+        yield Input(id='outdir', placeholder=self.OUT_PLACEHOLDER)
+
+    def compose_after_actions(self):
+        yield Static('', id='status')
+        yield Static('', id='link')
+        yield Log(id='log')
+        yield Static('', id='image')
+
+    def on_mount(self):
+        self.query_one('#actions', ActionMenu).set_enabled('open', False)
 
     def outdir(self):
         from textual.widgets import Input
         v = self.query_one('#outdir', Input).value.strip()
         return v or None
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == 'run':
-            cmd = self.app.test_render_cmd()
+    def command(self):
+        raise NotImplementedError
+
+    def on_action(self, action_id):
+        if action_id == 'run':
+            cmd = self.command()
             if self.outdir():
                 cmd += ['--out', self.outdir()]
             self.worker = run_command(self.app, cmd, self.query_one('#log', Log),
                                       on_finish=self.on_render_done)
             self.query_one('#status', Static).update('running…')
-        elif event.button.id == 'cancel' and getattr(self, 'worker', None):
+        elif action_id == 'cancel' and getattr(self, 'worker', None):
             self.worker.cancel()
             self.query_one('#status', Static).update('cancelled')
-        elif event.button.id == 'open' and self.outdir():
+        elif action_id == 'open':
             import subprocess
-            subprocess.Popen(['open', self.outdir()])
+            subprocess.Popen(['open', self.outdir() or self.app.default_out()])
 
     def on_render_done(self, rc):
-        import glob
-        import os
-        import subprocess
         out = self.outdir() or self.app.default_out()
         self.query_one('#status', Static).update(f'done (exit {rc})')
-        self.query_one('#open', Button).disabled = False
-        # clickable file:// link (OSC-8 via Text link style; cmd+click opens Finder)
+        self.query_one('#actions', ActionMenu).set_enabled('open', True)
         from rich.text import Text
         self.link_url = f'file://{out}'
         self.query_one('#link', Static).update(Text(f'output: {out}', style=f'link {self.link_url}'))
+
+
+class BgTestScreen(_RenderScreenBase):
+    """Background test — runs the SAME render path as the full render (anti-goal)."""
+
+    TITLE = 'Background test render (same code path as the full render)'
+    ACTIONS = [('run', 'Run test render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder')]
+
+    def command(self):
+        return self.app.test_render_cmd()
+
+    def on_render_done(self, rc):
+        import glob
+        import subprocess
+        super().on_render_done(rc)
+        out = self.outdir() or self.app.default_out()
         # show the rendered test frame inside the terminal (Rich ANSI half-block image)
         masters = sorted(glob.glob(os.path.join(out, 'scene_*.mp4')))
         if masters:
@@ -127,84 +163,47 @@ class BgTestScreen(SubmenuScreen):
 
 
 class InputsScreen(SubmenuScreen):
+    TITLE = 'Transcript + voiceover'
+    ACTIONS = [('save', 'Save inputs')]
+
     def compose_body(self):
         from textual.widgets import Input
-        with Vertical():
-            yield Label('Project inputs — tip: drag a file/folder from Finder into a field to paste its path')
-            yield Label('Project directory (custom path for the project files)')
-            yield Input(id='projectdir', placeholder='projects/<name>')
-            yield Label('transcript.txt path')
-            yield Input(id='transcript', value='transcript.txt')
-            yield Label('voiceover file (optional)')
-            yield Input(id='vo', placeholder='audio/vo.wav')
-            yield Button('Save inputs', id='save', variant='primary')
-            yield Static('', id='status')
-            yield Static('', id='error')
+        yield Label('Tip: drag a file/folder from Finder into a field to paste its path')
+        yield Label('transcript.txt path')
+        yield Input(id='transcript', value='transcript.txt')
+        yield Label('voiceover file (optional)')
+        yield Input(id='vo', placeholder='audio/vo.wav')
+        yield Static('', id='status')
+        yield Static('', id='error')
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id != 'save':
+    def on_action(self, action_id):
+        if action_id != 'save':
             return
         import json
-        import os
 
         from textual.widgets import Input
 
         from .. import project as project_mod
-        from .colours_screen import PROJECTS
         try:
-            pj = os.path.join(PROJECTS, 'default', 'project.json')
-            p = project_mod.load(os.path.dirname(pj)) if os.path.isfile(pj) else project_mod.default_project('default')
+            pd = self.app.project_dir
+            pj = os.path.join(pd, 'project.json')
+            p = project_mod.load(pd) if os.path.isfile(pj) else project_mod.default_project(os.path.basename(pd))
             p['transcript'] = self.query_one('#transcript', Input).value.strip()
             vo = self.query_one('#vo', Input).value.strip()
             p['vo'] = vo or None
-            project_mod.save(os.path.join(PROJECTS, 'default'), p)
-            self.query_one('#status', Static).update('saved inputs')
+            project_mod.save(pd, p)
+            self.query_one('#status', Static).update(f'saved inputs to {pj}')
         except (ValueError, json.JSONDecodeError) as e:
             self.query_one('#error', Static).update(f'error: {e}')
 
 
-class RenderScreen(SubmenuScreen):
-    def compose_body(self):
-        from textual.containers import Vertical
-        from textual.widgets import Input
-        with Vertical():
-            yield Label('Full render (all variants)')
-            yield Label('Output directory (drop a folder from Finder to paste its path)')
-            yield Input(id='outdir', placeholder='<project>/renders/<variant>')
-            yield Button('Render', id='run', variant='primary')
-            yield Button('Cancel', id='cancel')
-            yield Button('Open output in Finder', id='open', disabled=True)
-            yield Log(id='log')
-            yield Static('', id='status')
-            yield Static('', id='link')
+class RenderScreen(_RenderScreenBase):
+    TITLE = 'Full render (all variants)'
+    ACTIONS = [('run', 'Render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder')]
+    OUT_PLACEHOLDER = '<project>/renders/<variant>'
 
-    def outdir(self):
-        from textual.widgets import Input
-        v = self.query_one('#outdir', Input).value.strip()
-        return v or None
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == 'run':
-            cmd = self.app.full_render_cmd()
-            if self.outdir():
-                cmd += ['--out', self.outdir()]
-            self.worker = run_command(self.app, cmd, self.query_one('#log', Log),
-                                      on_finish=self.on_render_done)
-            self.query_one('#status', Static).update('rendering…')
-        elif event.button.id == 'cancel' and getattr(self, 'worker', None):
-            self.worker.cancel()
-            self.query_one('#status', Static).update('cancelled')
-        elif event.button.id == 'open' and self.outdir():
-            import subprocess
-            subprocess.Popen(['open', self.outdir()])
-
-    def on_render_done(self, rc):
-        out = self.outdir() or self.app.default_out()
-        self.query_one('#status', Static).update(f'done (exit {rc})')
-        self.query_one('#open', Button).disabled = False
-        from rich.text import Text
-        self.link_url = f'file://{out}'
-        self.query_one('#link', Static).update(Text(f'output: {out}', style=f'link {self.link_url}'))
+    def command(self):
+        return self.app.full_render_cmd()
 
 
 class MenuApp(MenuAppBase):

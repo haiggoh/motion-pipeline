@@ -54,6 +54,7 @@ def test_zone_gate_on_sample(sample_project):
 
 @pytest.mark.skipif(shutil.which('hyperframes') is None and not os.path.isdir(os.path.join(ROOT, 'node_modules')),
                     reason='hyperframes not installed')
+@pytest.mark.slow
 def test_real_test_render_and_chroma_gate(sample_project):
     # drop the globe for the render test (its vector strokes are graphics, not gradient;
     # the globe render path is covered by the generate test) — plain bg+text at 1080p

@@ -4,6 +4,7 @@ import json
 import pytest
 from textual.widgets import Button, Input, Static
 
+from tui_probe import choose
 from motion_pipeline.tui.app import MenuApp
 from motion_pipeline import scheme as scheme_mod
 
@@ -54,17 +55,17 @@ async def test_derive_preview_save_and_reedit(tmp_path):
         for k in COLOUR_KEYS:
             scr.query_one(f'#{k}', Input).value = DARK[k]
         await pilot.pause()
-        scr.query_one('#derive', Button).press()
+        await choose(pilot, scr, 'derive')
         await pilot.pause()
         assert 'secondary_text: #a6b0c8' in text_of(scr.query_one('#preview', Static))
-        scr.query_one('#save', Button).press()
+        await choose(pilot, scr, 'save')
         await pilot.pause()
         p = tmp_path / DARK['name'] / 'scheme.json'
         assert p.is_file() and json.loads(p.read_text()) == DARK
         # re-edit: change accent, save again -> persisted
         scr.query_one('#accent', Input).value = '#00c2ff'
         await pilot.pause()
-        scr.query_one('#save', Button).press()
+        await choose(pilot, scr, 'save')
         await pilot.pause()
         await pilot.pause()
         assert json.loads(p.read_text())['accent'] == '#00c2ff'
@@ -86,7 +87,7 @@ async def test_invalid_hex_shows_error_not_crash(tmp_path):
         for k in COLOUR_KEYS:
             scr.query_one(f'#{k}', Input).value = '#0b1a4c'
         scr.query_one('#accent', Input).value = 'nope'
-        scr.query_one('#save', Button).press()
+        await choose(pilot, scr, 'save')
         await pilot.pause()
         await pilot.pause()
         assert 'invalid hex' in text_of(scr.query_one('#error', Static))

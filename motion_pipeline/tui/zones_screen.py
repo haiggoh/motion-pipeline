@@ -7,7 +7,7 @@ import json
 import os
 
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Input, Label, ListItem, ListView, Static
+from textual.widgets import Input, Label, ListItem, ListView, Static
 
 from .. import project as project_mod
 from .base import SubmenuScreen
@@ -20,6 +20,9 @@ def _load(name):
 
 
 class ZonesScreen(SubmenuScreen):
+    TITLE = 'Keep-out zones'
+    ACTIONS = [('save', 'Add/update zone')]
+
     def compose_body(self):
         with Horizontal():
             with Vertical(id='zonelist'):
@@ -32,8 +35,6 @@ class ZonesScreen(SubmenuScreen):
                 yield Input(id='section', placeholder='intro')
                 yield Label('Rect [x,y,w,h] in frame coords of the project aspect')
                 yield Input(id='rect', placeholder='520,100,880,880')
-                with Horizontal():
-                    yield Button('Add/update zone', id='save', variant='primary')
                 yield Static('', id='status')
                 yield Static('', id='error')
 
@@ -55,8 +56,8 @@ class ZonesScreen(SubmenuScreen):
         for i, z in enumerate(p.get('zones', [])):
             lv.append(ListItem(Label(f"{z['section']}: {z['rect']}"), id=f'zone-{i}'))
 
-    def on_button_pressed(self, event):
-        if event.button.id != 'save':
+    def on_action(self, action_id):
+        if action_id != 'save':
             return
         err = self.query_one('#error', Static)
         err.update('')

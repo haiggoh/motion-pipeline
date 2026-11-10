@@ -6,6 +6,7 @@ import subprocess
 import pytest
 from textual.widgets import Button, Input, Static
 
+from tui_probe import choose
 from motion_pipeline.tui.app import MenuApp
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,7 +42,7 @@ async def test_render_screen_has_outdir_link_and_open_button(tmp_path, monkeypat
         screen = app.screen
         outdir = screen.query_one('#outdir', Input)
         assert outdir.placeholder  # custom output path field present
-        assert screen.query_one('#open', Button).disabled  # enabled after a render
+        assert screen.query_one('#actions').get_option('open').disabled  # enabled after a render
         assert screen.query_one('#link', Static)
         # simulate a finished render into a custom dir
         custom = tmp_path / 'my-renders'
@@ -51,7 +52,7 @@ async def test_render_screen_has_outdir_link_and_open_button(tmp_path, monkeypat
         await pilot.pause()
         assert str(custom) in str(screen.query_one('#link', Static).content)  # path visible
         assert screen.link_url == f'file://{custom}'  # OSC-8 hyperlink target
-        assert not screen.query_one('#open', Button).disabled
+        assert not screen.query_one('#actions').get_option('open').disabled
 
 
 @pytest.mark.asyncio

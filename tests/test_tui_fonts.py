@@ -5,6 +5,7 @@ import os
 import pytest
 from textual.widgets import Button, Input, ListView, Static
 
+from tui_probe import choose
 from motion_pipeline.tui.fonts_screen import FontsScreen, system_fonts
 from motion_pipeline.tui.app import MenuApp as MotionPipelineApp
 
@@ -63,7 +64,7 @@ async def test_save_bundled_font_config(tmp_path):
         from types import SimpleNamespace
         scr.on_list_view_selected(SimpleNamespace(item=SimpleNamespace(id=f'font-{seq}')))
         await pilot.pause()
-        scr.query_one('#save', Button).press()
+        await choose(pilot, scr, 'save')
         await pilot.pause()
         await pilot.pause()
         cfg = json.loads((tmp_path / 'project.json').read_text())

@@ -26,10 +26,20 @@ def fg_is_blue(style) -> bool:
 
 
 def on_screen(app, widget) -> bool:
+    """Region inside the screen AND actually painted there: the widget at the region's
+    centre is this widget (or a child). A region alone is NOT clipped by a parent container,
+    so a field hidden below its column's edge still has in-screen coordinates (0.5.0 fonts
+    screen: two weight fields clipped while region-only checks passed)."""
     r = widget.region
     w, h = app.screen.size
-    return r.width > 0 and r.height > 0 and r.x >= 0 and r.y >= 0 \
-        and r.x + r.width <= w and r.y + r.height <= h
+    if not (r.width > 0 and r.height > 0 and r.x >= 0 and r.y >= 0
+            and r.x + r.width <= w and r.y + r.height <= h):
+        return False
+    try:
+        hit, _ = app.screen.get_widget_at(r.x + r.width // 2, r.y + r.height // 2)
+    except Exception:
+        return False
+    return hit is widget or widget in hit.ancestors
 
 
 def shot(app, name):
@@ -42,3 +52,14 @@ def shot(app, name):
     if shutil.which('rsvg-convert'):
         subprocess.run(['rsvg-convert', svg, '-o', svg[:-4] + '.png'], check=False)
     return svg
+
+
+async def choose(pilot, screen, action_id):
+    """Pick an action row the way a user does: focus the action list, move the highlight to
+    the row, press Enter (delivery path: OptionList selection -> ActionMenu.Chosen)."""
+    menu = screen.query_one('#actions')
+    menu.focus()
+    menu.highlighted = menu.get_option_index(action_id)
+    await pilot.pause()
+    await pilot.press('enter')
+    await pilot.pause()
