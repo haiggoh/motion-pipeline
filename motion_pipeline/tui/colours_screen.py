@@ -136,16 +136,20 @@ class ColoursScreen(SubmenuScreen):
             self._echo.discard(wid)
             return
         if wid in COLOUR_KEYS:  # hex edited by the user
-            hexv = event.value.strip()
+            # NB: never _set_field(wid, …) here — Input.value applies immediately but Changed
+            # events queue, so rewriting the field would mark the NEXT queued edit as an echo
+            # and swallow it (0.5.1 bug). The field keeps the raw text; canonicalise at the
+            # swatch/HSL and at save.
             try:
-                hh, ss, ll = scheme_mod.hex_to_hsl(hexv)
+                canon = scheme_mod.normalise_hex(event.value)  # accepts bare 'ffffff' too
             except ValueError:
-                self._set_swatch(wid, None)
+                self._set_swatch(wid, None)  # invalid input: empty swatch, never a crash
                 return
+            hh, ss, ll = scheme_mod.hex_to_hsl(canon)
             self._set_field(f'h-{wid}', str(hh))
             self._set_field(f's-{wid}', str(ss))
             self._set_field(f'l-{wid}', str(ll))
-            self._set_swatch(wid, hexv)
+            self._set_swatch(wid, canon)
         elif wid and wid[0] in 'hsl' and wid[1:2] == '-':  # H/S/L edited by the user
             key = wid[2:]
             if key not in COLOUR_KEYS:
@@ -161,11 +165,17 @@ class ColoursScreen(SubmenuScreen):
             self._set_swatch(key, hexv)
 
     def _set_swatch(self, key, hexv):
+        """A field value must never be able to crash the app: only a canonical '#rrggbb'
+        (Textual's parser rejects bare hex) is ever assigned to the style."""
         sw = self.query_one(f'#swatch-{key}', Static)
-        sw.set_class(not hexv, '-empty')
-        if hexv:
+        try:
+            canon = scheme_mod.normalise_hex(hexv) if hexv else None
+        except ValueError:
+            canon = None
+        sw.set_class(canon is None, '-empty')
+        if canon:
             sw.update('')
-            sw.styles.background = hexv
+            sw.styles.background = canon
         else:
             sw.update('░░')  # visible empty marker: no colour yet
             sw.styles.background = 'ansi_default'
@@ -175,7 +185,8 @@ class ColoursScreen(SubmenuScreen):
         err.update('')
         try:
             pd = self.require_project()
-            colours = self.current_colours()
+            # canonicalise on the way in: scheme.json always stores '#rrggbb', never bare hex
+            colours = {k: scheme_mod.normalise_hex(v) for k, v in self.current_colours().items()}
             scheme = scheme_mod.validate_scheme({'name': os.path.basename(pd), **colours})
             if action_id == 'derive':
                 p = scheme_mod.derive_palette(scheme)

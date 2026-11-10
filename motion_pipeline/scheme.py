@@ -34,6 +34,17 @@ def _hex_to_srgb(h):
     return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
 
 
+def normalise_hex(h):
+    """Canonical '#rrggbb'. Accepts the user-friendly bare 6-hex ('ffffff') as well as
+    '#rrggbb'; anything else raises ValueError naming the input. ONE place where the two
+    parsers' disagreement (ours lstrip's '#', Textual's Color.parse requires it) is
+    resolved — callers hand the result to anything that parses colours."""
+    h = str(h).strip().lstrip('#')
+    if len(h) == 6 and all(c in '0123456789abcdefABCDEF' for c in h):
+        return '#' + h.lower()
+    raise ValueError(f"invalid hex colour {str(h)!r} (want #rrggbb, e.g. #ff6a00)")
+
+
 def hex_to_hsl(h):
     """#rrggbb -> (h 0-360, s 0-100, l 0-100)."""
     import colorsys
