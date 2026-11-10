@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.5.0 — 2026-11-10
+
+Menu rebuilt around one shared csl-style action list after user testing of v0.4.1
+(plan: `~/.claude/plans/2026-11-10-motion-pipeline-0.5.0-ui-fixes-plan.md`):
+
+- hover/keyboard highlight recolours text like csl — the v0.4.x selectors
+  (`.list-item:hover`) matched nothing in Textual 8.2.8; now `ListItem.-hovered`/`.-highlight`
+- every submenu: numbered action rows `N) label`, `Back` last and never saving; main menu:
+  blank-separated rows, plain `Quit` last, no Back
+- ONE round frame on the visible field only (inputs + dropdowns' `SelectCurrent`), round
+  blue when focused, rounded overlay when expanded
+- colour editor: labelled rows, always-visible framed swatches, live hex + H/S/L sync,
+  saved scheme prefilled on load
+- colour variants as overlays (`variants/<name>.json` override only); generate renders the
+  chosen variant
+- projects live in a projects folder you choose once (`~/.config/motion-pipeline`), never
+  inside the brew libexec (wiped on upgrade); fixes schemes nesting at `<project>/<name>/scheme.json`
+- modular project layout: menu-owned files stay pristine, foreign keys refused by name;
+  AI graphics declared in `ai_graphics/manifest.json`; generated per-project `AGENTS.md`
+- Finder drag-and-drop into path fields (paste routing, `My\ Folder` / `file://` decoding,
+  exists/not-found marker)
+- Background test and full render run the REAL pipeline via `render_cli`; Cancel stops the
+  process; failures name the exit code + reason; in-terminal frame preview
+- video format on the project screen (step 0): aspect 16:9/9:16/1:1/4:5, fps 25/30/50/60,
+  UHD (16:9 only) — for new projects and via "Save format" on the current project
+- `bin/motion-pipeline-dev` runs the menu from a repo checkout (see README)
+- tests are delivery-level (computed styles, on-screen regions, disk bytes, executed
+  commands) with mutation checks; the e2e chroma gate now samples after the section card
+
+Manual check (not automatable, left to a human): a real Finder drag-and-drop into a path
+field in Terminal.app.
+
 ## v0.4.1 — 2026-11-09
 
 Regression fixes for v0.4.0 (caught by user testing, reproduced with screenshot/region

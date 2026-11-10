@@ -70,6 +70,18 @@ cp -r samples/globe projects/my-globe
 macOS first (Apple Silicon); Linux assumed. See `docs/` for architecture, the scheme
 derivation rules, the transcript markup reference, and the timing-JSON reference.
 
+## Run from a checkout (dev)
+
+`bin/motion-pipeline-dev` runs the menu from THIS checkout instead of the brew copy on PATH:
+
+```bash
+bin/motion-pipeline-dev          # stderr banner names the checkout + commit it runs
+bin/motion-pipeline-dev --help   # options; MP_DEV_PYTHON overrides the interpreter
+```
+
+It resolves its own path through symlinks, sets `PYTHONPATH` to the repo, and runs
+`<repo>/.venv/bin/python` (or `$MP_DEV_PYTHON` if set). The Quickstart venv must exist.
+
 ## Licences
 
 Our code Apache-2.0 (`LICENSE`); details and third-party notices in `NOTICES.md`
