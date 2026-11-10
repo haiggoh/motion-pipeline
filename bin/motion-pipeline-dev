@@ -1,0 +1,64 @@
+#!/bin/bash
+# motion-pipeline-dev — run the motion-pipeline menu from THIS checkout (not the Homebrew
+# copy on PATH). Prints which checkout + commit it runs on stderr, then passes every
+# argument to `python -m motion_pipeline` (so --version / --check-render / --setup-render work).
+#
+# usage: bin/motion-pipeline-dev [--help] [motion_pipeline args...]
+#
+# Environment:
+#   MP_DEV_PYTHON   python to run with (default: <checkout>/.venv/bin/python);
+#                   set but not executable -> exit 2, named
+# Exit: 2 bad override / bad flag (from motion_pipeline), 3 checkout not set up (.venv missing).
+# bash 3.2 compatible (macOS /bin/bash).
+set -euo pipefail
+
+# resolve this script through symlinks (no readlink -f on macOS bash 3.2)
+src="${BASH_SOURCE[0]}"
+while [ -h "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+REPO="$(cd -P "$(dirname "$src")/.." && pwd)"
+SHOWN="$REPO"
+case "$REPO" in "$HOME"/*) SHOWN="~${REPO#"$HOME"}" ;; esac
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<EOF
+motion-pipeline-dev — run the motion-pipeline menu from this checkout: $SHOWN
+  (the 'motion-pipeline' on your PATH is the Homebrew copy; this one runs the repo code)
+
+usage: motion-pipeline-dev [motion_pipeline args...]
+  (no args)        open the menu from this checkout
+  --version        version of this checkout
+  --check-render   report the render toolchain
+  --setup-render   install the render toolchain (~/.cache/motion-pipeline)
+
+Environment:
+  MP_DEV_PYTHON    python to use (default: $SHOWN/.venv/bin/python)
+EOF
+  exit 0
+fi
+
+if [ -n "${MP_DEV_PYTHON:-}" ]; then
+  if [ ! -x "$MP_DEV_PYTHON" ]; then
+    echo "motion-pipeline-dev: MP_DEV_PYTHON is set but is not an executable: $MP_DEV_PYTHON" >&2
+    exit 2
+  fi
+  PY="$MP_DEV_PYTHON"
+else
+  PY="$REPO/.venv/bin/python"
+  if [ ! -x "$PY" ]; then
+    echo "motion-pipeline-dev: no .venv in $SHOWN — set it up once:" >&2
+    echo "  cd $SHOWN && uv venv --python /opt/homebrew/bin/python3.11 .venv && uv pip install --python .venv/bin/python -e '.[dev]'" >&2
+    exit 3
+  fi
+fi
+
+sha="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
+if [ -n "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]; then sha="$sha+dirty"; fi
+echo "motion-pipeline (DEV) — checkout $SHOWN @ $sha" >&2
+
+# no cd: relative paths typed in the menu resolve against YOUR shell dir, as with the brew copy;
+# PYTHONPATH puts this checkout ahead of any other installed copy
+PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m motion_pipeline "$@"
