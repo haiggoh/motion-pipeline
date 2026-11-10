@@ -12,7 +12,7 @@ import os
 import shutil
 
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Input, Label, ListItem, ListView, Select, Static
+from textual.widgets import Input, Label, ListItem, ListView, Select, Static
 
 from .. import fonts as fonts_mod
 from .base import SubmenuScreen
@@ -42,21 +42,24 @@ def project_json_path(project_dir):
 
 
 class FontsScreen(SubmenuScreen):
+    TITLE = 'Font'
+    ACTIONS = [('save', 'Save font config')]
+    BODY_FILL = True
+
     def compose_body(self):
         with Horizontal():
             with Vertical(id='fontlist'):
-                yield Label('Search fonts (type to filter; bundled OFL first):')
+                yield Label('Search fonts (bundled OFL first)')
                 yield Input(id='font-search', placeholder='type to filter…')
                 yield ListView(id='fonts')
             with Vertical(id='editor'):
-                yield Label('Selected family')
-                yield Static('(none)', id='family')
+                yield Static('Family: (none)', id='family')
                 for role in fonts_mod.ROLES:
-                    yield Label(f'{role} weight')
-                    yield Select([(str(w), w) for w in (400, 600, 700, 900)],
-                                 id=f'role-{role}', value=fonts_mod.DEFAULT_WEIGHTS[role])
-                with Horizontal():
-                    yield Button('Save font config', id='save', variant='primary')
+                    with Horizontal(classes='role-row'):
+                        yield Label(f'{role}', classes='role-label')
+                        yield Select([(str(w), w) for w in (400, 600, 700, 900)],
+                                     id=f'role-{role}', value=fonts_mod.DEFAULT_WEIGHTS[role],
+                                     allow_blank=False, classes='weight')
                 yield Static('', id='licence-warning')
                 yield Static('', id='status')
                 yield Static('', id='error')
@@ -92,7 +95,7 @@ class FontsScreen(SubmenuScreen):
         fam, _src, _seq = next(s for s in self._shown if s[2] == seq)
         path = self._all[fam]
         self._selected = fam
-        self.query_one('#family', Static).update(fam)
+        self.query_one('#family', Static).update(f'Family: {fam}')
         path = self._all.get(fam)
         warn = self.query_one('#licence-warning', Static)
         if path is None:
@@ -107,8 +110,8 @@ class FontsScreen(SubmenuScreen):
             warn.update(f'LICENCE WARNING: {fam} is a system/client font (licence not OFL-verified). '
                         f'Copied to the project\'s gitignored fonts/ ({dst}); never committed to this repo.')
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id != 'save':
+    def on_action(self, action_id):
+        if action_id != 'save':
             return
         import json
         err = self.query_one('#error', Static)
