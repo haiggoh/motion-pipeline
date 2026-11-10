@@ -15,8 +15,8 @@ def test_csl_style_no_painted_background_and_round_panels():
     # rounded frames on the TEXT FIELDS (inputs + dropdown selects), not the window
     assert 'Input, Select' in CSL_CSS and 'border: round ansi_bright_black' in CSL_CSS
     assert '.panel {' in CSL_CSS and 'border' not in CSL_CSS.split('.panel {')[1].split('}')[0]
-    # hover works like csl: soft-blue text on hover and on highlight, never a filled block
-    assert '.list-item:hover' in CSL_CSS and 'ansi_bright_blue' in CSL_CSS
+    # hover/highlight: proven by COMPUTED style in tests/test_hover_csl.py (the CSS-text
+    # assertion that used to live here passed on a selector that matched nothing)
     # home menu: one empty line between items
     assert '#menu-list > ListItem { margin: 0 0 1 0; }' in CSL_CSS
     app = MenuApp()

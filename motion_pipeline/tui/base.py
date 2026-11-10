@@ -17,11 +17,24 @@ CSL_CSS = """
 Screen { layout: vertical; background: ansi_default; color: ansi_default; }
 Static, Label { background: ansi_default; color: ansi_default; }
 ListView { background: ansi_default; color: ansi_default; border: none; }
-/* hover works like csl: soft-blue text on hover AND on keyboard highlight, never a filled block */
-/* class selectors beat Textual's default type selectors, so hover/highlight keep the
-   terminal background and only recolour the text (no filled block) */
-ListView > .list-item:hover { background: ansi_default; color: ansi_bright_blue; }
-ListView > .list-item--highlighted { background: ansi_default; color: ansi_bright_blue; text-style: bold; }
+/* hover works like csl: soft-blue text on hover AND on keyboard highlight, never a filled block.
+   Selectors copied from Textual 8.2.8's own ListView DEFAULT_CSS (widgets/_list_view.py): the
+   live classes are `-hovered` / `-highlight`. v0.4.x targeted `.list-item:hover`, which matches
+   NOTHING — tests/test_hover_csl.py asserts the computed style so a dead selector goes red. */
+ListView > ListItem.-hovered { background: ansi_default; color: ansi_bright_blue; }
+ListView > ListItem.-highlight { background: ansi_default; color: ansi_bright_blue; text-style: none; }
+ListView:focus > ListItem.-highlight { background: ansi_default; color: ansi_bright_blue; text-style: bold; }
+ListView:focus { background-tint: ansi_default 0%; }
+/* the row's Label sets its own colour (`Static, Label` rule above), so it must be recoloured
+   explicitly — inheritance from the ListItem never reaches it */
+ListView > ListItem.-hovered Label, ListView > ListItem.-highlight Label { color: ansi_bright_blue; }
+ListView:focus > ListItem.-highlight Label { color: ansi_bright_blue; text-style: bold; }
+/* OptionList (menus): same rules as csl session_picker.py:814-821 */
+OptionList { background: ansi_default; color: ansi_default; border: none; background-tint: ansi_default 0%; }
+OptionList:focus { background: ansi_default; color: ansi_default; border: none; }
+OptionList > .option-list--option-highlighted { background: ansi_default; color: ansi_bright_blue; text-style: none; }
+OptionList:focus > .option-list--option-highlighted { background: ansi_default; color: ansi_bright_blue; text-style: bold; }
+OptionList > .option-list--option-hover { background: ansi_default; color: ansi_bright_blue; }
 /* home menu: one empty line between all items */
 #menu-list > ListItem { margin: 0 0 1 0; }
 /* rounded frames surround the TEXT FIELDS only (inputs + dropdowns), not the window */
