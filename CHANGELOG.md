@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.3 — 2026-11-11
+
+- test(ui): QC hardening of the 0.5.2 launch-UX tests after an independent out-of-family
+  review (GLM 5.3 Flash dispatch, 2026-11-10, per the milestone-QC playbook): the nav row
+  enabling after LOAD is now asserted (was create-only), the from-Home path is driven
+  through the home menu's real wiring (was direct `push_screen`), and 'esc' on the launch
+  screen is asserted alongside 'b' plus a screen-stack identity check (nothing sits behind
+  the launch screen). Each reviewer-proposed mutation was applied in isolation and turned
+  the suite RED, then restored. Fast suite 129 passed. No behaviour change. Commit 257020a.
+
 ## v0.5.2 — 2026-11-10
 
 - feat(ui): the app now always launches in New / load project (step 0), not Home —
