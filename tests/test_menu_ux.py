@@ -45,7 +45,7 @@ async def test_every_submenu_back_is_last_row_and_pops_without_saving(tmp_path, 
             if key == 'colours':
                 scr.query_one('#accent', Input).value = '#123456'   # typed, not saved
             await choose(pilot, scr, 'back')
-            assert isinstance(app.screen, MenuScreen), key
+            assert app.screen is not scr, key  # Back popped the submenu (the launch screen may itself be a SubmenuScreen)
         assert not (tmp_path / 'proj').exists()  # Back wrote nothing
 
 
@@ -53,6 +53,8 @@ async def test_every_submenu_back_is_last_row_and_pops_without_saving(tmp_path, 
 async def test_main_menu_is_csl_style_quit_last_no_back():
     app = MenuApp()
     async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        app.push_screen(MenuScreen())  # the app launches in step 0 now; Home is reached from there
         await pilot.pause()
         scr = app.screen
         assert isinstance(scr, MenuScreen) and not isinstance(scr, SubmenuScreen)
@@ -162,4 +164,4 @@ async def test_step_zero_is_project_create_or_load():
         scr = app.screen
         assert scr.query_one('#name', Input) and scr.query_one('#dir', Input)
         menu = scr.query_one('#actions')
-        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'load', 'root', 'format', 'back']
+        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'load', 'root', 'back']

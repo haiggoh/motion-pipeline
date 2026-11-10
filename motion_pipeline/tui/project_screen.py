@@ -1,7 +1,7 @@
 """ProjectScreen — step 0: create or load the project everything else reads and writes,
-change the remembered projects folder, and set the video format (aspect / fps / UHD) for
-new projects and — via Save format — for the current one. app.project_dir is always the
-CURRENT project folder.
+change the remembered projects folder, and set the video format (aspect / fps / UHD) in
+the same create/load step (no separate action). app.project_dir is always the CURRENT
+project folder.
 """
 import os
 
@@ -10,7 +10,7 @@ from textual.widgets import Checkbox, Input, Label, Select, Static
 
 from .. import config
 from .. import project as project_mod
-from .base import SubmenuScreen
+from .base import ActionMenu, SubmenuScreen
 from .paths import PathInput
 
 # display order per the README's format list; values must exist in project.ASPECTS
@@ -21,7 +21,7 @@ FPS_OPTIONS = [(str(f), f) for f in project_mod.FPS_CHOICES]
 class ProjectScreen(SubmenuScreen):
     TITLE = 'New / load project'
     ACTIONS = [('create', 'Create new project'), ('load', 'Load existing project'),
-               ('root', 'Save projects folder'), ('format', 'Save format')]
+               ('root', 'Save projects folder')]
 
     def compose_body(self):
         with Horizontal(classes='path-row'):
@@ -46,6 +46,18 @@ class ProjectScreen(SubmenuScreen):
         yield Static('', id='status')
         yield Static('', id='error')
 
+    def trailing_action(self):
+        # Launched as the app's root (0.5.2)? The last row then leads to Home and is NOT
+        # called 'Back' — we did not come from Home. Entered from Home later: plain 'Back'.
+        return ('home', 'Home') if getattr(self, 'root_entry', False) else ('back', 'Back')
+
+    def on_mount(self):
+        menu = self.query_one('#actions', ActionMenu)
+        self._nav_id = 'home' if getattr(self, 'root_entry', False) else 'back'
+        # the nav row is not available until a project is saved — create/load set the
+        # format in the SAME step, there is no separate 'Save format' action (0.5.2)
+        menu.set_enabled(self._nav_id, bool(getattr(self.app, 'project_dir', None)))
+
     def _target_dir(self, name):
         d = self.query_one('#dir', Input).value.strip()
         if d:
@@ -68,6 +80,10 @@ class ProjectScreen(SubmenuScreen):
         return aspect, fps, uhd
 
     def on_action(self, action_id):
+        if action_id == 'home':  # launch screen (0.5.2): the nav row leads to the main menu
+            from .app import MenuScreen
+            self.app.push_screen(MenuScreen())
+            return
         err = self.query_one('#error', Static)
         err.update('')
         status = self.query_one('#status', Static)
@@ -75,21 +91,6 @@ class ProjectScreen(SubmenuScreen):
             if action_id == 'root':
                 root = config.set_projects_root(self.query_one('#root', Input).value)
                 status.update(f'projects folder: {root}')
-                return
-            if action_id == 'format':
-                pd = self.require_project()
-                aspect, fps, uhd = self._format_values()
-                p = project_mod.load(pd)
-                p['aspect'] = aspect
-                p['resolution'] = project_mod.resolution_for(aspect, uhd)
-                p['fps'] = fps
-                project_mod.save(pd, p)
-                msg = (f'format saved: {aspect} {p["resolution"][0]}x{p["resolution"][1]} '
-                       f'@ {fps} fps')
-                if p.get('zones'):
-                    msg += (' — keep-out zones are in pixel coordinates of the previous '
-                            'format — check step 3')
-                status.update(msg)
                 return
             name = self.query_one('#name', Input).value.strip()
             d = self._target_dir(name)
@@ -112,5 +113,7 @@ class ProjectScreen(SubmenuScreen):
             self.app.project_dir = d
             config.set_last_project(d)
             status.update(f'{verb} {name} ({d})')
+            # project saved (format set in the same step) -> the nav row becomes available
+            self.query_one('#actions', ActionMenu).set_enabled(self._nav_id, True)
         except (ValueError, FileNotFoundError, OSError) as e:
             err.update(f'error: {e}')

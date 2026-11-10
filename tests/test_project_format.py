@@ -79,28 +79,6 @@ async def test_load_fills_aspect_fps_uhd_from_project_json(_isolated_config):
         assert scr.query_one('#uhd', Checkbox).value is False
 
 
-async def test_save_format_updates_current_project_and_warns_about_zones(_isolated_config):
-    proj = _isolated_config / 'zoned'
-    p = project_mod.default_project('zoned')
-    p['zones'] = [{'section': 'logo', 'rect': [10, 10, 100, 100]}]
-    project_mod.save(str(proj), p)
-    app = MenuApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        await pilot.pause()
-        scr = await _open_project_screen(pilot, app)
-        scr.query_one('#dir', Input).value = str(proj)
-        await choose(pilot, scr, 'load')
-        scr.query_one('#aspect', Select).value = '9:16'
-        scr.query_one('#fps', Select).value = 25
-        await pilot.pause()
-        await choose(pilot, scr, 'format')
-        pj = json.loads((proj / 'project.json').read_text())
-        assert pj['aspect'] == '9:16' and pj['resolution'] == [1080, 1920] and pj['fps'] == 25
-        assert pj['zones'] == [{'section': 'logo', 'rect': [10, 10, 100, 100]}]
-        status = str(scr.query_one('#status', Static).render())
-        assert 'zones' in status and 'step 3' in status
-
-
 async def test_back_writes_nothing_after_editing_format_fields(_isolated_config):
     proj = _isolated_config / 'keep'
     project_mod.save(str(proj), project_mod.default_project('keep'))

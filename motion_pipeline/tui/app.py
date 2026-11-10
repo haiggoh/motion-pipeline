@@ -257,7 +257,9 @@ class FirstRunScreen(Screen):
         if len(self.app.screen_stack) > 2:
             self.app.pop_screen()
         else:
-            self.app.switch_screen(MenuScreen())
+            scr = self.app.SCREENS['project']()  # land in step 0, not Home (0.5.2)
+            scr.root_entry = True
+            self.app.switch_screen(scr)
 
 
 class MenuApp(MenuAppBase):
@@ -299,4 +301,8 @@ class MenuApp(MenuAppBase):
         if config.projects_root() is None:
             self.push_screen(FirstRunScreen())
         else:
-            self.push_screen(MenuScreen())
+            # 0.5.2: always launch in step 0 (New / load project) — every setting depends on a
+            # saved project; Home is reached from there via the 'Home' row.
+            scr = self.SCREENS['project']()
+            scr.root_entry = True
+            self.push_screen(scr)

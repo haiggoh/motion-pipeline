@@ -10,6 +10,7 @@ from textual.widgets import Input
 
 from motion_pipeline import config
 from motion_pipeline.tui.app import MenuApp, MenuScreen
+from motion_pipeline.tui.project_screen import ProjectScreen
 from tui_probe import choose
 
 
@@ -23,12 +24,14 @@ async def test_first_run_asks_for_projects_root_and_remembers_it(fresh_config, t
         assert '~/motion-pipeline/projects' in inp.value  # suggested default, editable
         inp.value = str(root)
         await choose(pilot, app.screen, 'save')
-        assert isinstance(app.screen, MenuScreen)
+        assert isinstance(app.screen, ProjectScreen)  # launch always lands in step 0 now, not Home
     assert json.loads((fresh_config / 'config.json').read_text())['projects_root'] == str(root)
     app2 = MenuApp()
     async with app2.run_test(size=(80, 24)) as pilot:
         await pilot.pause()
-        assert isinstance(app2.screen, MenuScreen)  # asked once
+        assert isinstance(app2.screen, ProjectScreen)  # asked once — still step 0, not Home
+        app2.push_screen(MenuScreen())
+        await pilot.pause()
         assert str(root) in str(app2.screen.query_one('#subtitle').render()) or \
             'myprojects' in str(app2.screen.query_one('#subtitle').render())
 

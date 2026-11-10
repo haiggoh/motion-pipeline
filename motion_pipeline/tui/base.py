@@ -136,8 +136,9 @@ class MenuAppBase(App):
 
     def action_back(self):
         # only a SUBMENU goes back; on the main menu `b` does nothing (v0.4.x popped the main
-        # menu itself and left an empty screen)
-        if isinstance(self.screen, SubmenuScreen):
+        # menu itself and left an empty screen). A root-entry screen (launched into step 0,
+        # 0.5.2) has nothing behind it either.
+        if isinstance(self.screen, SubmenuScreen) and not getattr(self.screen, 'root_entry', False):
             self.pop_screen()
 
     def action_quit_app(self):
@@ -153,7 +154,7 @@ class ActionMenu(OptionList):
             super().__init__()
             self.action_id = action_id
 
-    BARE = ('back', 'quit')
+    BARE = ('back', 'quit', 'home')  # 'home' = the launch screen's way to the main menu
 
     def __init__(self, actions, spaced=False, first_number=1, **kwargs):
         self.actions = list(actions)
@@ -196,9 +197,14 @@ class SubmenuScreen(Screen):
             yield Static(self.TITLE, classes='title')
             with Vertical(id='body', classes='body-fill' if self.BODY_FILL else ''):
                 yield from self.compose_body()
-            yield ActionMenu(self.ACTIONS + [('back', 'Back')], id='actions')
+            yield ActionMenu(self.ACTIONS + [self.trailing_action()], id='actions')
             yield from self.compose_after_actions()
             yield Static(self.HINT, classes='hint')
+
+    def trailing_action(self) -> tuple:
+        """The last action row. ('back', 'Back') by default; a screen launched as the app's
+        root (root_entry=True) overrides this — e.g. the project screen shows 'Home'."""
+        return ('back', 'Back')
 
     def compose_body(self):
         raise NotImplementedError
@@ -248,7 +254,7 @@ class SubmenuScreen(Screen):
             event.stop()
 
     def action_back(self):
-        if self.app.screen is self:
+        if self.app.screen is self and not getattr(self, 'root_entry', False):
             self.app.pop_screen()
 
     def action_quit_app(self):
