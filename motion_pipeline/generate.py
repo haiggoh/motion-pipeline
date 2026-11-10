@@ -89,10 +89,12 @@ def place_text_block(lines, W, H, font_px, line_h, zones):
     return x, int(H * 0.55)
 
 
-def generate(project_path, _variant='default'):
-    """Generate src/ for one project+variant. Returns the list of written files."""
+def generate(project_path, variant='default'):
+    """Generate src/ for one project+variant (the variant's colour overlay applied to the base
+    scheme — scheme.resolve_variant). Returns the list of written files."""
+    from .scheme import resolve_variant
     pj = json.load(open(os.path.join(project_path, 'project.json')))
-    scheme = json.load(open(os.path.join(project_path, 'scheme.json')))
+    scheme = resolve_variant(project_path, variant)
     timing = json.load(open(os.path.join(project_path, 'timing.json')))
     tr = json.load(open(os.path.join(project_path, 'transcript_model.json')))
     W, H = pj['resolution']
