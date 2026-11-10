@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.1 — 2026-11-10
+
+- fix(ui): typing a bare hex colour (`ffffff`, no `#`) into a CI colour field crashed the
+  whole menu with an unhandled `StyleValueError` (user report 2026-11-10 09:23 via
+  `bin/motion-pipeline-dev`). Hex input is now canonicalised to `#rrggbb` (bare 6-hex
+  accepted) for the swatch/H/S/L, and Save stores the canonical form in `scheme.json`;
+  invalid input shows the visible empty swatch instead of crashing; `_set_swatch` only ever
+  assigns a canonical colour, so no field value can crash the app. Tests:
+  `tests/test_colours_hex_input.py` (RED with the exact 0.5.0 crash under mutation, GREEN
+  after; fast suite 125 passed).
+
 ## v0.5.0 — 2026-11-10
 
 Menu rebuilt around one shared csl-style action list after user testing of v0.4.1
