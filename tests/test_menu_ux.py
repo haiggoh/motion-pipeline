@@ -88,11 +88,13 @@ async def test_digit_runs_submenu_action_but_types_into_a_focused_field(tmp_path
         app.push_screen(app.SCREENS['project']()); await pilot.pause()
         scr = app.screen
         name = scr.query_one('#name', Input)
+        scr.query_one('#dir', Input).value = str(tmp_path / 'p1')  # never the cwd
         name.focus(); await pilot.press('1'); await pilot.pause()
         assert name.value == '1' and isinstance(app.screen, type(scr))   # typed, not an action
         scr.query_one('#actions').focus(); await pilot.pause()
         await pilot.press('1'); await pilot.pause()                       # 1) Create new project
         assert 'created' in str(scr.query_one('#status').render())
+        assert (tmp_path / 'p1' / 'project.json').is_file()
 
 
 @pytest.mark.asyncio
