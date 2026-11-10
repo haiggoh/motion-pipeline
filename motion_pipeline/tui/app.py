@@ -12,6 +12,7 @@ from textual.screen import Screen
 from textual.widgets import Label, Log, Static
 
 from .base import ActionMenu, MenuAppBase, SubmenuScreen
+from .paths import PathInput
 from .jobs import run_command
 
 
@@ -100,7 +101,7 @@ class _RenderScreenBase(SubmenuScreen):
     def compose_body(self):
         from textual.widgets import Input
         yield Label('Output directory (drop a folder from Finder to paste its path)')
-        yield Input(id='outdir', placeholder=self.OUT_PLACEHOLDER)
+        yield PathInput(id='outdir', placeholder=self.OUT_PLACEHOLDER)
 
     def compose_after_actions(self):
         yield Static('', id='status')
@@ -175,9 +176,9 @@ class InputsScreen(SubmenuScreen):
         from textual.widgets import Input
         yield Label('Tip: drag a file/folder from Finder into a field to paste its path')
         yield Label('transcript.txt path')
-        yield Input(id='transcript', value='transcript.txt')
+        yield PathInput(id='transcript', value='transcript.txt')
         yield Label('voiceover file (optional)')
-        yield Input(id='vo', placeholder='audio/vo.wav')
+        yield PathInput(id='vo', placeholder='audio/vo.wav')
         yield Static('', id='status')
         yield Static('', id='error')
 
@@ -223,7 +224,7 @@ class FirstRunScreen(Screen):
             yield Static('motion-pipeline — where should your projects live?', classes='title')
             yield Static('Chosen once and remembered; change it later in step 0. '
                          'Drop a folder from Finder to paste its path.', classes='subtitle')
-            yield Input(id='root', value=config.projects_root() or config.SUGGESTED_ROOT)
+            yield PathInput(id='root', value=config.projects_root() or config.SUGGESTED_ROOT)
             yield ActionMenu([('save', 'Use this folder'), ('quit', 'Quit')], id='actions')
             yield Static('', id='error')
             yield Static('↑↓ move · Enter/click select · q quit', classes='hint')

@@ -8,6 +8,7 @@ from textual.widgets import Input, Label, Static
 from .. import config
 from .. import project as project_mod
 from .base import SubmenuScreen
+from .paths import PathInput
 
 
 class ProjectScreen(SubmenuScreen):
@@ -19,9 +20,9 @@ class ProjectScreen(SubmenuScreen):
         yield Label('Project name')
         yield Input(id='name', placeholder='my-project')
         yield Label('Project directory (optional; drop a folder from Finder)')
-        yield Input(id='dir', placeholder='<projects folder>/<name>')
+        yield PathInput(id='dir', placeholder='<projects folder>/<name>')
         yield Label('Projects folder (where new projects are created)')
-        yield Input(id='root', value=config.projects_root() or config.SUGGESTED_ROOT)
+        yield PathInput(id='root', value=config.projects_root() or config.SUGGESTED_ROOT)
         yield Static('', id='status')
         yield Static('', id='error')
 

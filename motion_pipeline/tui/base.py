@@ -214,6 +214,20 @@ class SubmenuScreen(Screen):
     def on_action_menu_chosen(self, event):
         self.run_action(event.action_id)
 
+    def on_paste(self, event):
+        """A Finder drop arrives as a paste to the FOCUSED widget. When that is not a text
+        field (e.g. the action list), route it to this screen's first path field."""
+        from .paths import PathInput
+        if isinstance(self.focused, Input):
+            return
+        fields = list(self.query(PathInput))
+        if not fields:
+            return
+        event.stop()
+        target = fields[0]
+        target.focus()
+        target.post_message(type(event)(event.text))
+
     def on_key(self, event):
         menu = self.query_one('#actions', ActionMenu)
         if event.key in menu.numbers and not isinstance(self.focused, Input):
