@@ -97,6 +97,8 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 .variant-select { width: 22; }
 .variant-name { width: 24; }
 #preview, #error, #status { height: auto; }
+#image { height: auto; }
+.joblog { height: 1fr; min-height: 3; color: ansi_bright_black; }
 .role-row { height: 3; }
 .role-label { width: 11; padding: 1 1 0 0; }
 .weight { width: 16; }

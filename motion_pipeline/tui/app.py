@@ -106,8 +106,8 @@ class _RenderScreenBase(SubmenuScreen):
     def compose_after_actions(self):
         yield Static('', id='status')
         yield Static('', id='link')
-        yield Log(id='log')
         yield Static('', id='image')
+        yield Log(id='log', classes='joblog')
 
     def on_mount(self):
         self.query_one('#actions', ActionMenu).set_enabled('open', False)
@@ -137,6 +137,14 @@ class _RenderScreenBase(SubmenuScreen):
 
     def on_render_done(self, rc):
         out = self.outdir() or self.app.default_out()
+        if rc != 0:
+            # name WHY, from the log (render_cli prints 'missing dependency: …' / 'error: …')
+            lines = [str(x) for x in self.query_one('#log', Log).lines]
+            why = next((x for x in reversed(lines)
+                        if x.startswith(('missing dependency', 'error', 'disk guard', 'no '))), '')
+            self.query_one('#status', Static).update(
+                f'failed (exit {rc})' + (f' — {why}' if why else '') + ' — see the log below')
+            return
         self.query_one('#status', Static).update(f'done (exit {rc})')
         self.query_one('#actions', ActionMenu).set_enabled('open', True)
         from rich.text import Text
@@ -165,7 +173,12 @@ class BgTestScreen(_RenderScreenBase):
             subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', masters[0],
                             '-frames:v', '1', png], check=False)
             if os.path.isfile(png):
-                self.query_one('#image', Static).update(render_ansi_image(png, max_w=160, max_h=90))
+                img = self.query_one('#image', Static)
+                # fit the space left below the actions (half-block = 2 pixel rows per cell)
+                w, h = self.app.size
+                top = self.query_one('#link', Static).region.bottom + 1
+                rows = max(5, h - top - 2)
+                img.update(render_ansi_image(png, max_w=max(20, w - 4), max_h=rows))
 
 
 class InputsScreen(SubmenuScreen):

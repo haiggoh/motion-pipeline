@@ -20,28 +20,33 @@ async def test_all_menu_screens_mount():
 
 
 @pytest.mark.asyncio
-async def test_worker_streams_progress_and_stays_responsive_and_cancellable():
-    cmd = ['bash', '-c', 'for i in 1 2 3 4 5 6 7 8; do echo line$i; sleep 0.3; done']
+async def test_worker_streams_progress_and_stays_responsive_and_cancellable(tmp_path):
+    """Cancel must STOP the render process (v0.1-0.4: worker.cancel() on a thread worker left
+    the subprocess running), not just stop the log."""
+    import asyncio
+    import os
+    pidfile = tmp_path / 'pid'
+    cmd = ['bash', '-c', f'echo $$ > {pidfile}; for i in $(seq 1 40); do echo line$i; sleep 0.1; done']
     app = MenuApp(test_render_cmd=cmd)
+    app.project_dir = str(tmp_path)
     async with app.run_test() as pilot:
         app.push_screen(app.SCREENS['bgtest']())
         await pilot.pause()
         await choose(pilot, app.screen, 'run')
-        await pilot.pause()
-        # responsiveness: the app answers queries while the worker runs
-        assert app.screen.query_one('#status', Static) is not None
-        await pilot.pause()
-        # cancel mid-run
+        for _ in range(30):
+            await pilot.pause(0.05)
+            if pidfile.exists() and pidfile.read_text().strip():
+                break
+        pid = int(pidfile.read_text())
+        await pilot.pause(0.3)
+        assert app.screen.query_one('#status', Static) is not None   # responsive meanwhile
         await choose(pilot, app.screen, 'cancel')
-        await pilot.pause()
-        await pilot.pause()
-        lines = [str(entry) for entry in app.screen.query_one('#log', Log).lines]
-        assert any('line' in entry for entry in lines), lines
+        await pilot.pause(0.5)
         status = str(app.screen.query_one('#status', Static).render())
         assert 'cancel' in status, status
-        # after cancel, no further progress lines arrive
-        n = len(lines)
-        await pilot.pause()
-        await pilot.pause()
-        lines2 = [str(entry) for entry in app.screen.query_one('#log', Log).lines]
-        assert len(lines2) <= n + 1, (lines, lines2)  # at most the in-flight line
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)                                       # the process is gone (and reaped)
+        n = len(app.screen.query_one('#log', Log).lines)
+        assert any('line' in str(e) for e in app.screen.query_one('#log', Log).lines)
+        await pilot.pause(1.2)
+        assert len(app.screen.query_one('#log', Log).lines) <= n + 1
