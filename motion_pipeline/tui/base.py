@@ -107,6 +107,15 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 #family { height: 2; padding: 0 0 1 0; }
 .zone-list { width: 30; }
 .zone-editor { width: 1fr; padding: 0 0 0 1; }
+/* project screen (0.5.0 Task 4e): label-left rows so name/dir/root + the format row +
+   5 action rows + status/error all fit at 80x24 */
+.path-row { height: 3; }
+.path-row > Label { padding: 1 1 0 0; width: auto; }
+.path-row > Input { width: 1fr; }
+.format-row { height: 3; }
+.format-row > Label { padding: 1 0 0 1; width: auto; color: ansi_bright_black; }
+.format-row > Select { width: 15; margin: 0 0 0 1; }
+.format-row > Checkbox { width: auto; margin: 1 0 0 2; }
 .muted { color: ansi_bright_black; }
 """
 

@@ -162,4 +162,4 @@ async def test_step_zero_is_project_create_or_load():
         scr = app.screen
         assert scr.query_one('#name', Input) and scr.query_one('#dir', Input)
         menu = scr.query_one('#actions')
-        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'load', 'root', 'back']
+        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'load', 'root', 'format', 'back']

@@ -22,12 +22,20 @@ OWNED_KEYS = REQUIRED_KEYS + ('zones', 'fonts', 'transcript', 'vo', 'graphics')
 AGENTS_TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'project_AGENTS.md')
 
 
+def resolution_for(aspect, uhd=False):
+    """Resolution [w, h] for an aspect; UHD only applies to 16:9 (the caller refuses the
+    combination). ONE aspect -> resolution wiring: default_project() and the project
+    screen's Save format both read this."""
+    base = ASPECTS.get(aspect)
+    if base is None:
+        raise ValueError(f'invalid aspect {aspect!r} (want one of {sorted(ASPECTS)})')
+    return list(UHD) if (uhd and aspect == '16:9') else list(base)
+
+
 def default_project(name, aspect='16:9', fps=60, uhd=False):
-    base = ASPECTS.get(aspect, ASPECTS['16:9'])
-    w, h = UHD if (uhd and aspect == '16:9') else base
-    return {'name': name, 'aspect': aspect, 'resolution': [w, h], 'fps': fps,
-            'variants': ['default'], 'zones': [], 'fonts': {}, 'transcript': 'transcript.txt',
-            'vo': None}
+    return {'name': name, 'aspect': aspect, 'resolution': resolution_for(aspect, uhd),
+            'fps': fps, 'variants': ['default'], 'zones': [], 'fonts': {},
+            'transcript': 'transcript.txt', 'vo': None}
 
 
 def validate(p):
