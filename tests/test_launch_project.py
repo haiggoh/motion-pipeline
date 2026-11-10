@@ -23,6 +23,7 @@ async def test_launch_lands_on_project_screen_not_home(_isolated_config):
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause()
         assert isinstance(app.screen, ProjectScreen), type(app.screen).__name__
+        assert len(app.screen_stack) == 2, len(app.screen_stack)  # nothing sits behind the launch screen (QC 2026-11-10)
         menu, last = _nav_row(app.screen)
         assert last.id == 'home' and str(last.prompt) == 'Home', (last.id, last.prompt)
         assert menu.get_option('home').disabled, 'nav row must be disabled until a project is saved'
@@ -50,17 +51,45 @@ async def test_nav_row_enables_after_create_and_home_reaches_menu(_isolated_conf
         assert isinstance(app.screen, MenuScreen), type(app.screen).__name__
 
 
+async def test_nav_row_enables_after_load_too(_isolated_config):
+    # QC 2026-11-10: on_action enables the nav row after create AND load — only create was
+    # covered. Mutation: enabling inside the create branch only must turn this RED.
+    from motion_pipeline import project as project_mod
+    pdir = _isolated_config / 'acme'
+    pdir.mkdir()
+    project_mod.save(str(pdir), project_mod.default_project('acme'))
+    app = MenuApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        scr = app.screen
+        assert isinstance(scr, ProjectScreen)
+        menu, last = _nav_row(scr)
+        assert last.id == 'home' and menu.get_option('home').disabled
+        scr.query_one('#name', Input).value = 'acme'
+        await pilot.pause()
+        await choose(pilot, scr, 'load')
+        assert app.project_dir == str(pdir), app.project_dir
+        menu, last = _nav_row(scr)
+        assert last.id == 'home' and not menu.get_option('home').disabled, (
+            last.id, menu.get_option('home').disabled)
+
+
 async def test_from_home_trailing_row_is_back_and_pops(_isolated_config, tmp_path):
     app = MenuApp()
     app.project_dir = str(tmp_path)  # a saved project already exists
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause()
-        assert isinstance(app.screen, ProjectScreen)
-        app.push_screen(MenuScreen())       # Home
+        assert isinstance(app.screen, ProjectScreen)  # launched into step 0
+        # QC 2026-11-10: reach Home via the launch screen's own 'Home' row, then re-enter step 0
+        # through the HOME MENU's wiring (choose 'project') — not push_screen directly.
+        # Mutation: the menu wiring setting root_entry=True on the pushed screen -> RED here.
+        await choose(pilot, app.screen, 'home')
         await pilot.pause()
-        app.push_screen(app.SCREENS['project']())  # enter step 0 FROM home
+        assert isinstance(app.screen, MenuScreen), type(app.screen).__name__
+        await choose(pilot, app.screen, 'project')
         await pilot.pause()
         scr = app.screen
+        assert isinstance(scr, ProjectScreen)
         menu, last = _nav_row(scr)
         assert last.id == 'back' and str(last.prompt) == 'Back', (last.id, last.prompt)
         assert not menu.get_option('back').disabled  # came from home: Back works
@@ -76,3 +105,10 @@ async def test_back_key_does_not_pop_the_launch_screen(_isolated_config):
         await pilot.press('b')   # nothing behind the launch screen
         await pilot.pause()
         assert isinstance(app.screen, ProjectScreen), type(app.screen).__name__
+        # QC 2026-11-10: esc routes through SubmenuScreen.action_back (base.py) — a SEPARATE
+        # root_entry guard from the 'b' priority binding. Mutation: dropping that guard in
+        # SubmenuScreen.action_back only -> esc pops here, RED.
+        await pilot.press('escape')
+        await pilot.pause()
+        assert isinstance(app.screen, ProjectScreen), type(app.screen).__name__
+        assert len(app.screen_stack) == 2, len(app.screen_stack)
