@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.2 — 2026-11-10
+
+- feat(ui): the app now always launches in New / load project (step 0), not Home —
+  every setting depends on a saved project (user 2026-11-10 12:44). On that launch
+  screen the trailing nav row is disabled until a project is created/loaded and is
+  labelled 'Home', not 'Back' (entered from Home later it is 'Back' again). Video
+  format (aspect/fps/UHD) is set in the SAME create/load step, so the separate
+  'Save format' action is gone. 'b'/esc on the launch screen no longer pops it.
+  Tests: `tests/test_launch_project.py` (launch screen, gated+Home row,
+  Back-from-home, b-inert at launch) + updated menu_ux/projects_root/format tests;
+  fast suite 128 passed; mutation (gate removed) RED on the disabled assertion,
+  restored GREEN. Commit b607861.
+
 ## v0.5.1 — 2026-11-10
 
 - fix(ui): typing a bare hex colour (`ffffff`, no `#`) into a CI colour field crashed the
