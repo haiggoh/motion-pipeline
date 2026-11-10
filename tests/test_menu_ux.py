@@ -5,29 +5,28 @@ import pytest
 from textual.widgets import Input
 
 from motion_pipeline.tui.app import MenuApp, MenuScreen, STEPS
-from tui_probe import choose, on_screen
+from tui_probe import bg_is_default, choose, on_screen
 from motion_pipeline.tui.base import CSL_CSS, SubmenuScreen
 
 
-def test_csl_style_no_painted_background_and_round_panels():
-    # the terminal's own background shows through: every surface is ansi_default
-    assert 'background: ansi_default' in CSL_CSS
-    assert 'background: $surface' not in CSL_CSS and 'background: grey' not in CSL_CSS.lower()
-    # rounded frames on the TEXT FIELDS (inputs + dropdown selects), not the window
-    assert 'Input, Select' in CSL_CSS and 'border: round ansi_bright_black' in CSL_CSS
-    assert '.panel {' in CSL_CSS and 'border' not in CSL_CSS.split('.panel {')[1].split('}')[0]
-    # hover/highlight: proven by COMPUTED style in tests/test_hover_csl.py (the CSS-text
-    # assertion that used to live here passed on a selector that matched nothing)
-    # home menu spacing: proven by test_main_menu_is_csl_style_quit_last_no_back
+async def test_csl_style_no_painted_background_and_round_text_fields(tmp_path):
+    """Delivered, not declared: the live screen and an Input compute to the terminal's own
+    background, and text fields carry ONE round frame (dropdowns: test_select_rounded.py)."""
     app = MenuApp()
     assert app.ansi_color is True
-    assert 'ansi_default' in app.CSS
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        assert bg_is_default(app.screen.rich_style)
+        app.push_screen(app.SCREENS['project']()); await pilot.pause()
+        inp = app.screen.query_one('#name', Input)
+        assert inp.styles.border_top[0] == 'round' and bg_is_default(inp.rich_style)
+        panel = app.screen.query_one('.panel')
+        assert panel.styles.border_top[0] in ('', 'none')  # the window itself is not framed
 
 
 @pytest.mark.asyncio
 async def test_every_submenu_back_is_last_row_and_pops_without_saving(tmp_path, monkeypatch):
-    monkeypatch.setattr('motion_pipeline.tui.colours_screen.PROJECTS', str(tmp_path))
-    monkeypatch.setattr('motion_pipeline.tui.fonts_screen.PROJECTS', str(tmp_path))
     app = MenuApp()
     app.project_dir = str(tmp_path / 'proj')
     async with app.run_test(size=(80, 24)) as pilot:
@@ -42,11 +41,11 @@ async def test_every_submenu_back_is_last_row_and_pops_without_saving(tmp_path, 
             assert last.id == 'back' and str(last.prompt) == 'Back', (key, last.prompt)
             assert on_screen(app, menu), f'{key}: action rows not fully on-screen at 80x24'
             assert menu.max_scroll_y == 0, f'{key}: action rows scroll, Back hidden'
+            assert on_screen(app, scr.query_one('.hint')), f'{key}: key hint pushed off-screen at 80x24'
             if key == 'colours':
-                scr.query_one('#name', Input).value = 'should-not-save'
+                scr.query_one('#accent', Input).value = '#123456'   # typed, not saved
             await choose(pilot, scr, 'back')
             assert isinstance(app.screen, MenuScreen), key
-        assert not (tmp_path / 'should-not-save').exists()
         assert not (tmp_path / 'proj').exists()  # Back wrote nothing
 
 
@@ -163,4 +162,4 @@ async def test_step_zero_is_project_create_or_load():
         scr = app.screen
         assert scr.query_one('#name', Input) and scr.query_one('#dir', Input)
         menu = scr.query_one('#actions')
-        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'load', 'back']
+        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'load', 'root', 'back']

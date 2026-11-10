@@ -17,7 +17,6 @@ from textual.widgets import Input, Label, ListItem, ListView, Select, Static
 from .. import fonts as fonts_mod
 from .base import SubmenuScreen
 
-PROJECTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'projects')
 FONT_DIRS = ['/Library/Fonts', os.path.expanduser('~/Library/Fonts'), '/System/Library/Fonts']
 
 
@@ -102,7 +101,10 @@ class FontsScreen(SubmenuScreen):
             warn.update('')
         else:
             # copy the client/system font into the project's gitignored fonts/ (decide-question 2)
-            pdir = getattr(self.app, 'project_dir', PROJECTS)
+            pdir = getattr(self.app, 'project_dir', None)
+            if not pdir:
+                warn.update('pick or create a project in step 0 first — the font file is copied into it')
+                return
             os.makedirs(os.path.join(pdir, 'fonts'), exist_ok=True)
             dst = os.path.join(pdir, 'fonts', os.path.basename(path))
             if not os.path.isfile(dst):
@@ -121,7 +123,7 @@ class FontsScreen(SubmenuScreen):
             if not fam:
                 raise ValueError('pick a font family from the list')
             roles = {role: self.query_one(f'#role-{role}', Select).value for role in fonts_mod.ROLES}
-            pdir = getattr(self.app, 'project_dir', PROJECTS)
+            pdir = self.require_project()
             path = project_json_path(pdir)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             cfg = {}

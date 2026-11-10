@@ -150,3 +150,79 @@ def save_scheme(path, scheme):
         json.dump(scheme, f, indent=2)
         f.write('\n')
     os.replace(tmp, path)
+
+
+# --- colour variants as overlays (0.5.0 Task 4b, design §8a) ------------------------------
+# <project>/scheme.json is the base scheme (variant "default"). Each extra variant is
+# <project>/variants/<name>.json holding ONLY the colour keys it overrides; every other
+# project setting (transcript, fonts, zones, timing) is shared, so variants never drift.
+import re as _re
+
+COLOUR_KEYS = INPUT_KEYS[1:]
+_VARIANT_NAME = _re.compile(r'^[a-z0-9][a-z0-9_-]{0,31}$')
+
+
+def base_scheme_path(project_dir):
+    return os.path.join(project_dir, 'scheme.json')
+
+
+def variant_path(project_dir, name):
+    return os.path.join(project_dir, 'variants', f'{name}.json')
+
+
+def check_variant_name(name):
+    if name == 'default' or not _VARIANT_NAME.match(name or ''):
+        raise ValueError(f'invalid variant name {name!r}: want lowercase letters/digits/-/_ '
+                         '(max 32), not "default"')
+    return name
+
+
+def load_overlay(project_dir, name):
+    p = variant_path(project_dir, name)
+    if not os.path.isfile(p):
+        raise ValueError(f'unknown variant {name!r} (no {p})')
+    with open(p) as f:
+        ov = json.load(f)
+    if not isinstance(ov, dict):
+        raise ValueError(f'{p}: want a JSON object of colour overrides')
+    bad = sorted(set(ov) - set(COLOUR_KEYS))
+    if bad:
+        raise ValueError(f'{p}: keys {bad} are not colour keys {list(COLOUR_KEYS)}')
+    for k, v in ov.items():
+        _hex_to_srgb(v)
+    return ov
+
+
+def resolve_variant(project_dir, variant='default'):
+    """Base scheme with the variant's overrides applied (validated)."""
+    base = load_scheme(base_scheme_path(project_dir))
+    if variant == 'default':
+        return dict(base, name='default')
+    check_variant_name(variant)
+    return validate_scheme(dict(base, **load_overlay(project_dir, variant), name=variant))
+
+
+def save_variant(project_dir, name, full_colours):
+    """Store ONLY the keys that differ from the base; enforce the contrast floors on the
+    resolved scheme. Returns the overlay written."""
+    check_variant_name(name)
+    base = load_scheme(base_scheme_path(project_dir))
+    overlay = {k: full_colours[k] for k in COLOUR_KEYS
+               if k in full_colours and full_colours[k].lower() != base[k].lower()}
+    for v in overlay.values():
+        _hex_to_srgb(v)
+    derive_palette(dict(base, **overlay, name=name))
+    p = variant_path(project_dir, name)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(overlay, f, indent=2)
+        f.write('\n')
+    os.replace(tmp, p)
+    return overlay
+
+
+def list_variants(project_dir):
+    d = os.path.join(project_dir, 'variants')
+    names = sorted(f[:-5] for f in os.listdir(d) if f.endswith('.json')) if os.path.isdir(d) else []
+    return ['default'] + names

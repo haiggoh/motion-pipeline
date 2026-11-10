@@ -1,138 +1,219 @@
-"""ColoursScreen — CI colour setup (design §2 step 1, G3), with live swatches + HSL fields.
+"""ColoursScreen — CI colours of the CURRENT project (design §2 step 1, G3), with live
+swatches + H/S/L fields and optional colour variants (0.5.0 Tasks 4/4b/4c).
 
-Layout is vertical and compact so everything stays on screen in a normal terminal:
-per colour one row = [swatch][hex field (12)][H][S][L fields (7 each)]. Each hex field
-live-updates its swatch and HSL fields; editing HSL updates the hex + swatch.
+One labelled row per colour: [name][swatch][hex][H][S][L]. Values are prefilled from the
+project's scheme.json; each hex edit live-updates its swatch + H/S/L, and an H/S/L edit
+updates hex + swatch. Off by default, the "Multiple colour variants" checkbox reveals a
+variant picker: a variant is an OVERLAY (<project>/variants/<name>.json holding only the
+colours that differ from the base), so it stays in sync with every other project change.
 """
 import os
 
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Input, Label, ListItem, ListView, Static
+from textual.widgets import Checkbox, Input, Label, Select, Static
 
+from .. import project as project_mod
 from .. import scheme as scheme_mod
 from .base import SubmenuScreen
 
-PROJECTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'projects')
-COLOUR_KEYS = scheme_mod.INPUT_KEYS[1:]
+COLOUR_KEYS = scheme_mod.COLOUR_KEYS
+NEW_VARIANT = '__new__'
 
 
 def scheme_path(project_dir):
-    return os.path.join(project_dir, 'scheme.json')
+    return scheme_mod.base_scheme_path(project_dir)
 
 
 class ColoursScreen(SubmenuScreen):
     TITLE = 'CI colours'
-    ACTIONS = [('derive', 'Derive & preview'), ('save', 'Save scheme')]
+    ACTIONS = [('derive', 'Derive & preview'), ('save', 'Save colours')]
 
     def compose_body(self):
-        with Vertical():
-            yield Label('Project name')
-            yield Input(id='name', placeholder='my-project')
+        with Vertical(id='colour-rows'):
             for key in COLOUR_KEYS:
                 with Horizontal(classes='colour-row'):
-                    yield Static('  ', id=f'swatch-{key}', classes='swatch')
+                    yield Label(key.replace('_', ' '), classes='colour-label')
+                    yield Static('░░', id=f'swatch-{key}', classes='swatch -empty')
                     yield Input(id=key, placeholder='#rrggbb', classes='hexfield')
-                    yield Label('H')
-                    yield Input(id=f'h-{key}', placeholder='0-360', classes='hsl')
-                    yield Label('S')
-                    yield Input(id=f's-{key}', placeholder='0-100', classes='hsl')
-                    yield Label('L')
-                    yield Input(id=f'l-{key}', placeholder='0-100', classes='hsl')
-            yield Static('', id='preview')
-            yield Static('', id='error')
-            yield Label('Saved schemes (click to re-edit)')
-            yield ListView(id='schemes')
+                    yield Label('H', classes='hsl-label')
+                    yield Input(id=f'h-{key}', placeholder='H', classes='hsl')
+                    yield Label('S', classes='hsl-label')
+                    yield Input(id=f's-{key}', placeholder='S', classes='hsl')
+                    yield Label('L', classes='hsl-label')
+                    yield Input(id=f'l-{key}', placeholder='L', classes='hsl')
+        with Horizontal(id='variant-bar'):
+            yield Checkbox('Multiple colour variants', id='multi')
+            yield Select([('default', 'default')], id='variant', value='default',
+                         allow_blank=False, classes='variant-select')
+            yield Input(id='variant-name', placeholder='new variant name', classes='variant-name')
 
-    def on_mount(self) -> None:
-        self.refresh_scheme_list()
+    def compose_after_actions(self):
+        yield Static('', id='preview')
+        yield Static('', id='error')
 
+    # ---- state ------------------------------------------------------------------------
     def project_dir(self):
-        return getattr(self.app, 'project_dir', PROJECTS)
+        return getattr(self.app, 'project_dir', None)
 
-    def refresh_scheme_list(self) -> None:
-        if not self.query('#schemes'):
-            return
-        lv = self.query_one('#schemes', ListView)
-        existing = {getattr(c, 'id', '') for c in lv.children}
-        base = self.project_dir()
-        if not os.path.isdir(base):
-            return
-        for name in sorted(os.listdir(base)):
-            p = scheme_path(os.path.join(base, name))
-            if os.path.isfile(p) and f'scheme-{name}' not in existing:
-                lv.append(ListItem(Label(name), id=f'scheme-{name}'))
+    def on_mount(self):
+        self._echo = set()
+        pd = self.project_dir()
+        variants = scheme_mod.list_variants(pd) if pd else ['default']
+        multi = len(variants) > 1
+        self.query_one('#multi', Checkbox).value = multi
+        self._refresh_variant_options(variants, 'default')
+        self._show_variant_bar(multi)
+        self.load_variant('default')
 
-    def current_scheme(self):
-        name = self.query_one('#name', Input).value.strip()
-        vals = {k: self.query_one(f'#{k}', Input).value.strip() for k in COLOUR_KEYS}
-        return {'name': name, **vals}
+    def _refresh_variant_options(self, variants, selected):
+        sel = self.query_one('#variant', Select)
+        sel.set_options([(v, v) for v in variants] + [('+ new variant', NEW_VARIANT)])
+        sel.value = selected
+
+    def _show_variant_bar(self, on):
+        self.query_one('#variant', Select).display = on
+        self.query_one('#variant-name', Input).display = on and self.current_variant() == NEW_VARIANT
+
+    def current_variant(self):
+        v = self.query_one('#variant', Select).value
+        return v if isinstance(v, str) else 'default'
+
+    def load_variant(self, name):
+        """Fill the rows from the resolved variant (base for 'default')."""
+        pd = self.project_dir()
+        if not pd or not os.path.isfile(scheme_path(pd)):
+            for k in COLOUR_KEYS:
+                self._set_swatch(k, None)
+            return
+        try:
+            s = scheme_mod.resolve_variant(pd, name)
+        except ValueError as e:
+            self.query_one('#error', Static).update(f'error: {e}')
+            return
+        for k in COLOUR_KEYS:
+            self.set_colour(k, s[k])
+
+    def set_colour(self, key, hexv):
+        hh, ss, ll = scheme_mod.hex_to_hsl(hexv)
+        self._set_field(key, hexv)
+        self._set_field(f'h-{key}', str(hh))
+        self._set_field(f's-{key}', str(ss))
+        self._set_field(f'l-{key}', str(ll))
+        self._set_swatch(key, hexv)
+
+    def current_colours(self):
+        return {k: self.query_one(f'#{k}', Input).value.strip() for k in COLOUR_KEYS}
+
+    # ---- events -----------------------------------------------------------------------
+    def on_checkbox_changed(self, event):
+        if event.checkbox.id == 'multi':
+            if not event.value:
+                self.query_one('#variant', Select).value = 'default'
+            self._show_variant_bar(event.value)
+
+    def on_select_changed(self, event):
+        if event.select.id != 'variant':
+            return
+        v = event.value
+        self.query_one('#variant-name', Input).display = (v == NEW_VARIANT)
+        if isinstance(v, str) and v != NEW_VARIANT:
+            self.load_variant(v)
+
+    def _set_field(self, wid, value):
+        """Set a field programmatically and mark the resulting Changed event as an echo, so
+        it is not mistaken for a user edit (v0.5.0 bug: a deferred H/S/L echo overwrote a
+        just-typed invalid hex with the previous colour). Only marks when the value really
+        changes — an unchanged value fires no event and would swallow the next real edit."""
+        inp = self.query_one(f'#{wid}', Input)
+        if inp.value != value:
+            self._echo.add(wid)
+            inp.value = value
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Live two-way sync: hex <-> HSL <-> swatch. An HSL change that exactly matches the
-        current hex (the hex->hsl sync echo) is not written back, so the hex never degrades
-        through a lossy round-trip."""
+        """Live two-way sync: hex <-> HSL <-> swatch."""
         wid = event.input.id
-        if wid in COLOUR_KEYS:  # hex edited
+        if wid in self._echo:
+            self._echo.discard(wid)
+            return
+        if wid in COLOUR_KEYS:  # hex edited by the user
             hexv = event.value.strip()
             try:
                 hh, ss, ll = scheme_mod.hex_to_hsl(hexv)
-                self.query_one(f'#h-{wid}', Input).value = str(hh)
-                self.query_one(f'#s-{wid}', Input).value = str(ss)
-                self.query_one(f'#l-{wid}', Input).value = str(ll)
-                self._set_swatch(wid, hexv)
             except ValueError:
                 self._set_swatch(wid, None)
-        elif wid and wid[0] in 'hsl' and '-' in wid:  # HSL field edited
-            _, key = wid.split('-', 1)
+                return
+            self._set_field(f'h-{wid}', str(hh))
+            self._set_field(f's-{wid}', str(ss))
+            self._set_field(f'l-{wid}', str(ll))
+            self._set_swatch(wid, hexv)
+        elif wid and wid[0] in 'hsl' and wid[1:2] == '-':  # H/S/L edited by the user
+            key = wid[2:]
             if key not in COLOUR_KEYS:
                 return
             try:
                 hh = float(self.query_one(f'#h-{key}', Input).value or 0)
                 ss = float(self.query_one(f'#s-{key}', Input).value or 0)
                 ll = float(self.query_one(f'#l-{key}', Input).value or 0)
-                cur = self.query_one(f'#{key}', Input).value.strip()
-                ch, cs, cl = scheme_mod.hex_to_hsl(cur) if cur else (0, 0, 0)
-                if (round(hh), round(ss), round(ll)) == (ch, cs, cl):
-                    return  # sync echo, not a user edit
-                hexv = scheme_mod.hsl_to_hex(hh, ss, ll)
-                self.query_one(f'#{key}', Input).value = hexv
-                self._set_swatch(key, hexv)
             except ValueError:
-                pass
+                return
+            hexv = scheme_mod.hsl_to_hex(hh, ss, ll)
+            self._set_field(key, hexv)
+            self._set_swatch(key, hexv)
 
     def _set_swatch(self, key, hexv):
         sw = self.query_one(f'#swatch-{key}', Static)
-        sw.update('  ')
-        sw.styles.background = hexv if hexv else 'ansi_default'
+        sw.set_class(not hexv, '-empty')
+        if hexv:
+            sw.update('')
+            sw.styles.background = hexv
+        else:
+            sw.update('░░')  # visible empty marker: no colour yet
+            sw.styles.background = 'ansi_default'
 
-    def on_action(self, action_id):
+    def on_action(self, action_id) -> None:
         err = self.query_one('#error', Static)
         err.update('')
         try:
-            s = scheme_mod.validate_scheme(self.current_scheme())
+            pd = self.require_project()
+            colours = self.current_colours()
+            scheme = scheme_mod.validate_scheme({'name': os.path.basename(pd), **colours})
             if action_id == 'derive':
-                p = scheme_mod.derive_palette(s)
-                lines = [f'{k}: {v}' for k, v in p.items() if k != 'gradient_stops']
-                lines.append('gradient_stops: ' + ' -> '.join(p['gradient_stops']))
-                self.query_one('#preview', Static).update('\n'.join(lines))
+                p = scheme_mod.derive_palette(scheme)
+                self.query_one('#preview', Static).update(self._palette_line(p))
             elif action_id == 'save':
-                if not s['name']:
-                    raise ValueError('project name is empty')
-                scheme_mod.save_scheme(scheme_path(os.path.join(self.project_dir(), s['name'])), s)
-                self.query_one('#preview', Static).update(f'saved {scheme_path(os.path.join(self.project_dir(), s["name"]))}')
-                self.refresh_scheme_list()
+                variant = self.current_variant() if self.query_one('#multi', Checkbox).value else 'default'
+                if variant == NEW_VARIANT:
+                    variant = scheme_mod.check_variant_name(self.query_one('#variant-name', Input).value.strip())
+                if variant == 'default':
+                    scheme_mod.save_scheme(scheme_path(pd), scheme)
+                    msg = f'saved {scheme_path(pd)}'
+                else:
+                    if not os.path.isfile(scheme_path(pd)):
+                        raise ValueError('save the default colours first — a variant only overrides them')
+                    ov = scheme_mod.save_variant(pd, variant, colours)
+                    msg = f'saved variant {variant!r} ({len(ov)} colour(s) differ from default)'
+                self._sync_project_variants(pd)
+                self._refresh_variant_options(scheme_mod.list_variants(pd), variant)
+                self._show_variant_bar(self.query_one('#multi', Checkbox).value)
+                self.query_one('#preview', Static).update(msg)
         except ValueError as e:
             err.update(f'error: {e}')
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        name = event.item.id.removeprefix('scheme-')
-        s = scheme_mod.load_scheme(scheme_path(os.path.join(self.project_dir(), name)))
-        self.query_one('#name', Input).value = s['name']
-        for k in COLOUR_KEYS:
-            hexv = s[k]
-            self.query_one(f'#{k}', Input).value = hexv
-            hh, ss, ll = scheme_mod.hex_to_hsl(hexv)
-            self.query_one(f'#h-{k}', Input).value = str(hh)
-            self.query_one(f'#s-{k}', Input).value = str(ss)
-            self.query_one(f'#l-{k}', Input).value = str(ll)
-            self._set_swatch(k, hexv)
+    def _sync_project_variants(self, pd):
+        pj = os.path.join(pd, 'project.json')
+        p = project_mod.load(pd) if os.path.isfile(pj) else project_mod.default_project(os.path.basename(pd))
+        p['variants'] = scheme_mod.list_variants(pd)
+        project_mod.save(pd, p)
+
+    @staticmethod
+    def _palette_line(p):
+        from rich.text import Text
+        t = Text()
+        for k in ('secondary_text', 'label_tint', 'particle_colour', 'highlight_bar'):
+            t.append(f'{k.replace("_", " ")} ')
+            t.append('  ', style=f'on {p[k]}')
+            t.append('  ')
+        t.append('gradient ')
+        for stop in p['gradient_stops']:
+            t.append('  ', style=f'on {stop}')
+        return t

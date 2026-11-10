@@ -14,7 +14,6 @@ from textual.widgets import Label, Log, Static
 from .base import ActionMenu, MenuAppBase, SubmenuScreen
 from .jobs import run_command
 
-ROOT_PROJECTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'projects')
 
 
 def render_ansi_image(path, max_w=160, max_h=90):
@@ -61,13 +60,19 @@ class MenuScreen(Screen):
             yield Static('motion-pipeline — Project Menu', classes='title')
             yield Static(self.subtitle(), classes='subtitle', id='subtitle')
             yield ActionMenu(STEPS + [('quit', 'Quit')], spaced=True, first_number=0, id='actions')
-            yield Static('', classes='spacer')
-            yield Static('↑↓ move · Enter/click select · 0-6 step · q quit', classes='hint')
-            yield Static(f'motion-pipeline v{__version__}', classes='version')
+            with Vertical(classes='footer'):
+                yield Static('↑↓ move · Enter/click select · 0-6 step · q quit', classes='hint')
+                yield Static(f'motion-pipeline v{__version__}', classes='version')
 
     def subtitle(self):
+        from .. import config
         pd = getattr(self.app, 'project_dir', None)
-        return f'no-code motion graphics · project: {os.path.basename(pd) if pd else "(none)"}'
+        root = config.projects_root() or '(not chosen)'
+        home = os.path.expanduser('~')
+        if root.startswith(home):
+            root = '~' + root[len(home):]
+        name = os.path.basename(pd) if pd else '(none — pick one in step 0)'
+        return f'project: {name} · projects folder: {root}'
 
     def on_screen_resume(self):
         self.query_one('#subtitle', Static).update(self.subtitle())
@@ -185,7 +190,7 @@ class InputsScreen(SubmenuScreen):
 
         from .. import project as project_mod
         try:
-            pd = self.app.project_dir
+            pd = self.require_project()
             pj = os.path.join(pd, 'project.json')
             p = project_mod.load(pd) if os.path.isfile(pj) else project_mod.default_project(os.path.basename(pd))
             p['transcript'] = self.query_one('#transcript', Input).value.strip()
@@ -206,24 +211,68 @@ class RenderScreen(_RenderScreenBase):
         return self.app.full_render_cmd()
 
 
+class FirstRunScreen(Screen):
+    """Asked once: where projects live (remembered in ~/.config/motion-pipeline). Never inside
+    the installed package — Homebrew replaces it on every upgrade."""
+
+    def compose(self):
+        from textual.widgets import Input
+
+        from .. import config
+        with Vertical(classes='panel'):
+            yield Static('motion-pipeline — where should your projects live?', classes='title')
+            yield Static('Chosen once and remembered; change it later in step 0. '
+                         'Drop a folder from Finder to paste its path.', classes='subtitle')
+            yield Input(id='root', value=config.projects_root() or config.SUGGESTED_ROOT)
+            yield ActionMenu([('save', 'Use this folder'), ('quit', 'Quit')], id='actions')
+            yield Static('', id='error')
+            yield Static('↑↓ move · Enter/click select · q quit', classes='hint')
+
+    def on_action_menu_chosen(self, event):
+        from textual.widgets import Input
+
+        from .. import config
+        if event.action_id == 'quit':
+            self.app.exit()
+            return
+        try:
+            config.set_projects_root(self.query_one('#root', Input).value)
+        except (ValueError, OSError) as e:
+            self.query_one('#error', Static).update(f'error: {e}')
+            return
+        if len(self.app.screen_stack) > 2:
+            self.app.pop_screen()
+        else:
+            self.app.switch_screen(MenuScreen())
+
+
 class MenuApp(MenuAppBase):
     SCREENS = {}  # filled in on_mount to avoid import cycles
 
     def __init__(self, test_render_cmd=None, full_render_cmd=None):
         super().__init__()
-        self._test_cmd = test_render_cmd or ['bash', '-c', 'echo test-render-placeholder']
-        self._full_cmd = full_render_cmd or ['bash', '-c', 'echo full-render-placeholder']
+        self._test_cmd = test_render_cmd
+        self._full_cmd = full_render_cmd
+        self.project_dir = None
+
+    def _cli(self, mode):
+        import sys
+        if not self.project_dir:
+            return ['bash', '-c', 'echo "no project open — create or load one in step 0 first" >&2; exit 2']
+        return [sys.executable, '-m', 'motion_pipeline.render_cli', '--project', self.project_dir,
+                '--mode', mode]
 
     def test_render_cmd(self):
-        return list(self._test_cmd)
+        return list(self._test_cmd) if self._test_cmd else self._cli('test')
 
     def full_render_cmd(self):
-        return list(self._full_cmd)
+        return list(self._full_cmd) if self._full_cmd else self._cli('full')
 
     def default_out(self):
-        return 'renders/default'
+        return os.path.join(self.project_dir or '.', 'renders', 'default')
 
     def on_mount(self) -> None:
+        from .. import config
         from .colours_screen import ColoursScreen
         from .fonts_screen import FontsScreen
         from .project_screen import ProjectScreen
@@ -231,6 +280,9 @@ class MenuApp(MenuAppBase):
         self.SCREENS = {'menu': MenuScreen, 'project': ProjectScreen, 'colours': ColoursScreen,
                         'fonts': FontsScreen, 'zones': ZonesScreen, 'bgtest': BgTestScreen,
                         'inputs': InputsScreen, 'render': RenderScreen}
-        if not getattr(self, 'project_dir', None):
-            self.project_dir = os.path.join(ROOT_PROJECTS, 'default')
-        self.push_screen(MenuScreen())
+        if self.project_dir is None:
+            self.project_dir = config.last_project()
+        if config.projects_root() is None:
+            self.push_screen(FirstRunScreen())
+        else:
+            self.push_screen(MenuScreen())

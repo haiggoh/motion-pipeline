@@ -24,3 +24,23 @@ def _projects_tripwire():
     yield
     after = _snapshot()
     assert after == before, f'tests wrote into the repo projects/ folder: {sorted(after ^ before)}'
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config(tmp_path_factory, monkeypatch):
+    """Every test gets its own config dir with a projects root already chosen (so the
+    first-run screen does not appear) — never the user's real ~/.config/motion-pipeline.
+    Tests of the first-run flow clear it with `fresh_config`."""
+    cfg = tmp_path_factory.mktemp('mpcfg')
+    root = tmp_path_factory.mktemp('mproot')
+    monkeypatch.setenv('MP_CONFIG_DIR', str(cfg))
+    (cfg / 'config.json').write_text('{"projects_root": "%s"}\n' % root)
+    return root
+
+
+@pytest.fixture
+def fresh_config(_isolated_config, monkeypatch, tmp_path):
+    d = tmp_path / 'freshcfg'
+    d.mkdir()
+    monkeypatch.setenv('MP_CONFIG_DIR', str(d))
+    return d

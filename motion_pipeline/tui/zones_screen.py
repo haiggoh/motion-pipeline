@@ -11,29 +11,29 @@ from textual.widgets import Input, Label, ListItem, ListView, Static
 
 from .. import project as project_mod
 from .base import SubmenuScreen
-from .colours_screen import PROJECTS
 
 
-def _load(name):
-    path = os.path.join(PROJECTS, name, 'project.json')
-    return json.loads(open(path).read()) if os.path.isfile(path) else project_mod.default_project(name)
+def _load(project_dir):
+    path = os.path.join(project_dir, 'project.json')
+    return json.loads(open(path).read()) if os.path.isfile(path) else \
+        project_mod.default_project(os.path.basename(project_dir))
 
 
 class ZonesScreen(SubmenuScreen):
     TITLE = 'Keep-out zones'
     ACTIONS = [('save', 'Add/update zone')]
+    BODY_FILL = True
 
     def compose_body(self):
         with Horizontal():
-            with Vertical(id='zonelist'):
-                yield Label('Keep-out zones (click to edit)')
+            with Vertical(id='zonelist', classes='zone-list'):
+                yield Label('Keep-out zones')
+                yield Static('(no zones yet)', id='zones-empty', classes='muted')
                 yield ListView(id='zones')
-            with Vertical(id='editor'):
-                yield Label('Project name')
-                yield Input(id='name', placeholder='my-project')
-                yield Label('Zone section (transcript section name)')
+            with Vertical(id='zone-editor', classes='zone-editor'):
+                yield Label('Section (transcript section name)')
                 yield Input(id='section', placeholder='intro')
-                yield Label('Rect [x,y,w,h] in frame coords of the project aspect')
+                yield Label('Rect x,y,w,h (frame pixels)')
                 yield Input(id='rect', placeholder='520,100,880,880')
                 yield Static('', id='status')
                 yield Static('', id='error')
@@ -46,13 +46,14 @@ class ZonesScreen(SubmenuScreen):
             return  # DOM not composed yet
         lv = self.query_one('#zones', ListView)
         lv.clear()
-        name = self.query_one('#name', Input).value.strip()
-        if not name:
+        pd = getattr(self.app, 'project_dir', None)
+        if not pd:
             return
         try:
-            p = _load(name)
+            p = _load(pd)
         except Exception:
             return
+        self.query_one('#zones-empty', Static).display = not p.get('zones')
         for i, z in enumerate(p.get('zones', [])):
             lv.append(ListItem(Label(f"{z['section']}: {z['rect']}"), id=f'zone-{i}'))
 
@@ -62,19 +63,17 @@ class ZonesScreen(SubmenuScreen):
         err = self.query_one('#error', Static)
         err.update('')
         try:
-            name = self.query_one('#name', Input).value.strip()
-            if not name:
-                raise ValueError('project name is empty')
+            pd = self.require_project()
             section = self.query_one('#section', Input).value.strip()
             rect = [int(v) for v in self.query_one('#rect', Input).value.split(',')]
             if len(rect) != 4:
                 raise ValueError('rect must be x,y,w,h')
-            p = _load(name)
+            p = _load(pd)
             zones = [z for z in p.get('zones', []) if z['section'] != section]
             zones.append({'section': section, 'rect': rect})
             p['zones'] = zones
-            project_mod.save(os.path.join(PROJECTS, name), p)
-            self.query_one('#status', Static).update(f'saved zone for {section!r} in {name}')
+            project_mod.save(pd, p)
+            self.query_one('#status', Static).update(f'saved zone for {section!r} in {os.path.basename(pd)}')
             self.refresh_zones()
         except (ValueError, json.JSONDecodeError) as e:
             err.update(f'error: {e}')

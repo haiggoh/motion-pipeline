@@ -59,7 +59,11 @@ Header, Footer { background: ansi_default; color: ansi_bright_black; }
 .panel { padding: 0 1; background: ansi_default; height: 1fr; }
 .title { text-style: bold; padding: 0 0 1 0; }
 .subtitle { color: ansi_bright_cyan; padding: 0 0 1 0; }
-.hint { color: ansi_bright_black; }
+/* key hint (and the home menu's version footer) are DOCKED to the bottom: they claim their
+   rows first, so content can never push them off-screen (a 1fr spacer still takes >= 1 row) */
+.hint { color: ansi_bright_black; dock: bottom; }
+.footer { dock: bottom; height: auto; }
+.footer > .hint { dock: none; }
 .version { color: ansi_bright_black; text-style: italic; padding: 1 0 0 0; }
 /* form fields, then the action rows DIRECTLY below them (Back last); only screens with a
    long list (fonts) let the body fill the height (class body-fill) */
@@ -69,22 +73,39 @@ Header, Footer { background: ansi_default; color: ansi_bright_black; }
 #body > Vertical, #body > Horizontal { height: auto; }
 #body.body-fill > Vertical, #body.body-fill > Horizontal { height: 1fr; }
 #actions { height: auto; max-height: 100%; margin: 1 0 0 0; padding: 0; }
-.spacer { height: 1fr; min-height: 0; }
 /* scrollbars: thin grey thumb on the terminal background, never a painted block */
 * { scrollbar-background: ansi_default; scrollbar-background-hover: ansi_default;
     scrollbar-background-active: ansi_default; scrollbar-color: ansi_bright_black;
     scrollbar-color-hover: ansi_bright_blue; scrollbar-color-active: ansi_bright_blue;
     scrollbar-corner-color: ansi_default; scrollbar-size-vertical: 1; }
-.swatch { width: 4; height: 1; }
+/* colour editor: one labelled row per colour, framed swatch (visible even when empty) */
 .colour-row { height: 3; }
-.hexfield { width: 12; }
-.hsl { width: 7; }
+.colour-label { width: 17; padding: 1 1 0 0; }
+/* filled swatch = a solid colour block; only an EMPTY swatch is framed (+ ░ marker) */
+.swatch { width: 6; height: 3; content-align: center middle; color: ansi_bright_black; }
+.swatch.-empty { border: round ansi_bright_black; }
+/* a field's frame (2) + padding (2) eat 4 columns: hex needs 7 chars + cursor */
+.hexfield { width: 12; padding: 0 1; }
+.hsl-label { width: 2; padding: 1 0 0 1; color: ansi_bright_black; }
+.hsl { width: 8; padding: 0 1; }
+#variant-bar { height: 3; }
+#variant-bar > Select, #variant-bar > Input { margin: 0 0 0 1; }
+Checkbox { background: ansi_default; border: none; padding: 1 1 0 0; width: auto; }
+Checkbox:focus { border: none; color: ansi_bright_blue; }
+Checkbox > .toggle--button { background: ansi_default; color: ansi_bright_black; }
+Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
+.variant-select { width: 22; }
+.variant-name { width: 24; }
+#preview, #error, #status { height: auto; }
 .role-row { height: 3; }
 .role-label { width: 11; padding: 1 1 0 0; }
 .weight { width: 16; }
 #fontlist { width: 1fr; }
 #editor { width: 30; padding: 0 0 0 1; }
 #family { height: 2; padding: 0 0 1 0; }
+.zone-list { width: 30; }
+.zone-editor { width: 1fr; padding: 0 0 0 1; }
+.muted { color: ansi_bright_black; }
 """
 
 
@@ -166,8 +187,6 @@ class SubmenuScreen(Screen):
                 yield from self.compose_body()
             yield ActionMenu(self.ACTIONS + [('back', 'Back')], id='actions')
             yield from self.compose_after_actions()
-            if not self.BODY_FILL:
-                yield Static('', classes='spacer')
             yield Static(self.HINT, classes='hint')
 
     def compose_body(self):
@@ -178,6 +197,13 @@ class SubmenuScreen(Screen):
 
     def on_action(self, action_id: str) -> None:
         pass
+
+    def require_project(self) -> str:
+        """The current project folder, or ValueError telling the user to pick one first."""
+        pd = getattr(self.app, 'project_dir', None)
+        if not pd:
+            raise ValueError('no project open — create or load one in step 0 first')
+        return pd
 
     def run_action(self, action_id: str) -> None:
         if action_id == 'back':

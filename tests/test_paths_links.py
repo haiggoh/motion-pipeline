@@ -34,7 +34,6 @@ def test_render_scene_accepts_custom_out():
 
 @pytest.mark.asyncio
 async def test_render_screen_has_outdir_link_and_open_button(tmp_path, monkeypatch):
-    monkeypatch.setattr('motion_pipeline.tui.colours_screen.PROJECTS', str(tmp_path))
     app = MenuApp()
     async with app.run_test() as pilot:
         app.push_screen(app.SCREENS['render']())
@@ -57,7 +56,6 @@ async def test_render_screen_has_outdir_link_and_open_button(tmp_path, monkeypat
 
 @pytest.mark.asyncio
 async def test_bgtest_shows_inline_image_and_link(tmp_path, monkeypatch):
-    monkeypatch.setattr('motion_pipeline.tui.colours_screen.PROJECTS', str(tmp_path))
     app = MenuApp()
     async with app.run_test() as pilot:
         app.push_screen(app.SCREENS['bgtest']())
