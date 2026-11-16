@@ -104,13 +104,17 @@ class _RenderScreenBase(SubmenuScreen):
         yield PathInput(id='outdir', placeholder=self.OUT_PLACEHOLDER)
 
     def compose_after_actions(self):
+        from textual.widgets import RichLog
         yield Static('', id='status', classes='feedback')
         yield Static('', id='link')
         yield Static('', id='image')
-        yield Log(id='log', classes='joblog')
+        yield RichLog(id='log', wrap=True, markup=False, classes='joblog', min_width=0)
 
     def on_mount(self):
-        self.query_one('#actions', ActionMenu).set_enabled('open', False)
+        menu = self.query_one('#actions', ActionMenu)
+        menu.set_enabled('open', False)
+        menu.set_enabled('cancel', False)
+        self._job_running = False  # BISECT: no worker attr
 
     def outdir(self):
         from textual.widgets import Input
@@ -120,26 +124,45 @@ class _RenderScreenBase(SubmenuScreen):
     def command(self):
         raise NotImplementedError
 
+    def open_target(self):
+        return self.outdir() or self.app.default_out()
+
     def on_action(self, action_id):
+        from textual.widgets import RichLog
+        menu = self.query_one('#actions', ActionMenu)
         if action_id == 'run':
+            if self._job_running:
+                return  # one job at a time
             cmd = self.command()
             if self.outdir():
                 cmd += ['--out', self.outdir()]
-            self.worker = run_command(self.app, cmd, self.query_one('#log', Log),
+            self._job_running = True
+            menu.set_enabled('run', False)
+            menu.set_enabled('cancel', True)
+            self.worker = run_command(self.app, cmd, self.query_one('#log', RichLog),
                                       on_finish=self.on_render_done)
             self.query_one('#status', Static).update('running…')
-        elif action_id == 'cancel' and getattr(self, 'worker', None):
-            self.worker.cancel()
-            self.query_one('#status', Static).update('cancelled')
+        elif action_id == 'cancel':
+            if self._job_running and getattr(self, 'worker', None):
+                self.worker.cancel()
+                self._job_running = False
+                menu.set_enabled('run', True)
+                menu.set_enabled('cancel', False)
+                self.query_one('#status', Static).update('cancelled')
         elif action_id == 'open':
             import subprocess
-            subprocess.Popen(['open', self.outdir() or self.app.default_out()])
+            subprocess.Popen(['open', self.open_target()])
 
     def on_render_done(self, rc):
-        out = self.outdir() or self.app.default_out()
+        from textual.widgets import RichLog
+        self._job_running = False
+        menu = self.query_one('#actions', ActionMenu)
+        menu.set_enabled('run', True)
+        menu.set_enabled('cancel', False)
+        out = self.open_target()
         if rc != 0:
             # name WHY, from the log (render_cli prints 'missing dependency: …' / 'error: …')
-            lines = [str(x) for x in self.query_one('#log', Log).lines]
+            lines = [x.text if hasattr(x, 'text') else str(x) for x in self.query_one('#log', RichLog).lines]
             why = next((x for x in reversed(lines)
                         if x.startswith(('missing dependency', 'error', 'disk guard', 'no '))), '')
             self.query_one('#status', Static).update(
@@ -254,6 +277,22 @@ class RenderScreen(_RenderScreenBase):
 
     def command(self):
         return self.app.full_render_cmd()
+
+    def open_target(self):
+        """Multiple variants render into <project>/renders/<variant>/ — open the renders ROOT;
+        a single variant opens its own folder."""
+        if self.outdir():
+            return self.outdir()
+        pd = self.app.project_dir
+        try:
+            from .. import project as project_mod
+            variants = project_mod.load(pd)['variants']
+        except Exception:
+            variants = ['default']
+        renders = os.path.join(pd, 'renders')
+        if len(variants) > 1:
+            return renders
+        return os.path.join(renders, variants[0] if variants else 'default')
 
 
 class FirstRunScreen(Screen):

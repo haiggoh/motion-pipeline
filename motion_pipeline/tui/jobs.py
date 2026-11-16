@@ -29,8 +29,9 @@ class Job:
             self.worker.cancel()
 
 
-def run_command(app, cmd, log, done_msg='done', on_finish=None):
-    """Run cmd (list) as a worker; each output line is appended to `log`.
+def run_command(app, cmd, log, on_finish=None):
+    """Run cmd (list) as a worker; each output line is written to `log` (a RichLog with
+    wrap=True). The final log line is honest: 'done (exit 0)' or 'failed (exit N)'.
     on_finish(rc), if given, is called (via call_from_thread) when the command exits —
     not after a cancel. Returns the Job."""
     job = Job()
@@ -45,14 +46,14 @@ def run_command(app, cmd, log, done_msg='done', on_finish=None):
             if job.cancelled:
                 break
             if app.is_running:
-                app.call_from_thread(log.write_line, line.rstrip('\n'))
+                app.call_from_thread(log.write, line.rstrip('\n'))
         try:
             rc = proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             os.killpg(proc.pid, signal.SIGKILL)
             rc = proc.wait()
         if app.is_running and not job.cancelled:
-            app.call_from_thread(log.write_line, f'{done_msg} (exit {rc})')
+            app.call_from_thread(log.write, 'done (exit 0)' if rc == 0 else f'failed (exit {rc})')
             if on_finish is not None:
                 app.call_from_thread(on_finish, rc)
         return rc

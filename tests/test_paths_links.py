@@ -82,14 +82,14 @@ def test_jobs_on_finish_fires(tmp_path):
     import asyncio
     from motion_pipeline.tui.app import MenuApp
     from motion_pipeline.tui.jobs import run_command
-    from textual.widgets import Log
+    from textual.widgets import RichLog
 
     async def go():
         app = MenuApp()
         async with app.run_test() as pilot:
             app.push_screen(app.SCREENS['render']())
             await pilot.pause()
-            log = app.screen.query_one('#log', Log)
+            log = app.screen.query_one('#log', RichLog)
             got = []
             run_command(app, ['bash', '-c', 'echo hi; exit 3'], log,
                         on_finish=lambda rc: got.append(rc))

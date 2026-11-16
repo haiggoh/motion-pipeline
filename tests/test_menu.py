@@ -1,6 +1,6 @@
 """Task 5 TUI tests: all screens mount; worker progress + responsiveness + cancellation."""
 import pytest
-from textual.widgets import Button, Log, Static
+from textual.widgets import Button, RichLog, Static
 
 from tui_probe import choose
 from motion_pipeline.tui.app import MenuApp, STEPS
@@ -46,7 +46,7 @@ async def test_worker_streams_progress_and_stays_responsive_and_cancellable(tmp_
         assert 'cancel' in status, status
         with pytest.raises(ProcessLookupError):
             os.kill(pid, 0)                                       # the process is gone (and reaped)
-        n = len(app.screen.query_one('#log', Log).lines)
-        assert any('line' in str(e) for e in app.screen.query_one('#log', Log).lines)
+        n = len(app.screen.query_one('#log', RichLog).lines)
+        assert any('line' in str(e) for e in app.screen.query_one('#log', RichLog).lines)
         await pilot.pause(1.2)
-        assert len(app.screen.query_one('#log', Log).lines) <= n + 1
+        assert len(app.screen.query_one('#log', RichLog).lines) <= n + 1
