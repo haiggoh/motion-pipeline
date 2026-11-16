@@ -66,7 +66,24 @@ def validate(p):
                 raise ValueError(f"zone missing key {k!r}: {z}")
         if len(z['rect']) != 4:
             raise ValueError(f"zone rect must be [x,y,w,h]: {z['rect']}")
+        if not all(isinstance(v, int) and not isinstance(v, bool) for v in z['rect']):
+            raise ValueError(f"zone rect must be integers x,y,w,h: {z['rect']}")
+        zx, zy, zw, zh = z['rect']
+        if zx < 0 or zy < 0 or zw <= 0 or zh <= 0:
+            raise ValueError(f"zone rect must have x,y >= 0 and w,h > 0: {z['rect']}")
+        if 'aspect' in z and z['aspect'] not in ASPECTS:
+            raise ValueError(f"invalid zone aspect {z['aspect']!r} (want one of {sorted(ASPECTS)})")
+        if z.get('aspect', p['aspect']) == p['aspect']:  # only ACTIVE zones must fit this frame
+            fw, fh = p['resolution']
+            if zx + zw > fw or zy + zh > fh:
+                raise ValueError(f"zone rect {z['rect']} is outside the {fw}×{fh} frame")
     return p
+
+
+def active_zones(p):
+    """Zones active for p's aspect (P1): a zone with no `aspect` (legacy project) means the
+    project's aspect. Inactive-aspect zones stay on disk, just unused."""
+    return [z for z in p.get('zones', []) if z.get('aspect', p['aspect']) == p['aspect']]
 
 
 def project_dir(root, name):

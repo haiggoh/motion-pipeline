@@ -48,3 +48,35 @@ def test_save_load_round_trip(tmp_path):
     assert project.load(str(d)) == p
     with pytest.raises(ValueError, match='no project.json'):
         project.load(str(tmp_path / 'projects' / 'nope'))
+
+
+def test_zone_rect_and_aspect_validation_loud():
+    p = project.default_project('d')  # 16:9 -> 1920x1080
+    p['zones'] = [{'section': 'a', 'rect': [0, 0, 10, 'x']}]
+    with pytest.raises(ValueError, match='integers'):
+        project.validate(p)
+    p['zones'] = [{'section': 'a', 'rect': [-1, 0, 10, 10]}]
+    with pytest.raises(ValueError, match='>= 0'):
+        project.validate(p)
+    p['zones'] = [{'section': 'a', 'rect': [0, 0, 0, 10]}]
+    with pytest.raises(ValueError, match='w,h > 0'):
+        project.validate(p)
+    p['zones'] = [{'section': 'a', 'rect': [0, 0, 10, 10], 'aspect': '3:2'}]
+    with pytest.raises(ValueError, match='invalid zone aspect'):
+        project.validate(p)
+    p['zones'] = [{'section': 'a', 'rect': [1900, 0, 100, 100]}]
+    with pytest.raises(ValueError, match='outside the 1920×1080 frame'):
+        project.validate(p)
+    # an INACTIVE-aspect zone is kept (Apply-format), not frame-checked against this aspect
+    p['zones'] = [{'section': 'a', 'rect': [1900, 0, 100, 100], 'aspect': '9:16'}]
+    assert project.validate(p)
+
+
+def test_active_zones_aspect_filter():
+    p = project.default_project('d')  # 16:9
+    p['zones'] = [
+        {'section': 'a', 'rect': [0, 0, 10, 10]},                    # legacy: no aspect -> active
+        {'section': 'b', 'rect': [0, 0, 10, 10], 'aspect': '16:9'},   # active
+        {'section': 'c', 'rect': [0, 0, 10, 10], 'aspect': '9:16'},   # inactive
+    ]
+    assert [z['section'] for z in project.active_zones(p)] == ['a', 'b']

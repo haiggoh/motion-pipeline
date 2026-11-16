@@ -107,7 +107,8 @@ def generate(project_path, variant='default'):
     roles = font_gate(project_path, pj)
     font_px = int(H / 12 * ASPECT_FONT_SCALE.get(aspect, 1.0))
     line_h = int(font_px * 1.25)
-    zones = [z for z in pj.get('zones', [])]
+    from .project import active_zones
+    zones = active_zones(pj)
     out_dir = os.path.join(project_path, 'src')
     os.makedirs(out_dir, exist_ok=True)
     # AI-owned layer (ai_layer.py): validated BEFORE anything is written, copied into

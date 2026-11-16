@@ -38,7 +38,7 @@ def main(argv=None):
         if not words:
             continue
         lines = generate.layout_lines(words, max(8, int(W * 0.84 / (font_px * 0.52))), font_px)
-        zs = [z for z in p.get('zones', []) if z['section'] == sec['name']]
+        zs = [z for z in project.active_zones(p) if z['section'] == sec['name']]
         x, y = generate.place_text_block(lines, W, H, font_px, line_h, zs)
         max_w = max(len(''.join(pc for _, pc, _ in ln)) for ln in lines)
         block = (x, y, int(max_w * font_px * 0.52), len(lines) * line_h)
