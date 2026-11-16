@@ -107,6 +107,9 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 #family { height: 2; padding: 0 0 1 0; }
 .zone-list { width: 30; }
 .zone-editor { width: 1fr; padding: 0 0 0 1; }
+/* step-0 picker (Task 3): the list takes the flexible space (max 8 rows), input rows stay 3 */
+#projects { height: 1fr; max-height: 8; }
+#body.body-fill > Horizontal.path-row, #body.body-fill > Horizontal.format-row { height: 3; }
 /* project screen (0.5.0 Task 4e): label-left rows so name/dir/root + the format row +
    5 action rows + status/error all fit at 80x24 */
 .path-row { height: 3; }

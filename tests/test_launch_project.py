@@ -28,7 +28,7 @@ async def test_launch_lands_on_project_screen_not_home(_isolated_config):
         assert last.id == 'home' and str(last.prompt) == 'Home', (last.id, last.prompt)
         assert menu.get_option('home').disabled, 'nav row must be disabled until a project is saved'
         ids = [menu.get_option_at_index(i).id for i in range(menu.option_count)]
-        assert ids == ['create', 'load', 'root', 'home'], ids  # no separate 'format' action
+        assert ids == ['create', 'sample', 'load', 'format', 'root', 'home'], ids  # Task 3 picker actions
 
 
 async def test_nav_row_enables_after_create_and_home_reaches_menu(_isolated_config):
