@@ -18,7 +18,7 @@ FPS_CHOICES = (25, 30, 50, 60)
 REQUIRED_KEYS = ('name', 'aspect', 'resolution', 'fps', 'variants')
 # every key the menu owns in project.json. Anything else is refused by validate(): AI
 # additions belong in ai_graphics/ (ai_layer.py), never in the menu's files (0.5.0 Task 4d).
-OWNED_KEYS = REQUIRED_KEYS + ('zones', 'fonts', 'transcript', 'vo', 'graphics')
+OWNED_KEYS = REQUIRED_KEYS + ('zones', 'fonts', 'transcript', 'vo', 'graphics', 'wpm', 'language', 'aligner')
 AGENTS_TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'project_AGENTS.md')
 
 
@@ -35,7 +35,7 @@ def resolution_for(aspect, uhd=False):
 def default_project(name, aspect='16:9', fps=60, uhd=False):
     return {'name': name, 'aspect': aspect, 'resolution': resolution_for(aspect, uhd),
             'fps': fps, 'variants': ['default'], 'zones': [], 'fonts': {},
-            'transcript': 'transcript.txt', 'vo': None}
+            'transcript': 'transcript.txt', 'vo': None, 'wpm': 140, 'language': 'de', 'aligner': 'auto'}
 
 
 def validate(p):
@@ -58,6 +58,14 @@ def validate(p):
                          f"(want {ar[0]}:{ar[1]}, e.g. {list(ASPECTS[p['aspect']])} or {list(UHD)} UHD)")
     if p['fps'] not in FPS_CHOICES:
         raise ValueError(f"invalid fps {p['fps']!r} (want one of {list(FPS_CHOICES)})")
+    if 'wpm' in p:
+        wpm = p['wpm']
+        if not isinstance(wpm, int) or isinstance(wpm, bool) or not 60 <= wpm <= 300:
+            raise ValueError(f"invalid wpm {wpm!r} — want an integer 60–300 (key 'wpm')")
+    if 'language' in p and p['language'] not in ('de', 'en', 'auto'):
+        raise ValueError(f"invalid language {p['language']!r} — want 'de', 'en' or 'auto' (key 'language')")
+    if 'aligner' in p and p['aligner'] not in ('auto', 'classical', 'whisper'):
+        raise ValueError(f"invalid aligner {p['aligner']!r} — want 'auto', 'classical' or 'whisper' (key 'aligner')")
     if not isinstance(p['variants'], list) or not p['variants']:
         raise ValueError("invalid variants: want a non-empty list of scheme names")
     for z in p.get('zones', []):

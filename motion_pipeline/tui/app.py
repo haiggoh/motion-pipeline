@@ -186,21 +186,50 @@ class InputsScreen(SubmenuScreen):
     ACTIONS = [('save', 'Save inputs')]
 
     def compose_body(self):
-        from textual.widgets import Input
+        from textual.containers import Horizontal
+        from textual.widgets import Input, Select
         yield Label('Tip: drag a file/folder from Finder into a field to paste its path')
         yield Label('transcript.txt path')
         yield PathInput(id='transcript', value='transcript.txt')
         yield Label('voiceover file (optional)')
         yield PathInput(id='vo', placeholder='audio/vo.wav')
+        with Horizontal(classes='path-row'):
+            yield Label('wpm')
+            yield Input(id='wpm', placeholder='140')
+            yield Label('language')
+            yield Select([('Deutsch', 'de'), ('English', 'en'), ('Auto-detect', 'auto')],
+                         id='language', allow_blank=False)
+            yield Label('aligner')
+            yield Select([('Auto (speech model if installed)', 'auto'), ('Classical', 'classical'),
+                         ('Speech model', 'whisper')], id='aligner', allow_blank=False)
         yield Static('', id='status')
         yield Static('', id='error')
+
+    def on_mount(self):
+        from textual.widgets import Input, Select
+
+        from .. import project as project_mod
+        pd = getattr(self.app, 'project_dir', None)
+        if not pd:
+            return
+        try:
+            p = project_mod.load(pd)
+        except Exception:
+            return
+        # prefill EVERY field from the saved project — an empty vo field here is what cleared
+        # the saved voiceover on a transcript-only save (data-loss bug)
+        self.query_one('#transcript', Input).value = p.get('transcript') or 'transcript.txt'
+        self.query_one('#vo', Input).value = p.get('vo') or ''
+        self.query_one('#wpm', Input).value = str(p.get('wpm', 140))
+        self.query_one('#language', Select).value = p.get('language', 'de')
+        self.query_one('#aligner', Select).value = p.get('aligner', 'auto')
 
     def on_action(self, action_id):
         if action_id != 'save':
             return
         import json
 
-        from textual.widgets import Input
+        from textual.widgets import Input, Select
 
         from .. import project as project_mod
         try:
@@ -208,8 +237,10 @@ class InputsScreen(SubmenuScreen):
             pj = os.path.join(pd, 'project.json')
             p = project_mod.load(pd) if os.path.isfile(pj) else project_mod.default_project(os.path.basename(pd))
             p['transcript'] = self.query_one('#transcript', Input).value.strip()
-            vo = self.query_one('#vo', Input).value.strip()
-            p['vo'] = vo or None
+            p['vo'] = self.query_one('#vo', Input).value.strip() or None
+            p['wpm'] = int(self.query_one('#wpm', Input).value.strip())
+            p['language'] = self.query_one('#language', Select).value
+            p['aligner'] = self.query_one('#aligner', Select).value
             project_mod.save(pd, p)
             self.query_one('#status', Static).update(f'saved inputs to {pj}')
         except (ValueError, json.JSONDecodeError) as e:

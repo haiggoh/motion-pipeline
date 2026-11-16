@@ -119,7 +119,7 @@ def prepare_inputs(project_dir):
             raise Missing(f'voiceover {vpath} — fix it in step 5 or clear the field')
         timing = align.align(vpath, model)
     else:
-        timing = align.estimate_timings(model, wpm=140)
+        timing = align.estimate_timings(model, wpm=p.get('wpm', 140))
     align.save_timing(os.path.join(project_dir, 'timing.json'), timing)
     return p
 
