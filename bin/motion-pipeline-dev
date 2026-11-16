@@ -61,4 +61,4 @@ echo "motion-pipeline (DEV) — checkout $SHOWN @ $sha" >&2
 
 # no cd: relative paths typed in the menu resolve against YOUR shell dir, as with the brew copy;
 # PYTHONPATH puts this checkout ahead of any other installed copy
-PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m motion_pipeline "$@"
+PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -P -m motion_pipeline "$@"  # -P: a cwd package never shadows this checkout (E11)

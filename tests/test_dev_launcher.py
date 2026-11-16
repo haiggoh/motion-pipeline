@@ -48,3 +48,14 @@ def test_bad_python_override_and_missing_venv(tmp_path):
     os.chmod(fake / 'bin' / 'motion-pipeline-dev', 0o755)
     r = run('--version', exe=str(fake / 'bin' / 'motion-pipeline-dev'))
     assert r.returncode == 3 and '.venv' in r.stderr and 'uv' in r.stderr
+
+
+def test_dev_launcher_ignores_cwd_package(tmp_path):
+    """E11: a cwd containing a fake motion_pipeline package must NOT shadow this checkout —
+    the launcher execs python with -P (sys.path[0] = cwd is dropped)."""
+    fake_cwd = tmp_path / 'cwd'
+    (fake_cwd / 'motion_pipeline').mkdir(parents=True)
+    (fake_cwd / 'motion_pipeline' / '__init__.py').write_text(
+        "raise RuntimeError('cwd package shadowed the real one')\n")
+    r = subprocess.run([L, '--version'], capture_output=True, text=True, cwd=str(fake_cwd))
+    assert r.returncode == 0 and __version__ in r.stdout, (r.returncode, r.stdout, r.stderr)
