@@ -37,8 +37,8 @@ class ZonesScreen(SubmenuScreen):
                 yield Input(id='section', placeholder='intro')
                 yield Label('Rect x,y,w,h (frame pixels)')
                 yield Input(id='rect', placeholder='520,100,880,880')
-                yield Static('', id='status')
-                yield Static('', id='error')
+                yield Static('', id='status', classes='feedback')
+                yield Static('', id='error', classes='feedback-error')
 
     def on_mount(self):
         self._seq = 0         # ever-increasing ListItem ids (index ids crashed with DuplicateIds, E2)

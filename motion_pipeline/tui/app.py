@@ -60,7 +60,7 @@ class MenuScreen(Screen):
         with Vertical(classes='panel'):
             yield Static('motion-pipeline — Project Menu', classes='title')
             yield Static(self.subtitle(), classes='subtitle', id='subtitle')
-            yield ActionMenu(STEPS + [('quit', 'Quit')], spaced=True, first_number=0, id='actions')
+            yield ActionMenu(STEPS + [('quit', 'Quit')], spaced=True, first_number=0, nav_gap=0, id='actions')  # Quit is not a nav row
             with Vertical(classes='footer'):
                 yield Static('↑↓ move · Enter/click select · 0-6 step · q quit', classes='hint')
                 yield Static(f'motion-pipeline v{__version__}', classes='version')
@@ -104,7 +104,7 @@ class _RenderScreenBase(SubmenuScreen):
         yield PathInput(id='outdir', placeholder=self.OUT_PLACEHOLDER)
 
     def compose_after_actions(self):
-        yield Static('', id='status')
+        yield Static('', id='status', classes='feedback')
         yield Static('', id='link')
         yield Static('', id='image')
         yield Log(id='log', classes='joblog')
@@ -202,8 +202,8 @@ class InputsScreen(SubmenuScreen):
             yield Label('aligner')
             yield Select([('Auto (speech model if installed)', 'auto'), ('Classical', 'classical'),
                          ('Speech model', 'whisper')], id='aligner', allow_blank=False)
-        yield Static('', id='status')
-        yield Static('', id='error')
+        yield Static('', id='status', classes='feedback')
+        yield Static('', id='error', classes='feedback-error')
 
     def on_mount(self):
         from textual.widgets import Input, Select
@@ -270,7 +270,7 @@ class FirstRunScreen(Screen):
                          'Drop a folder from Finder to paste its path.', classes='subtitle')
             yield PathInput(id='root', value=config.projects_root() or config.SUGGESTED_ROOT)
             yield ActionMenu([('save', 'Use this folder'), ('quit', 'Quit')], id='actions')
-            yield Static('', id='error')
+            yield Static('', id='error', classes='feedback-error')
             yield Static('↑↓ move · Enter/click select · q quit', classes='hint')
 
     def on_action_menu_chosen(self, event):

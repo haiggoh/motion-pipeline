@@ -38,7 +38,7 @@ async def test_every_submenu_back_is_last_row_and_pops_without_saving(tmp_path, 
             assert isinstance(scr, SubmenuScreen), key
             menu = scr.query_one('#actions')
             last = menu.get_option_at_index(menu.option_count - 1)
-            assert last.id == 'back' and str(last.prompt) == 'Back', (key, last.prompt)
+            assert last.id == 'back' and str(last.prompt) == 'Back to main menu', (key, last.prompt)
             assert on_screen(app, menu), f'{key}: action rows not fully on-screen at 80x24'
             assert menu.max_scroll_y == 0, f'{key}: action rows scroll, Back hidden'
             assert on_screen(app, scr.query_one('.hint')), f'{key}: key hint pushed off-screen at 80x24'
@@ -164,4 +164,4 @@ async def test_step_zero_is_project_create_or_load():
         scr = app.screen
         assert scr.query_one('#name', Input) and scr.query_one('#dir', Input)
         menu = scr.query_one('#actions')
-        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'sample', 'load', 'format', 'root', 'back']  # Task 3 picker actions
+        assert [menu.get_option_at_index(i).id for i in range(menu.option_count)] == ['create', 'sample', 'load', 'format', 'root', '_navgap0', 'back']  # Task 3 actions + Task 4 nav gap

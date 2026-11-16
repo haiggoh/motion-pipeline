@@ -48,8 +48,8 @@ class ColoursScreen(SubmenuScreen):
             yield Input(id='variant-name', placeholder='new variant name', classes='variant-name')
 
     def compose_after_actions(self):
-        yield Static('', id='preview')
-        yield Static('', id='error')
+        yield Static('', id='preview', classes='feedback')
+        yield Static('', id='error', classes='feedback-error')
 
     # ---- state ------------------------------------------------------------------------
     def project_dir(self):

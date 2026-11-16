@@ -30,11 +30,12 @@ class ProjectScreen(SubmenuScreen):
                ('root', 'Save projects folder')]
     BODY_FILL = True
     # reclaim two rows so the format row stays on screen at 80x24 with the picker (Task 3 layout)
-    CSS = '.title { padding: 0; } #actions { margin: 0 0 0 0; }'
+    CSS = ('.title { padding: 0; } #actions { margin: 0 0 0 0; } '
+           '#feedback-row { height: 1; margin: 1 0 0 0; } '
+           '#feedback-row .feedback, #feedback-row .feedback-error { margin: 0; }')
 
     def compose_body(self):
         yield Label('Projects', id='projects-label')
-        yield Static('(no projects yet — create one below)', id='projects-empty', classes='muted')
         yield ListView(id='projects')
         with Horizontal(classes='path-row'):
             yield Label('Name')
@@ -54,14 +55,15 @@ class ProjectScreen(SubmenuScreen):
             yield Checkbox('UHD (16:9 only)', id='uhd')
 
     def compose_after_actions(self):
-        # below the action rows (see _RenderScreenBase): feedback never pushes the fields around
-        yield Static('', id='status')
-        yield Static('', id='error')
+        # below the action rows, ONE row for both (80x24 fit): feedback never pushes the fields around
+        with Horizontal(id='feedback-row'):
+            yield Static('', id='status', classes='feedback')
+            yield Static('', id='error', classes='feedback-error')
 
     def trailing_action(self):
         # Launched as the app's root (0.5.2)? The last row then leads to Home and is NOT
         # called 'Back' — we did not come from Home. Entered from Home later: plain 'Back'.
-        return ('home', 'Home') if getattr(self, 'root_entry', False) else ('back', 'Back')
+        return ('home', 'Continue to main menu') if getattr(self, 'root_entry', False) else ('back', 'Back to main menu')
 
     def on_mount(self):
         menu = self.query_one('#actions', ActionMenu)
@@ -75,13 +77,17 @@ class ProjectScreen(SubmenuScreen):
 
     def refresh_picker(self):
         root = config.projects_root()
-        self.query_one('#projects-label', Label).update(
-            f'Projects in {root}' if root else 'Projects (no projects folder chosen yet)')
+        entries = projects_list.list_projects(root) if root else []
+        if not root:
+            label = 'Projects (no projects folder chosen yet)'
+        elif entries:
+            label = f'Projects in {root}'
+        else:
+            label = '(no projects yet — create one below)'
+        self.query_one('#projects-label', Label).update(label)
         lv = self.query_one('#projects', ListView)
         lv.clear()
-        entries = projects_list.list_projects(root) if root else []
         self._entries = {i: e for i, e in enumerate(entries)}
-        self.query_one('#projects-empty', Static).display = not entries
         lv.display = bool(entries)  # empty picker takes no row (format row must fit 80x24)
         for i, e in enumerate(entries):
             text = e['name'] if not e['error'] else f"{e['name']} — {e['error']}"

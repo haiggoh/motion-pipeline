@@ -59,9 +59,9 @@ class FontsScreen(SubmenuScreen):
                         yield Select([(str(w), w) for w in (400, 600, 700, 900)],
                                      id=f'role-{role}', value=fonts_mod.DEFAULT_WEIGHTS[role],
                                      allow_blank=False, classes='weight')
-                yield Static('', id='licence-warning')
-                yield Static('', id='status')
-                yield Static('', id='error')
+                yield Static('', id='licence-warning', classes='feedback')
+                yield Static('', id='status', classes='feedback')
+                yield Static('', id='error', classes='feedback-error')
 
     def on_mount(self):
         self._all = {f: None for f in fonts_mod.bundled_families()}  # bundled OFL wins over system copies

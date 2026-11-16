@@ -25,10 +25,10 @@ async def test_launch_lands_on_project_screen_not_home(_isolated_config):
         assert isinstance(app.screen, ProjectScreen), type(app.screen).__name__
         assert len(app.screen_stack) == 2, len(app.screen_stack)  # nothing sits behind the launch screen (QC 2026-11-10)
         menu, last = _nav_row(app.screen)
-        assert last.id == 'home' and str(last.prompt) == 'Home', (last.id, last.prompt)
+        assert last.id == 'home' and str(last.prompt) == 'Continue to main menu', (last.id, last.prompt)
         assert menu.get_option('home').disabled, 'nav row must be disabled until a project is saved'
         ids = [menu.get_option_at_index(i).id for i in range(menu.option_count)]
-        assert ids == ['create', 'sample', 'load', 'format', 'root', 'home'], ids  # Task 3 picker actions
+        assert ids == ['create', 'sample', 'load', 'format', 'root', '_navgap0', 'home'], ids  # Task 3 actions + Task 4 nav gap
 
 
 async def test_nav_row_enables_after_create_and_home_reaches_menu(_isolated_config):
@@ -91,7 +91,7 @@ async def test_from_home_trailing_row_is_back_and_pops(_isolated_config, tmp_pat
         scr = app.screen
         assert isinstance(scr, ProjectScreen)
         menu, last = _nav_row(scr)
-        assert last.id == 'back' and str(last.prompt) == 'Back', (last.id, last.prompt)
+        assert last.id == 'back' and str(last.prompt) == 'Back to main menu', (last.id, last.prompt)
         assert not menu.get_option('back').disabled  # came from home: Back works
         await choose(pilot, scr, 'back')
         assert isinstance(app.screen, MenuScreen), type(app.screen).__name__

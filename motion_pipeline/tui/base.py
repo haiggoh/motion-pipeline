@@ -5,6 +5,8 @@ Style copied from csl (free-agents session_picker.py, 2026-11-09): every surface
 inputs get a symmetric `round ansi_bright_black` frame, highlights are text-colour only.
 Menu grammar: numbers = actions, `b` = Back to main menu WITHOUT saving, `q` = Quit.
 """
+import os
+
 from textual.app import App
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -97,6 +99,9 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 .variant-select { width: 22; }
 .variant-name { width: 24; }
 #preview, #error, #status { height: auto; }
+/* feedback lines (Task 4): one empty row above the text, dimmed; errors red */
+.feedback { margin: 1 0 0 0; color: ansi_bright_black; }
+.feedback-error { margin: 0; color: ansi_red; }  /* the one empty row goes before the block (D8) */
 #image { height: auto; }
 .joblog { height: 1fr; min-height: 3; color: ansi_bright_black; }
 .role-row { height: 3; }
@@ -121,6 +126,12 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 .format-row > Checkbox { width: auto; margin: 1 0 0 2; }
 .muted { color: ansi_bright_black; }
 """
+
+
+def show_path(p: str) -> str:
+    """Abbreviate $HOME to ~ in feedback text."""
+    home = os.path.expanduser('~')
+    return '~' + p[len(home):] if p.startswith(home) else p
 
 
 class MenuAppBase(App):
@@ -159,14 +170,21 @@ class ActionMenu(OptionList):
 
     BARE = ('back', 'quit', 'home')  # 'home' = the launch screen's way to the main menu
 
-    def __init__(self, actions, spaced=False, first_number=1, **kwargs):
+    def __init__(self, actions, spaced=False, first_number=1, nav_gap=1, **kwargs):
+        # nav_gap=1 (D8 allows 1-2): 2 blank rows push the action rows off-screen at 80x24
+        # on the inputs/project screens (ledgered ruling, plan Task 4)
         self.actions = list(actions)
         self.numbers = {}
         opts = []
         n = first_number
+        gap_done = False
         for i, (aid, label) in enumerate(self.actions):
             if spaced and i:
                 opts.append(Option(' ', disabled=True, id=f'_gap{i}'))
+            if not gap_done and aid in self.BARE and nav_gap:
+                for g in range(nav_gap):  # blank rows above the nav row (D8)
+                    opts.append(Option(' ', disabled=True, id=f'_navgap{g}'))
+                gap_done = True
             if aid in self.BARE:
                 opts.append(Option(label, id=aid))
             else:
@@ -202,12 +220,19 @@ class SubmenuScreen(Screen):
                 yield from self.compose_body()
             yield ActionMenu(self.ACTIONS + [self.trailing_action()], id='actions')
             yield from self.compose_after_actions()
-            yield Static(self.HINT, classes='hint')
+            yield Static(self.hint_text(), classes='hint')
+
+    def hint_text(self):
+        """The key hint: a root-entry (launch) screen has nothing to go Back to."""
+        if getattr(self, 'root_entry', False):
+            return '↑↓ move · Enter/click select · 1-9 action · q quit'
+        return self.HINT
 
     def trailing_action(self) -> tuple:
-        """The last action row. ('back', 'Back') by default; a screen launched as the app's
-        root (root_entry=True) overrides this — e.g. the project screen shows 'Home'."""
-        return ('back', 'Back')
+        """The last action row. ('back', 'Back to main menu') by default; a screen launched as
+        the app's root (root_entry=True) overrides this — e.g. the project screen shows
+        'Continue to main menu'."""
+        return ('back', 'Back to main menu')
 
     def compose_body(self):
         raise NotImplementedError
