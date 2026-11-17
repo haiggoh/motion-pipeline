@@ -10,14 +10,15 @@ from motion_pipeline.font_index import BUNDLED_DIR
 from motion_pipeline.tui.app import MenuApp
 from tui_probe import bg_is_default, fg_is_blue
 
-_REAL_SCAN = font_index.scan
+_MONT_BOLD = os.path.join(BUNDLED_DIR, 'Montserrat', 'Montserrat-Bold.ttf')
 
 
 def _fast_scan(dirs=None, cache_path=None, progress=None):
-    # bundled + /Library/Fonts (enough families for the hover rows); tmp cache keeps it quick
-    import tempfile
-    return _REAL_SCAN(dirs=[BUNDLED_DIR, '/Library/Fonts'],
-                      cache_path=os.path.join(tempfile.mkdtemp(), 'c.json'))
+    # synthetic family list — enough rows for the hover assertions, no disk scan
+    return [font_index.Face(family=('Inter' if i == 0 else 'Montserrat' if i == 1 else f'Fam{i}'),
+                            style='Regular', weight=400, italic=False, path=_MONT_BOLD,
+                            index=0, bundled=i < 2)
+            for i in range(10)]
 
 
 async def test_list_hover_and_highlight_recolour_text_only(tmp_path, monkeypatch):

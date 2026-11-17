@@ -94,8 +94,8 @@ def test_jobs_on_finish_fires(tmp_path):
             run_command(app, ['bash', '-c', 'echo hi; exit 3'], log,
                         on_finish=lambda rc: got.append(rc))
             await pilot.pause()
-            for _ in range(50):
-                await pilot.pause()
+            for _ in range(100):
+                await pilot.pause(0.05)  # real time for the worker thread to finish
                 if got:
                     break
             assert got == [3], got

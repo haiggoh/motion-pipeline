@@ -6,14 +6,18 @@ IN the list area — never a bottom status row). Picking a family assigns it to 
 project's gitignored fonts/ only on Save, via fonts.copy_client_faces, and flagged non-OFL.
 Save: project.load → copy_client_faces → font_gate (validate BEFORE write) → project.save.
 """
+import json
 import os
+import subprocess
 
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, Label, ListItem, ListView, LoadingIndicator, Select, Static
 
 from .. import font_index
+from .. import font_preview
 from .. import fonts as fonts_mod
 from .. import project as project_mod
+from .ansi_image import render_ansi_image
 from .base import SubmenuScreen
 
 
@@ -29,7 +33,7 @@ def bundled_ref(abs_path):
 
 class FontsScreen(SubmenuScreen):
     TITLE = 'Font'
-    ACTIONS = [('save', 'Save font config')]
+    ACTIONS = [('save', 'Save font config'), ('sharp', 'Sharp preview (Quick Look)')]
     BODY_FILL = True
 
     def compose_body(self):
@@ -48,6 +52,9 @@ class FontsScreen(SubmenuScreen):
                 yield Select([('Headline', 'headline'), ('Label', 'label'), ('Body', 'body'),
                              ('Emphasis', 'emphasis'), ('All roles', 'all')],
                             id='edit-role', value='headline', allow_blank=False)
+                yield Label('Preview')
+                yield Input(id='sample-text', value=font_preview.SAMPLE_TEXT)
+                yield Static('', id='font-preview')
                 yield Static('', id='licence-warning', classes='feedback')
                 yield Static('', id='status', classes='feedback')
                 yield Static('', id='error', classes='feedback-error')
@@ -58,6 +65,7 @@ class FontsScreen(SubmenuScreen):
         self._shown = []     # (family, seq)
         self._seq = 0
         self._role_family = {r: None for r in fonts_mod.ROLES}
+        self._preview_token = 0
         self._refresh_list('')
         # the loader sits where the list will appear (never a bottom status row)
         fl = self.query_one('#fontlist')
@@ -127,6 +135,11 @@ class FontsScreen(SubmenuScreen):
     def on_input_changed(self, event):
         if event.input.id == 'font-search':
             self._refresh_list(event.value)
+        elif event.input.id == 'sample-text':
+            self._schedule_preview()
+
+    def on_select_changed(self, event):
+        self._schedule_preview()
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         seq = int(event.item.id.removeprefix('font-'))
@@ -144,8 +157,79 @@ class FontsScreen(SubmenuScreen):
                         'Copied into the project\'s gitignored fonts/ only on Save; never committed to this repo.')
         else:
             warn.update('')
+        self._schedule_preview()
+
+    # --- preview (Task 10): inline half-block, debounced 150 ms; sharp = Quick Look PNG at 2x ---
+    PX_BY_ROLE = {'headline': 24, 'label': 14, 'body': 16, 'emphasis': 16}
+
+    def _schedule_preview(self):
+        self._preview_token += 1
+        token = self._preview_token
+        self.set_timer(0.15, lambda: self._update_preview(token))
+
+    def _preview_lines(self):
+        text = self.query_one('#sample-text', Input).value or font_preview.SAMPLE_TEXT
+        lines = []
+        for role in fonts_mod.ROLES:
+            fam = self._role_family.get(role)
+            if not fam:
+                continue
+            w = self.query_one(f'#role-{role}-weight', Select).value
+            faces = [f for f in self._all.get(fam, []) if not f['italic'] and (w is None or f['weight'] == w)]
+            if not faces:
+                continue
+            face = next((f for f in faces if f['bundled']), faces[0])
+            lines.append((text, face['path'], face['index'], self.PX_BY_ROLE[role]))
+        return lines
+
+    def _preview_colors(self):
+        fg, bg = '#ffffff', '#101010'
+        pd = getattr(self.app, 'project_dir', None)
+        if pd:
+            sp = os.path.join(pd, 'scheme.json')
+            if os.path.isfile(sp):
+                try:
+                    from .. import scheme as scheme_mod
+                    pal = scheme_mod.derive_palette(json.load(open(sp)))
+                    fg, bg = pal['text'], pal['background_dark']
+                except Exception:
+                    pass
+        return fg, bg
+
+    def _update_preview(self, token):
+        if token != self._preview_token or not self._all:
+            return
+        lines = self._preview_lines()
+        if not lines:
+            return
+        fg, bg = self._preview_colors()
+        img = font_preview.render_sample(lines, 88, fg, bg, scale=1.0)
+        png = os.path.join(os.environ.get('TMPDIR', '/tmp'),
+                           f'motion-pipeline-preview-inline-{os.getpid()}.png')
+        img.save(png)
+        self.query_one('#font-preview', Static).update(render_ansi_image(png, max_w=44, max_h=12))
+
+    def _sharp_preview(self):
+        err = self.query_one('#error', Static)
+        err.update('')
+        try:
+            lines = self._preview_lines()
+            if not lines:
+                raise ValueError('pick a font family in the list first')
+            fg, bg = self._preview_colors()
+            img = font_preview.render_sample(lines, 88, fg, bg, scale=2.0)
+            png = os.path.join(os.environ.get('TMPDIR', '/tmp'),
+                               f'motion-pipeline-preview-{os.getpid()}.png')
+            img.save(png)
+            subprocess.Popen(['qlmanage', '-p', png], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.query_one('#status', Static).update(f'sharp preview: {png}')
+        except (ValueError, OSError) as e:
+            err.update(f'error: {e}')
 
     def on_action(self, action_id):
+        if action_id == 'sharp':
+            self._sharp_preview()
+            return
         if action_id != 'save':
             return
         err = self.query_one('#error', Static)
