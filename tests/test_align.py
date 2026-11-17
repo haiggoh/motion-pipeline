@@ -93,6 +93,70 @@ def test_reattach_vo_keeps_ids_changes_times(tmp_path):
     assert fast['words'][-1]['end'] < slow['words'][-1]['end']
 
 
+def _synthetic_vo(path, phrases):
+    """numpy burst fixture: 200 Hz-modulated 1 kHz tone, 120 ms per syllable, planted pauses."""
+    import numpy as np
+    sr = 16000
+    parts = [np.zeros(int(1.0 * sr), dtype=np.float32)]  # 1.0 s leading silence
+    for phrase_words, pause_after in phrases:
+        for _ in range(phrase_words):  # one 120 ms burst per syllable
+            t = np.arange(int(0.120 * sr)) / sr
+            parts.append(0.6 * np.sin(2 * np.pi * 1000 * t) * (1 + 0.5 * np.sin(2 * np.pi * 200 * t)))
+        parts.append(np.zeros(int(pause_after * sr), dtype=np.float32))
+    pcm = np.concatenate(parts).astype(np.float32)
+    import subprocess
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'f32le', '-ar', str(sr), '-ac', '1',
+                    '-i', '-', str(path)], input=pcm.tobytes(), check=True)
+    return str(path), 1.0  # leading silence seconds
+
+
+def test_leading_silence_respected(tmp_path):
+    wav, lead = _synthetic_vo(tmp_path / 'vo.wav', [(3, 0.4), (3, 0.0)])
+    tr = {'sections': [{'name': 'S'}],
+          'words': [{'id': f'w{i}', 'text': f'wort{i}', 'section': 'S', 'emphasized': False}
+                    for i in range(6)]}
+    doc = align.align(wav, tr)
+    assert doc['words'][0]['start'] >= lead - 0.05, doc['words'][0]  # old algorithm gave 0.0
+
+
+def test_words_snap_to_pauses(tmp_path):
+    wav, lead = _synthetic_vo(tmp_path / 'vo.wav', [(3, 0.4), (3, 0.0)])
+    tr = {'sections': [{'name': 'S'}],
+          'words': [{'id': f'w{i}', 'text': f'wort{i}', 'section': 'S', 'emphasized': False}
+                    for i in range(6)]}
+    doc = align.align(wav, tr)
+    # the 4th word starts the second phrase, right after the 400 ms pause (nucleus - 40 ms lead;
+    # a 120 ms burst's energy peak sits ~60 ms in, so allow for that)
+    phrase2_onset = lead + 3 * 0.120 + 0.4
+    assert abs(doc['words'][3]['start'] - phrase2_onset) <= 0.2, (doc['words'][3], phrase2_onset)
+
+
+def test_estimate_wpm_is_per_word():
+    tr = {'sections': [{'name': 'S'}],
+          'words': [{'id': f'w{i}', 'text': 'w', 'section': 'S', 'emphasized': False}
+                    for i in range(60)]}
+    doc = align.estimate_timings(tr, wpm=140)
+    total = doc['words'][-1]['end']
+    assert abs(total - 60 * 60 / 140) < 0.05 * 60 * 60 / 140, total  # 25.7 s +-5 %
+
+
+def test_say_german_vo_monotonic_and_inside_audio(tmp_path):
+    import shutil, subprocess
+    if not shutil.which('say'):
+        pytest.skip('say not available (printed)')
+    wav = tmp_path / 'vo.aiff'
+    subprocess.run(['say', '-v', 'Anna', '[[slnc 1000]] Das ist ein Test. [[slnc 600]] Zweiter Satz hier.',
+                    '-o', str(wav)], check=True)
+    tr = {'sections': [{'name': 'S'}],
+          'words': [{'id': f'w{i}', 'text': t, 'section': 'S', 'emphasized': False}
+                    for i, t in enumerate(['Das', 'ist', 'ein', 'Test.', 'Zweiter', 'Satz', 'hier.'])]}
+    doc = align.align(str(wav), tr)
+    align.validate_timing(doc)
+    dur = float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                                '-of', 'csv=p=0', str(wav)], capture_output=True, text=True).stdout.strip())
+    assert doc['words'][-1]['end'] <= dur + 0.2
+
+
 def test_save_timing_writes_validated_json(tmp_path):
     doc = align.estimate_timings(TR)
     p = tmp_path / 'timing.json'
