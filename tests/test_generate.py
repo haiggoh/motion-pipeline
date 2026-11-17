@@ -43,6 +43,28 @@ def read_scene(d, section):
     return (open(os.path.join(d, 'src', f'scene_{section}.html')).read())
 
 
+def test_page_declares_font_face_per_role(d):
+    """Task 11: every role's face is embedded via an mp-<role> @font-face alias + loaded in the page."""
+    d, tr, timing = d
+    generate.generate(d)
+    html = read_scene(d, 'Intro')
+    for role in ('headline', 'label', 'body', 'emphasis'):
+        assert f"font-family:'mp-{role}'" in html, role
+        assert f"src:url('fonts/{role}-" in html, role
+    assert "document.fonts.load" in html and 'MP_FONT_MISSING' in html  # the page-side gate
+    assert "font-family:'mp-body'" in html  # alias used, not the raw family name (P6)
+
+
+def test_fonts_copied_into_src(d):
+    """Task 11: each role's face file lands in src/fonts/<role>-<basename>."""
+    d, tr, timing = d
+    generate.generate(d)
+    fonts_dir = os.path.join(d, 'src', 'fonts')
+    names = os.listdir(fonts_dir)
+    for role in ('headline', 'label', 'body', 'emphasis'):
+        assert any(n.startswith(role + '-') for n in names), (role, names)
+
+
 def test_every_word_id_and_section_in_output(d):
     d, tr, timing = d
     generate.generate(d)

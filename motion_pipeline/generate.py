@@ -111,6 +111,23 @@ def generate(project_path, variant='default'):
     zones = active_zones(pj)
     out_dir = os.path.join(project_path, 'src')
     os.makedirs(out_dir, exist_ok=True)
+    # Task 11: embed each role's face into src/fonts/ and alias it mp-<role> (P6)
+    import shutil as _sh_fonts
+    fonts_out = os.path.join(out_dir, 'fonts')
+    os.makedirs(fonts_out, exist_ok=True)
+    face_css = []
+    fonts_js = []
+    for role in ('headline', 'label', 'body', 'emphasis'):
+        r = roles[role]
+        base = os.path.basename(r['file'])
+        dst_name = f'{role}-{base}'
+        _sh_fonts.copy(r['file'], os.path.join(fonts_out, dst_name))
+        face_css.append(f"@font-face{{font-family:'mp-{role}';src:url('fonts/{dst_name}');"
+                        f"font-weight:{r['weight']};font-style:normal}}")
+        fonts_js.append({'role': role, 'w': r['weight'], 'file': f'fonts/{dst_name}'})
+        r['css_file'] = f'fonts/{dst_name}'
+    font_css = '\n'.join(face_css)
+    fonts_js_s = json.dumps(fonts_js)
     # AI-owned layer (ai_layer.py): validated BEFORE anything is written, copied into
     # src/ai_graphics/ (src/ is ours to rebuild; ai_graphics/ itself is only ever read)
     from . import ai_layer
@@ -183,16 +200,17 @@ def generate(project_path, variant='default'):
                                            **({'start': timings_by_id[g['anchor']['word']]['start']}
                                               if 'word' in g['anchor'] else {})} for g in mine})
         page = f"""<!doctype html><html><head><meta charset="utf-8"><style>
+{font_css}
 body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;
-font-family:'{roles['body']['family']}';color:{palette['text']}}}
+font-family:'mp-body';color:{palette['text']}}}
 #root{{position:absolute;width:{W}px;height:{H}px;overflow:hidden}}
 #bg{{position:absolute;inset:0}}
 .line{{position:absolute;z-index:2;font-weight:{roles['body']['weight']};white-space:nowrap;
 overflow:hidden;height:{line_h}px}}
 {ai_css}.line span{{display:inline-block;transform:translateY(110%);opacity:0}}
-.line span.emph{{font-weight:{roles['emphasis']['weight']};color:{palette['accent']}}}
+.line span.emph{{font-family:'mp-emphasis';font-weight:{roles['emphasis']['weight']};color:{palette['accent']}}}
 .card{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-font-size:{int(H / 8)}px;font-weight:{roles['headline']['weight']};color:{palette['text']};
+font-family:'mp-headline';font-size:{int(H / 8)}px;font-weight:{roles['headline']['weight']};color:{palette['text']};
 background:{palette['background_dark']};opacity:0}}
 </style></head><body>
 <div id="root" data-composition-id="{card_id}" data-width="{W}" data-height="{H}" data-fps="{pj['fps']}" data-duration="{duration:.3f}">
@@ -204,6 +222,14 @@ background:{palette['background_dark']};opacity:0}}
 <script src="gsap.min.js"></script>
 {graphics_html}
 <script>
+(async () => {{
+  // Task 11 font gate: every role's face must load before the timeline is built;
+  // on failure log MP_FONT_MISSING (render_scene.sh greps it -> exit 5) and do NOT register
+  for (const f of {fonts_js_s}) {{
+    let loaded = [];
+    try {{ loaded = await document.fonts.load(`${{f.w}} 16px mp-${{f.role}}`); }} catch (e) {{}}
+    if (!loaded.length) {{ console.error(`MP_FONT_MISSING ${{f.role}} ${{f.file}}`); return; }}
+  }}
 {bg_js}
 const T = {tj};
 window.MP = {{timings: T, anchors: {ai_anchors}}};
@@ -214,6 +240,7 @@ for (const el of document.querySelectorAll('.line span')) {{
   const t = T[el.dataset.id];
   gsap.to(el, {{duration: 0.35, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'}});
 }}
+}})();
 </script>
 {ai_js}</body></html>
 """

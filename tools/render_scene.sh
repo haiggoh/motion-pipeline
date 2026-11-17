@@ -100,6 +100,7 @@ for scene in "${SCENES[@]}"; do
   [ $BANDED = 1 ] && sed -i '' 's|<head>|<head><script>window.__BANDED=true</script>|' "$site/index.html"
   [ -f "$ROOT/vendor/gsap.min.js" ] && cp "$ROOT/vendor/gsap.min.js" "$site/gsap.min.js"
   cp "$PROJECT"/src/*.js "$site/" 2>/dev/null || true
+  [ -d "$PROJECT/src/fonts" ] && cp -R "$PROJECT/src/fonts" "$site/fonts"  # Task 11: embedded faces
   # AI-owned graphics (ai_layer.py) the generator linked as ai_graphics/<file>
   [ -d "$PROJECT/src/ai_graphics" ] && cp -R "$PROJECT/src/ai_graphics" "$site/ai_graphics"
   if [ $STAGE = 1 ]; then echo "  site: $site"; continue; fi
@@ -120,6 +121,12 @@ PY
   (cd "$site" && NODE_OPTIONS="--max-old-space-size=4096" hyperframes render . --fps "$(python3 -c "import json;print(json.load(open('$PROJECT/project.json'))['fps'])")" --resolution "$res" --quality high --format png-sequence --output "$work/frames" > "$work/render.log" 2>&1 < /dev/null) \
     || { echo "render FAILED $name (see $work/render.log)" >&2; exit 1; }
   [ -f "$work/frames/frame_000001.png" ] || { echo "$name: unexpected png naming (no frame_000001.png)" >&2; exit 1; }
+  # Task 11 font gate: a role face that did not load is logged by the page as MP_FONT_MISSING
+  if grep -q 'MP_FONT_MISSING' "$work/render.log" 2>/dev/null; then
+    missing="$(grep -o 'MP_FONT_MISSING .*' "$work/render.log" | head -1)"
+    echo "font gate: $missing — the embedded face did not load (see $work/render.log)" >&2
+    exit 5
+  fi
   n=$(find "$work/frames" -name '*.png' | wc -l | tr -d ' ')
   ffmpeg -v error -y -f image2 -framerate "$(python3 -c "import json;print(json.load(open('$PROJECT/project.json'))['fps'])")" -start_number 1 -i "$work/frames/frame_%06d.png" -c:v ffv1 -level 3 -pix_fmt bgr0 -g 1 "$work/raw.mkv" || exit 1
   got=$(ffprobe -v error -count_frames -select_streams v -show_entries stream=nb_read_frames -of csv=p=0 "$work/raw.mkv")
