@@ -37,6 +37,7 @@ def test_every_css_selector_in_generated_pages_matches_an_element(tmp_path):
     generate.generate(pd)
     for name, page in _pages(pd).items():
         style = page.split('<style>', 1)[1].split('</style>', 1)[0]
+        style = re.sub(r'@[a-z-]+\{[^}]*\}', '', style)  # at-rules (@font-face) are not selectors (Task 11)
         body = page.split('<body>', 1)[1]
         for sel in set(re.findall(r'#([A-Za-z][\w-]*)\s*\{', style)):
             assert f'id="{sel}"' in body, f'{name}: CSS #{sel} matches no element (dead selector)'
