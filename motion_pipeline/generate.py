@@ -156,6 +156,7 @@ def generate(project_path, variant='default', max_seconds=None):
     from .scheme import derive_palette
     from .fonts import font_gate
     from .background import background_js
+    from . import audio_mux  # Task 22: sfx cue list for the page API
     palette = derive_palette(scheme)
     bg_js = background_js(palette, W, H)
     roles = font_gate(project_path, pj)
@@ -274,6 +275,17 @@ def generate(project_path, variant='default', max_seconds=None):
         ai_anchors = json.dumps({g['id']: {'element': g['element'], 'layer': g['layer'],
                                            **({'start': rel[g['anchor']['word']]['start']}
                                               if 'word' in g['anchor'] else {})} for g in mine})
+        # Task 22 page-API data (scene-relative)
+        sections_js = json.dumps({s['name']: round(s['start'] - start, 3)
+                                  for s in json.load(open(os.path.join(project_path, 'src', 'scenes.json')))})
+        sec_name_js = sec_name
+        palette_js = json.dumps(palette)
+        fonts_js2 = json.dumps({r: f'mp-{r}' for r in ('headline', 'label', 'body', 'emphasis')})
+        zones_js = json.dumps([[z['rect'][0], z['rect'][1], z['rect'][2], z['rect'][3]] for z in zs])
+        sfx_js = json.dumps([{'file': os.path.basename(c['file']), 'time': round(c['time'] - start, 3),
+                              'gain_db': c['gain_db'], 'graphic': c['graphic']}
+                             for c in audio_mux.sfx_cues(project_path, timing, tr)
+                             if start <= c['time'] < end])
         # dimming (README "dimming as the next lands"): every line except the last dims its
         # spans at the NEXT line's first word start
         dim_js = []
@@ -303,7 +315,31 @@ background:{palette['background_dark']};opacity:0}}
 {chr(10).join(line_html)}
 </div>
 <script src="gsap.min.js"></script>
+<script src="DrawSVGPlugin.min.js"></script>
+<script src="mp_lib.js"></script>
 {graphics_html}
+<script>
+// Task 22 page API: defined BEFORE any ai_graphics script loads
+const tl = gsap.timeline({{paused: true}});
+window.__timelines['{slug}'] = tl;
+const T = {tj};
+const SECTIONS = {sections_js};
+window.MP = {{
+  tl, timings: T, anchors: {ai_anchors},
+  at(ref, offset) {{ offset = offset || 0;
+    if (typeof ref === 'number') return ref + offset;
+    if (ref[0] === '#') return (SECTIONS[ref.slice(1)] != null ? SECTIONS[ref.slice(1)] : 0) + offset;
+    const w = T[ref]; return (w ? w.start : 0) + offset; }},
+  scene: {{name: {sec_name_js!r}, slug: {slug!r}, start: {start}, end: {end}, duration: {duration:.3f}}},
+  frame: {{W: {W}, H: {H}, fps: {pj['fps']}, aspect: {aspect!r}}},
+  palette: {palette_js},
+  fonts: {fonts_js2},
+  zones: {zones_js},
+  sfx: {sfx_js},
+  random: null  // set by mp_lib.js
+}};
+</script>
+{ai_js}
 <script>
 (async () => {{
   // Task 11 font gate: every role's face must load before the timeline is built;
@@ -314,10 +350,6 @@ background:{palette['background_dark']};opacity:0}}
     if (!loaded.length) {{ console.error(`MP_FONT_MISSING ${{f.role}} ${{f.file}}`); return; }}
   }}
 {bg_js}
-const T = {tj};
-window.MP = {{timings: T, anchors: {ai_anchors}}};
-const tl = gsap.timeline({{paused: true}});
-window.__timelines['{slug}'] = tl;
 const card = document.getElementById('{card_id}');
 tl.to(card, {{duration: 0.6, opacity: 1, ease: 'power2.out'}});
 tl.to(card, {{duration: 0.4, opacity: 0, delay: 1.2, ease: 'power2.in'}});

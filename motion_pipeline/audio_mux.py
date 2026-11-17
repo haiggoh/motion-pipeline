@@ -26,6 +26,9 @@ def sfx_cues(project_dir, timing, model):
     """Absolute-time SFX cue list from the AI manifest (Task 15b): [{file, time, gain_db, graphic}].
     Anchor = word start or section (scene) start; offset adds to it."""
     from . import ai_layer
+    # manifest anchors resolve against SECTION-bearing words: the transcript model, not the
+    # aligner's timing words (estimate_timings drops 'section') — Task 22 regression
+    words = (model or {}).get('words') or timing.get('words') or []
     times = {w['id']: w for w in timing['words']}
     scenes = None
     sp = os.path.join(project_dir, 'src', 'scenes.json')
@@ -33,7 +36,7 @@ def sfx_cues(project_dir, timing, model):
         scenes = {s['name']: s for s in json.load(open(sp))}
     last_end = max((w['end'] for w in timing['words']), default=0.0)
     out = []
-    for g in ai_layer.load_manifest(project_dir, timing['words']):
+    for g in ai_layer.load_manifest(project_dir, words):
         for i, cue in enumerate(g.get('sfx') or []):
             if isinstance(cue, dict):
                 pass

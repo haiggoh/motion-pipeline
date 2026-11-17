@@ -2,7 +2,7 @@
 
 - **Our code:** Apache-2.0 (see `LICENSE`).
 - **HyperFrames** (renderer, pinned 0.8.31): Apache-2.0 — https://github.com/heyimsylvester/hyperframes
-- **GSAP 3.14.2** (used inside generated pages): Standard "No Charge" licence,
+- **GSAP 3.14.2 + DrawSVGPlugin 3.14.2** (vendored under `vendor/`, used inside generated pages): Standard "No Charge" licence,
   https://gsap.com/standard-license — its clause "may not be used in tools that compete
   with Webflow" was reviewed; the user accepts the risk for a small tool with few users
   (decision recorded 2026-11-08).

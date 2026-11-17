@@ -105,7 +105,11 @@ def test_lines_dim_when_next_line_starts(tmp_path):
     generate.generate(d)
     html = pages(d)['scene_00_s.html']
     assert "tl.to(document.querySelectorAll('.line[data-line=\"0\"] span')" in html
-    assert 'duration: 0.3' in html and 'secondary' not in html  # colour comes from the palette
+    from motion_pipeline.scheme import resolve_variant, derive_palette
+    pal = derive_palette(resolve_variant(d, 'default'))
+    # Task 22 page API dumps every palette key into the page, so the dim colour is asserted
+    # against the palette VALUE (the old "'secondary' not in html" guard is superseded)
+    assert 'duration: 0.3' in html and f"color: '{pal['secondary_text']}'" in html
 
 
 def test_hyphenated_pieces_unique_ids(tmp_path):

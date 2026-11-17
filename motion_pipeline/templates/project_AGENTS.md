@@ -8,7 +8,7 @@ parts the menu has to keep editing.
 
 | Zone | Files | Owner | Rule |
 |---|---|---|---|
-| **Menu-owned** | `project.json`, `scheme.json`, `variants/*.json`, `transcript.txt`, `timing.json`, `transcript_model.json`, `audio/`, `fonts/` | the motion-pipeline menu | **never** edit these by hand or by AI. The menu validates them strictly and refuses a file with keys it does not own. |
+| **Menu-owned** | `MOTION_GRAPHICS_PLAYBOOK.md`, `AGENTS.md`, `project.json`, `scheme.json`, `variants/*.json`, `transcript.txt`, `timing.json`, `transcript_model.json`, `audio/`, `fonts/` | the motion-pipeline menu | **never** edit these by hand or by AI. The menu validates them strictly and refuses a file with keys it does not own. |
 | **Generated** | `src/` (scene pages, `src/element_ids.json`, `src/ai_graphics/`) | the generator | **never** edit — rebuilt on every generate/render, changes are lost. |
 | **AI-owned** | `ai_graphics/` | you | add your graphics here, and only here. The menu never writes to this folder. |
 
@@ -48,3 +48,10 @@ parts the menu has to keep editing.
 
 An invalid manifest entry stops the generator with a message naming the entry; nothing in the
 menu-owned zone is touched by that failure.
+
+## Before adding any graphic
+
+Read `MOTION_GRAPHICS_PLAYBOOK.md` in the project root first — it is menu-owned, regenerated on
+every save, and carries this project's live facts (frame, palette, fonts, scene table, zones,
+manifest) plus the exact check commands: `motion-pipeline --check-graphics <project dir>` and
+`motion-pipeline --render-test <project dir> --section <name>`.

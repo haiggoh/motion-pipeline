@@ -24,6 +24,7 @@ __doc__ = USAGE
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -137,6 +138,98 @@ def prepare_inputs(project_dir):
         timing['inputs'] = align.inputs_fingerprint(project_dir, p)  # Task 21
         align.save_timing(os.path.join(project_dir, 'timing.json'), timing)
     return p
+
+
+def check_graphics(project_dir):
+    """Task 22: validate the AI manifest (+ SFX + licences) and that every referenced file is used.
+    exit 0 ok / 1 problems listed / 3 project error."""
+    from . import ai_layer
+    from . import project as pm
+    try:
+        pm.load(project_dir)
+        timing = json.load(open(os.path.join(project_dir, 'timing.json'))) \
+            if os.path.isfile(os.path.join(project_dir, 'timing.json')) else {'words': []}
+        model = json.load(open(os.path.join(project_dir, 'transcript_model.json'))) \
+            if os.path.isfile(os.path.join(project_dir, 'transcript_model.json')) \
+            else {'sections': [], 'words': timing.get('words', [])}
+        entries = ai_layer.load_manifest(project_dir, model['words'])
+    except (ValueError, OSError, json.JSONDecodeError) as e:
+        print(f'check-graphics: project error: {e}', file=sys.stderr)
+        return 3
+    # every ai_graphics file must be referenced by a manifest entry
+    gdir = os.path.join(project_dir, ai_layer.DIR)
+    referenced = {g['file'] for g in entries}
+    problems = []
+    if os.path.isdir(gdir):
+        for root, _dirs, files in os.walk(gdir):
+            for f in files:
+                rel = os.path.relpath(os.path.join(root, f), gdir)
+                if rel.startswith('sfx/') or rel == 'manifest.json':
+                    continue
+                if rel not in referenced:
+                    problems.append(f'unreferenced file: {rel}')
+    # sfx field/licence checks already run inside load_manifest
+    if problems:
+        for pr in problems:
+            print(f'check-graphics: {pr}', file=sys.stderr)
+        return 1
+    print(f'check-graphics: OK — {len(entries)} graphic(s) declared, all files referenced')
+    return 0
+
+
+def render_test(project_dir, section=None, from_s=None, to_s=None, draft=False, dry_run=False):
+    """Task 22: render one scene span of the AI-test path into <project>/scratch/ai-test/.
+    Patches the page's data-duration to E-S and registers MP.tl.tweenFromTo(S, E); no gates,
+    no masters touched. Prints the plan (always) and runs render_scene.sh unless --dry-run."""
+    from . import generate, project
+    project.load(project_dir)  # validates the project, refuses foreign keys
+    generate.generate(project_dir, 'default')
+    scenes = json.load(open(os.path.join(project_dir, 'src', 'scenes.json')))
+    scene = next((s for s in scenes if s['name'] == section), scenes[0] if scenes else None)
+    if scene is None:
+        print(f'render-test: no scenes in src/scenes.json', file=sys.stderr)
+        return 3
+    S = from_s if from_s is not None else scene['start']
+    E = to_s if to_s is not None else scene['end']
+    if E <= S:
+        print(f'render-test: empty span {S}-{E}', file=sys.stderr)
+        return 2
+    page_path = os.path.join(project_dir, 'src', scene['file'])
+    html = open(page_path).read()
+    dur = f'{E - S:.3f}'
+    html = re.sub(r'data-duration="[\d.]+"', f'data-duration="{dur}"', html, count=1)
+    inject = (f'<script>window.__test_span=[{S:.3f},{E:.3f}];'
+              f'window.__timelines[Object.keys(window.__timelines)[0]]'
+              f'=gsap.timeline({{paused:true}}).add(window.MP.tl.tweenFromTo({S:.3f},{E:.3f}));</script>')
+    if '</head>' in html:
+        html = html.replace('</head>', inject + '</head>', 1)
+    out_dir = os.path.join(project_dir, 'scratch', 'ai-test')
+    print(f'render-test: {scene["slug"]} {S:.3f}-{E:.3f} data-duration={dur} -> {out_dir}')
+    if dry_run:
+        print('render-test: inject ' + inject)  # exact bytes that would be injected
+        return 0  # plan only — stage and render nothing
+    os.makedirs(out_dir, exist_ok=True)
+    tmp_proj = os.path.join(out_dir, '_proj')
+    if os.path.isdir(tmp_proj):
+        import shutil as _sh
+        _sh.rmtree(tmp_proj)
+    os.makedirs(os.path.join(tmp_proj, 'src'), exist_ok=True)
+    import shutil as _sh
+    _sh.copy(os.path.join(project_dir, 'project.json'), os.path.join(tmp_proj, 'project.json'))
+    _sh.copytree(os.path.join(project_dir, 'src'), os.path.join(tmp_proj, 'src'), dirs_exist_ok=True)
+    open(os.path.join(tmp_proj, 'src', scene['file']), 'w').write(html)
+    open(os.path.join(tmp_proj, 'src', 'scenes.json'), 'w').write(json.dumps(
+        [dict(scene, start=S, end=E)]))
+    for f in ('transcript_model.json', 'timing.json'):
+        src = os.path.join(project_dir, f)
+        if os.path.isfile(src):
+            _sh.copy(src, os.path.join(tmp_proj, f))
+    cmd = ['bash', os.path.join(PKG_ROOT, 'tools', 'render_scene.sh'), '--project', tmp_proj,
+           '--variant', 'default', '--mode', 'test', '--out', os.path.join(out_dir, f'{scene["slug"]}_{S:.1f}-{E:.1f}.mov')]
+    if draft:
+        cmd.append('--banded')  # placeholder for draft quality; real draft flag handled by toolchain
+    rc = subprocess.call(cmd)
+    return rc
 
 
 def remux(project_dir, variant=None, out=None):
@@ -270,6 +363,13 @@ def main(argv=None):
     ap.add_argument('--setup', action='store_true')
     ap.add_argument('--prepare-only', action='store_true',
                    help='transcript model + timing + generate the default variant, no render')
+    ap.add_argument('--check-graphics', metavar='DIR',
+                   help='validate ai_graphics manifest + SFX + licences; exit 0 ok / 1 problems / 3 project error')
+    ap.add_argument('--render-test', metavar='DIR')
+    ap.add_argument('--section', help='with --render-test: render only this section')
+    ap.add_argument('--from', dest='from_s', type=float, help='with --render-test: span start (s)')
+    ap.add_argument('--to', dest='to_s', type=float, help='with --render-test: span end (s)')
+    ap.add_argument('--draft', action='store_true', help='with --render-test: draft quality')
     ap.add_argument('--full-master', dest='full_master', action='store_true', default=None,
                    help='override the joined-master opt-in for this run')
     ap.add_argument('--no-full-master', dest='full_master', action='store_false')
@@ -281,8 +381,13 @@ def main(argv=None):
             return 0
         if a.setup:
             return setup(a.dry_run)
+        if a.check_graphics:
+            return check_graphics(os.path.abspath(a.check_graphics))
+        if a.render_test:
+            return render_test(os.path.abspath(a.render_test), a.section, a.from_s, a.to_s, a.draft,
+                               a.dry_run)
         if not a.project or not a.mode:
-            ap.error('--project and --mode are required (or use --check / --setup)')
+            ap.error('--project and --mode are required (or use --check / --check-graphics / --render-test / --setup)')
         if a.mode == 'remux':
             return remux(os.path.abspath(a.project), a.variant, a.out)
         if a.prepare_only:
