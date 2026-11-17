@@ -78,13 +78,31 @@ SCENES=( $(python3 -c "import json; print(' '.join('$PROJECT/src/' + s['file'] f
 [ "$MODE" = test ] && SCENES=( "${SCENES[0]}" )
 [ -n "$FRAMES" ] || { [ "$MODE" = test ] && FRAMES="0-59" || FRAMES="all"; }
 
-# disk guard (Review Focus 3): lossless intermediates ~1.4 MB/frame at 1080p
-need_mb=$(( $(python3 -c "import json;p=json.load(open('$PROJECT/project.json'));w,h=p['resolution'];print(max(1,(w*h*3)//1024//1024))") * 2 ))
+# disk guard (finding 17, Task 13): need = SUM over the scenes of ceil(duration*fps) frames,
+# ~1.4 MB/frame at 1080p (measured), x2 for the png + ffv1 transient; durations from scenes.json
+need_mb=$(python3 - "$PROJECT" <<'PY'
+import json, math, sys
+p = json.load(open(sys.argv[1] + '/project.json'))
+w, h = p['resolution']
+frames = sum(max(1, math.ceil((s['end'] - s['start']) * p['fps']))
+             for s in json.load(open(sys.argv[1] + '/src/scenes.json')))
+print(max(1, int(frames * w * h * 1.4 / (1920 * 1080) * 2)))
+PY
+)
 free_kb=$(df -k "$OUT" | tail -1 | awk '{print $4}')
-need_kb=$(( need_mb * 1024 * 2 ))  # png + mkv transient
+need_kb=$(( need_mb * 1024 ))
 if [ "$free_kb" -lt "$need_kb" ]; then
   echo "disk guard: free $(( free_kb / 1024 )) MB < needed $(( need_kb / 1024 )) MB for the intermediates — free space and retry" >&2
   exit 3
+fi
+
+# zone gate BEFORE any capture (Task 13): recomputes the layout; a failure stops before minutes
+# are spent. exit 6.
+if [ $DRY = 0 ] && [ $STAGE = 0 ]; then
+  if ! python3 "$TOOLS/check_zone.py" --project "$PROJECT" --variant "$VARIANT"; then
+    echo "zone gate: a text block intersects an active keep-out zone — see above (exit 6)" >&2
+    exit 6
+  fi
 fi
 
 for scene in "${SCENES[@]}"; do
@@ -133,6 +151,35 @@ for scene in "${SCENES[@]}"; do
     -an -c:v libx264 -preset veryfast -tune grain -profile:v high422 -pix_fmt yuv422p10le \
     -b:v 49M -maxrate 60M -bufsize 60M -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv \
     -metadata title="$name" "$OUT/$name.mp4" || exit 1
+  # chroma gate (Task 13) after each master: no chroma staircase on the top strip; exit 6 on
+  # failure, master kept, render_info.json NOT marked VERIFIED
+  if [ "${MP_SKIP_CHROMA_GATE:-0}" = "1" ]; then
+    echo "chroma gate skipped: MP_SKIP_CHROMA_GATE=1 (loud)"
+  else
+    read -r W H < <(python3 -c "import json;p=json.load(open('$PROJECT/project.json'));print(*p['resolution'])")
+    strip="$(( W / 20 )),$(( W * 19 / 20 )),$(( H / 50 )),$(( H * 3 / 50 ))"  # 0.05W..0.95W x 0.02H..0.06H
+    overlap=$(python3 - "$PROJECT" "$W" "$H" <<'PY'
+import json, sys
+root = sys.argv[1]
+sys.path.insert(0, root)
+from motion_pipeline import project as pm
+p = json.load(open(root + '/project.json'))
+w, h = p['resolution']
+s = (int(w * 0.05), int(w * 0.95), int(h * 0.02), int(h * 0.06))
+srect = (s[0], s[2], s[1] - s[0], s[3] - s[2])
+def inter(a, b):
+    return not (a[0] + a[2] <= b[0] or b[0] + b[2] <= a[0] or a[1] + a[3] <= b[1] or b[1] + b[3] <= a[1])
+hits = [z['section'] for z in pm.active_zones(p) if inter(srect, z['rect'])]
+print(' '.join(hits))
+PY
+)
+    if [ -n "$overlap" ]; then
+      echo "chroma gate skipped: strip overlaps zone/AI graphic ($overlap)"
+    elif ! python3 "$TOOLS/check_chroma_steps.py" --video "$OUT/$name.mp4" --frame 0 --strip "$strip" --max-step 2.0; then
+      echo "chroma gate FAILED for $name (strip $strip) — master kept in $OUT, render_info not VERIFIED (exit 6)" >&2
+      exit 6
+    fi
+  fi
   rm -rf "$work"
   echo "[render_scene] $name ok: $got fr -> $OUT/$name.mp4"
 done
