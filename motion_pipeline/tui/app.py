@@ -79,9 +79,11 @@ class _RenderScreenBase(SubmenuScreen):
     OUT_PLACEHOLDER = '<project>/renders/default'
 
     def compose_body(self):
-        from textual.widgets import Input
+        from textual.widgets import Checkbox, Input
         yield Label('Output directory (drop a folder from Finder to paste its path)')
         yield PathInput(id='outdir', placeholder=self.OUT_PLACEHOLDER)
+        yield Checkbox('Also write one joined full-length master (doubles the disk space of the masters)',
+                       id='full-master')  # D2: opt-in, persisted per project
 
     def compose_after_actions(self):
         from textual.widgets import RichLog
@@ -98,6 +100,16 @@ class _RenderScreenBase(SubmenuScreen):
         self.worker = None
         self._job_running = False
         self.set_interval(0.5, self._update_setup_row)  # Task 14: watch the streaming log
+        # Task 15: prefill the joined-master opt-in from the project
+        pd = getattr(self.app, 'project_dir', None)
+        if pd:
+            try:
+                from textual.widgets import Checkbox
+                from .. import project as project_mod
+                self.query_one('#full-master', Checkbox).value = \
+                    bool(project_mod.load(pd).get('full_master', False))
+            except Exception:
+                pass
 
     def outdir(self):
         from textual.widgets import Input
@@ -116,6 +128,13 @@ class _RenderScreenBase(SubmenuScreen):
         if action_id == 'run':
             if self._job_running:
                 return  # one job at a time
+            from textual.widgets import Checkbox
+            from .. import project as project_mod
+            pd = self.require_project()
+            if os.path.isfile(os.path.join(pd, 'project.json')):
+                p = project_mod.load(pd)
+                p['full_master'] = bool(self.query_one('#full-master', Checkbox).value)  # D2 persist
+                project_mod.save(pd, p)
             cmd = self.command()
             if self.outdir():
                 cmd += ['--out', self.outdir()]
@@ -135,6 +154,19 @@ class _RenderScreenBase(SubmenuScreen):
         elif action_id == 'open':
             import subprocess
             subprocess.Popen(['open', self.open_target()])
+        elif action_id == 'remux':
+            if self._job_running:
+                return
+            import sys
+            pd = self.require_project()
+            self._job_running = True
+            menu.set_enabled('run', False)
+            menu.set_enabled('cancel', True)
+            self.worker = run_command(self.app, [sys.executable, '-P', '-m',
+                                                 'motion_pipeline.render_cli', '--project', pd,
+                                                 '--mode', 'remux'],
+                                      self.query_one('#log', RichLog), on_finish=self.on_render_done)
+            self.query_one('#status', Static).update('re-muxing audio…')
         elif action_id == 'setup':
             if self._job_running:
                 return
@@ -305,7 +337,7 @@ class InputsScreen(SubmenuScreen):
 class RenderScreen(_RenderScreenBase):
     TITLE = 'Full render (all variants)'
     ACTIONS = [('run', 'Render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
-               ('setup', 'Install render toolchain')]
+               ('setup', 'Install render toolchain'), ('remux', 'Re-mux audio (no re-render)')]
     OUT_PLACEHOLDER = '<project>/renders/<variant>'
 
     def command(self):

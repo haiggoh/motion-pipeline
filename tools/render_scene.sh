@@ -146,13 +146,31 @@ for scene in "${SCENES[@]}"; do
     all) ;;
     *) s="${FRAMES%-*}"; e="${FRAMES#*-}"; trimvf="trim=start_frame=$s:end_frame=$((e + 1)),setpts=PTS-STARTPTS," ;;
   esac
+  # Task 15: the video-only encode is TEMPORARY ($work) — it is muxed into the .mov and deleted
   ffmpeg -v error -y -i "$work/raw.mkv" \
     -vf "${trimvf}scale=out_color_matrix=bt709:out_range=tv:flags=accurate_rnd+full_chroma_int,format=yuv422p10le" \
     -an -c:v libx264 -preset veryfast -tune grain -profile:v high422 -pix_fmt yuv422p10le \
     -b:v 49M -maxrate 60M -bufsize 60M -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv \
-    -metadata title="$name" "$OUT/$name.mp4" || exit 1
-  # chroma gate (Task 13) after each master: no chroma staircase on the top strip; exit 6 on
-  # failure, master kept, render_info.json NOT marked VERIFIED
+    -metadata title="$name" "$work/video.mp4" || exit 1
+  # Task 15: mux VO+SFX into the scene master .mov (video stream copied bit-exact, E9)
+  python3 - "$PROJECT" "$work/video.mp4" "$OUT/$name.mov" "$ROOT" <<'PY' || { echo "audio mux failed for $name" >&2; exit 1; }
+import json, os, sys
+proj_dir, video, out_mov, root = sys.argv[1:5]
+sys.path.insert(0, root)
+from motion_pipeline import audio_mux, project as pm
+p = pm.load(proj_dir)
+timing = json.load(open(os.path.join(proj_dir, 'timing.json')))
+model = json.load(open(os.path.join(proj_dir, 'transcript_model.json')))
+scenes = json.load(open(os.path.join(proj_dir, 'src', 'scenes.json')))
+scene = next(s for s in scenes if s['file'] == os.path.basename(out_mov)[:-4] + '.html')
+vo = p.get('vo')
+if vo and not os.path.isabs(vo):
+    vo = os.path.join(proj_dir, vo)
+cues = audio_mux.sfx_cues(proj_dir, timing, model)
+audio_mux.mux_scene(video, out_mov, scene['start'], scene['end'], vo, cues)
+PY
+  # chroma gate (Task 13) after each MASTER (.mov): no chroma staircase on the top strip; exit 6
+  # on failure, master kept in $OUT, render_info.json NOT marked VERIFIED
   if [ "${MP_SKIP_CHROMA_GATE:-0}" = "1" ]; then
     echo "chroma gate skipped: MP_SKIP_CHROMA_GATE=1 (loud)"
   else
@@ -175,14 +193,58 @@ PY
 )
     if [ -n "$overlap" ]; then
       echo "chroma gate skipped: strip overlaps zone/AI graphic ($overlap)"
-    elif ! python3 "$TOOLS/check_chroma_steps.py" --video "$OUT/$name.mp4" --frame 0 --strip "$strip" --max-step 2.0; then
+    elif ! python3 "$TOOLS/check_chroma_steps.py" --video "$OUT/$name.mov" --frame 0 --strip "$strip" --max-step 2.0; then
       echo "chroma gate FAILED for $name (strip $strip) — master kept in $OUT, render_info not VERIFIED (exit 6)" >&2
       exit 6
     fi
   fi
-  rm -rf "$work"
-  echo "[render_scene] $name ok: $got fr -> $OUT/$name.mp4"
+  rm -rf "$work"  # no video-only copy is ever kept (user 2026-11-16)
+  echo "[render_scene] $name ok: $got fr -> $OUT/$name.mov"
 done
+# old .mp4 masters are refused (masters are .mov now)
+if [ $DRY = 0 ] && [ $STAGE = 0 ] && ls "$OUT"/*.mp4 >/dev/null 2>&1; then
+  echo "old .mp4 masters present in $OUT — masters are .mov now; move them away and re-render (exit 3)" >&2
+  exit 3
+fi
+# Task 15 outputs after all scenes: timeline.json, preview, optional joined master, info fields
+[ $DRY = 1 ] && { echo "[render_scene] dry run complete"; exit 0; }
+[ $STAGE = 1 ] && { echo "[render_scene] staged sites only"; exit 0; }
+python3 - "$PROJECT" "$VARIANT" "$OUT" "$ROOT" <<'PY'
+import json, os, sys
+proj_dir, variant, out, root = sys.argv[1:5]
+sys.path.insert(0, root)
+from motion_pipeline import audio_mux, project as pm
+p = pm.load(proj_dir)
+fps = p['fps']
+scenes = json.load(open(os.path.join(proj_dir, 'src', 'scenes.json')))
+movs = [os.path.join(out, s['file'][:-5] + '.mov') for s in scenes]
+audio_mux.write_timeline(os.path.join(out, 'timeline.json'), scenes, fps)
+audio_mux.preview(movs, os.path.join(out, f'{variant}_preview.mp4'))
+timing = json.load(open(os.path.join(proj_dir, 'timing.json')))
+model = json.load(open(os.path.join(proj_dir, 'transcript_model.json')))
+vo = p.get('vo')
+if vo and not os.path.isabs(vo):
+    vo = os.path.join(proj_dir, vo)
+cues = audio_mux.sfx_cues(proj_dir, timing, model)
+full = os.environ.get('FULL_MASTER') or ('1' if p.get('full_master') else '0')
+if full == '1':
+    ok, frames = audio_mux.join([dict(s, file=m) for s, m in zip(scenes, movs)],
+                                os.path.join(out, f'{variant}_full.mov'), vo, cues)
+    want = sum(round((s['end'] - s['start']) * fps) for s in scenes)
+    if not ok or frames != want:
+        print(f'[render_scene] joined master SKIPPED: concat frames {frames} != {want} (re-encode is forbidden, D2)')
+    else:
+        print(f'[render_scene] joined master: {frames} fr')
+# record container/audio/scene spans in render_info.json for remux checks
+ip = os.path.join(out, 'render_info.json')
+if os.path.isfile(ip):
+    info = json.load(open(ip))
+    info['container'] = 'mov'
+    info['audio'] = 'vo+sfx'
+    info['scenes'] = [{'file': s['file'], 'start': s['start'], 'end': s['end']} for s in scenes]
+    with open(ip, 'w') as f:
+        json.dump(info, f, indent=2)
+PY
 [ $DRY = 1 ] && { echo "[render_scene] dry run complete"; exit 0; }
 python3 "$TOOLS/render_info.py" finish --dir "$OUT" --verify VERIFIED >/dev/null
 echo "[render_scene] DONE $OUT"

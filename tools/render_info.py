@@ -73,6 +73,9 @@ def main(argv=None):
     s.add_argument('--parts', required=True)
     s.add_argument('--content', required=True)
     s.add_argument('--node', default='')
+    s.add_argument('--container', default='')   # Task 15: 'mov'
+    s.add_argument('--audio', default='')       # Task 15: 'vo+sfx'
+    s.add_argument('--scenes', default='')      # Task 15: json list of scene spans, for remux checks
     f.add_argument('--verify', required=True, choices=('VERIFIED', 'FAILED'))
     f.add_argument('--verify-only', action='store_true')
     a = ap.parse_args(argv)
@@ -95,7 +98,9 @@ def main(argv=None):
         info = dict(old or {})
         info.update(rev=a.rev, colour=a.colour, parts=a.parts.split(), hf_arm=a.arm, hf_version=a.hf,
                     intermediate=a.intermediate,
-                    node=a.node, pipeline_commit=git('rev-parse', 'HEAD', cwd=a.content),
+                    node=a.node, container=a.container or None, audio=a.audio or None,
+                    scenes=json.loads(a.scenes) if a.scenes else None,
+                    pipeline_commit=git('rev-parse', 'HEAD', cwd=a.content),
                     content_tree=git('rev-parse', f'HEAD:{rel}', cwd=a.content) if rel else None,
                     dirty=bool(git('status', '--porcelain', '--', '.', cwd=a.content)),
                     started=(old['started'] if old and old.get('started') and old.get('verify') is None else now()),

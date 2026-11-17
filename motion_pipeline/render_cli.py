@@ -133,9 +133,60 @@ def prepare_inputs(project_dir):
     return p
 
 
-def render(project_dir, mode, variant=None, out=None, dry_run=False):
-    from . import generate
+def remux(project_dir, variant=None, out=None):
+    """--mode remux (Task 15): re-mux every scene .mov with the CURRENT VO/SFX, reading the video
+    stream from the existing .mov (bit-exact copy). Refuses when spans changed or a .mov is
+    missing (exit 3); a video-hash mismatch leaves the original untouched (exit 7)."""
+    from . import audio_mux
+    from . import project as pm
+    p = pm.load(project_dir)
+    variant = variant or 'default'
+    out = out or os.path.join(project_dir, 'renders', variant)
+    scenes = json.load(open(os.path.join(project_dir, 'src', 'scenes.json')))
+    info_path = os.path.join(out, 'render_info.json')
+    if os.path.isfile(info_path):
+        old = json.load(open(info_path)).get('scenes')
+        now = [{'file': s['file'], 'start': s['start'], 'end': s['end']} for s in scenes]
+        if old != now:
+            print('remux refused: scene spans changed since the render — re-render needed (exit 3)',
+                  file=sys.stderr)
+            return 3
+    vo = p.get('vo')
+    if vo and not os.path.isabs(vo):
+        vo = os.path.join(project_dir, vo)
+    timing = json.load(open(os.path.join(project_dir, 'timing.json')))
+    model = json.load(open(os.path.join(project_dir, 'transcript_model.json')))
+    cues = audio_mux.sfx_cues(project_dir, timing, model)
+    for s in scenes:
+        mov = os.path.join(out, s['file'][:-5] + '.mov')
+        if not os.path.isfile(mov):
+            print(f'remux refused: {mov} missing — re-render needed (exit 3)', file=sys.stderr)
+            return 3
+        tmp = mov + '.tmp'
+        if not audio_mux.remux_scene(mov, tmp, s['start'], s['end'], vo, cues):
+            os.remove(tmp)
+            print(f'remux: video-stream hash mismatch for {mov} — original kept untouched (exit 7)',
+                  file=sys.stderr)
+            return 7
+        os.replace(tmp, mov)
+    movs = [os.path.join(out, s['file'][:-5] + '.mov') for s in scenes]
+    audio_mux.preview(movs, os.path.join(out, f'{variant}_preview.mp4'))
+    audio_mux.write_timeline(os.path.join(out, 'timeline.json'), scenes, p['fps'])
+    if p.get('full_master'):
+        ok, frames = audio_mux.join([dict(s, file=m) for s, m in zip(scenes, movs, strict=True)],
+                                    os.path.join(out, f'{variant}_full.mov'), vo, cues)
+        want = sum(round((s['end'] - s['start']) * p['fps']) for s in scenes)
+        if not ok or frames != want:
+            print(f'[render_cli] joined master SKIPPED: concat frames {frames} != {want} '
+                  '(re-encode is forbidden, D2)', file=sys.stderr)
+    return 0
+
+
+def render(project_dir, mode, variant=None, out=None, dry_run=False, full_master=None):
+    from . import audio_mux, generate
     env = dict(os.environ)
+    if full_master is not None:
+        env['FULL_MASTER'] = '1' if full_master else '0'
     if not dry_run:
         env, lines = preflight()
         for line in lines:
@@ -158,6 +209,10 @@ def render(project_dir, mode, variant=None, out=None, dry_run=False):
         rc = subprocess.call(cmd, env=env)
         if rc:
             return rc
+        vout = (out if len(variants) == 1 else os.path.join(out, v)) if out \
+            else os.path.join(project_dir, 'renders', v)
+        scenes = json.load(open(os.path.join(project_dir, 'src', 'scenes.json')))
+        audio_mux.write_timeline(os.path.join(vout, 'timeline.json'), scenes, p['fps'])
     return rc
 
 
@@ -182,12 +237,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog='motion_pipeline.render_cli', description=USAGE.split('\n')[0],
                                  epilog=USAGE, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--project')
-    ap.add_argument('--mode', choices=('test', 'full'))
+    ap.add_argument('--mode', choices=('test', 'full', 'remux'))
     ap.add_argument('--variant')
     ap.add_argument('--out')
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--setup', action='store_true')
+    ap.add_argument('--full-master', dest='full_master', action='store_true', default=None,
+                   help='override the joined-master opt-in for this run')
+    ap.add_argument('--no-full-master', dest='full_master', action='store_false')
     a = ap.parse_args(argv)
     try:
         if a.check:
@@ -198,7 +256,10 @@ def main(argv=None):
             return setup(a.dry_run)
         if not a.project or not a.mode:
             ap.error('--project and --mode are required (or use --check / --setup)')
-        return render(os.path.abspath(a.project), a.mode, a.variant, a.out, a.dry_run)
+        if a.mode == 'remux':
+            return remux(os.path.abspath(a.project), a.variant, a.out)
+        return render(os.path.abspath(a.project), a.mode, a.variant, a.out, a.dry_run,
+                      full_master=a.full_master)
     except Missing as e:
         print(f'missing dependency: {e}', file=sys.stderr)
         return 3

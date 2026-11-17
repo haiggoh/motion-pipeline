@@ -58,6 +58,12 @@ def make_project(tmp_path, duration=2.0, zones=None, banded=False):
     (p / 'src' / 'scenes.json').write_text(json.dumps(
         [{'index': 0, 'name': 'S', 'slug': 's', 'start': 0.0, 'end': duration, 'file': 'scene_00_s.html'}]))
     (p / 'src' / 'scene_00_s.html').write_text('<html><head></head><body></body></html>')  # --banded seds in here
+    # Task 15: the mux step after the gates needs timing.json
+    import sys as _sys
+    _sys.path.insert(0, ROOT)
+    from motion_pipeline import align
+    tr = json.loads((p / 'transcript_model.json').read_text())
+    align.save_timing(str(p / 'timing.json'), align.estimate_timings(tr, wpm=140))
     return str(p)
 
 
@@ -93,7 +99,7 @@ def test_clean_render_passes_chroma_gate(tmp_path):
     r = run_render(p, bin_dir=b)
     assert r.returncode == 0, r.stderr[-600:]
     assert 'chroma gate skipped' not in r.stdout
-    assert os.path.isfile(os.path.join(p, 'renders', 'default', 'scene_00_s.mp4'))
+    assert os.path.isfile(os.path.join(p, 'renders', 'default', 'scene_00_s.mov'))
     assert open(calls).read().strip() != '', 'hyperframes was called'
 
 
@@ -104,7 +110,7 @@ def test_banded_known_bad_fails_chroma_gate_exit6(tmp_path):
     assert r.returncode == 6, (r.returncode, r.stderr[-400:])
     assert 'chroma gate FAILED' in r.stderr
     # master kept, render_info NOT marked VERIFIED
-    assert os.path.isfile(os.path.join(p, 'renders', 'default', 'scene_00_s.mp4'))
+    assert os.path.isfile(os.path.join(p, 'renders', 'default', 'scene_00_s.mov'))
     info = json.load(open(os.path.join(p, 'renders', 'default', 'render_info.json')))
     assert info.get('verify') != 'VERIFIED'
 

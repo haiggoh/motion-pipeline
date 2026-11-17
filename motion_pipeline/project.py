@@ -18,7 +18,8 @@ FPS_CHOICES = (25, 30, 50, 60)
 REQUIRED_KEYS = ('name', 'aspect', 'resolution', 'fps', 'variants')
 # every key the menu owns in project.json. Anything else is refused by validate(): AI
 # additions belong in ai_graphics/ (ai_layer.py), never in the menu's files (0.5.0 Task 4d).
-OWNED_KEYS = REQUIRED_KEYS + ('zones', 'fonts', 'transcript', 'vo', 'graphics', 'wpm', 'language', 'aligner')
+OWNED_KEYS = REQUIRED_KEYS + ('zones', 'fonts', 'transcript', 'vo', 'graphics', 'wpm', 'language',
+                             'aligner', 'full_master')
 AGENTS_TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'project_AGENTS.md')
 
 
@@ -35,7 +36,8 @@ def resolution_for(aspect, uhd=False):
 def default_project(name, aspect='16:9', fps=60, uhd=False):
     return {'name': name, 'aspect': aspect, 'resolution': resolution_for(aspect, uhd),
             'fps': fps, 'variants': ['default'], 'zones': [], 'fonts': {},
-            'transcript': 'transcript.txt', 'vo': None, 'wpm': 140, 'language': 'de', 'aligner': 'auto'}
+            'transcript': 'transcript.txt', 'vo': None, 'wpm': 140, 'language': 'de',
+            'aligner': 'auto', 'full_master': False}
 
 
 def validate(p):
@@ -66,6 +68,8 @@ def validate(p):
         raise ValueError(f"invalid language {p['language']!r} — want 'de', 'en' or 'auto' (key 'language')")
     if 'aligner' in p and p['aligner'] not in ('auto', 'classical', 'whisper'):
         raise ValueError(f"invalid aligner {p['aligner']!r} — want 'auto', 'classical' or 'whisper' (key 'aligner')")
+    if 'full_master' in p and not isinstance(p['full_master'], bool):
+        raise ValueError(f"invalid full_master {p['full_master']!r} — want true/false (key 'full_master')")
     if not isinstance(p['variants'], list) or not p['variants']:
         raise ValueError("invalid variants: want a non-empty list of scheme names")
     for z in p.get('zones', []):
