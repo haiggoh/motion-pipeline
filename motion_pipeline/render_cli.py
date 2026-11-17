@@ -172,6 +172,7 @@ def remux(project_dir, variant=None, out=None):
     movs = [os.path.join(out, s['file'][:-5] + '.mov') for s in scenes]
     audio_mux.preview(movs, os.path.join(out, f'{variant}_preview.mp4'))
     audio_mux.write_timeline(os.path.join(out, 'timeline.json'), scenes, p['fps'])
+    _write_sequence(project_dir, p, out, variant)  # remux rewrites the sequence too
     if p.get('full_master'):
         ok, frames = audio_mux.join([dict(s, file=m) for s, m in zip(scenes, movs, strict=True)],
                                     os.path.join(out, f'{variant}_full.mov'), vo, cues)
@@ -213,7 +214,25 @@ def render(project_dir, mode, variant=None, out=None, dry_run=False, full_master
             else os.path.join(project_dir, 'renders', v)
         scenes = json.load(open(os.path.join(project_dir, 'src', 'scenes.json')))
         audio_mux.write_timeline(os.path.join(vout, 'timeline.json'), scenes, p['fps'])
+        _write_sequence(project_dir, p, vout, v)  # Task 15c: Premiere-importable FCP 7 XML
     return rc
+
+
+def _write_sequence(project_dir, p, vout, variant):
+    """Write <variant>_sequence.xml (FCP 7 XML) next to timeline.json (Task 15c)."""
+    from . import premiere_xml
+    tl_path = os.path.join(vout, 'timeline.json')
+    if not os.path.isfile(tl_path):
+        return
+    scenes = json.load(open(tl_path))
+    for s in scenes:
+        s['file'] = os.path.join(vout, s['file'])  # absolute paths (Premiere relinks if moved)
+    full = os.path.join(vout, f'{variant}_full.mov')
+    premiere_xml.write_sequence(os.path.join(vout, f'{variant}_sequence.xml'),
+                                f"{p['name']} – {variant}", scenes, p['fps'],
+                                p['resolution'][0], p['resolution'][1],
+                                full_master=full if (p.get('full_master') and os.path.isfile(full))
+                                else None)
 
 
 def setup(dry_run=False):

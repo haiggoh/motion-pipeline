@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=1.0"]
+dev = ["pytest>=8", "pytest-asyncio>=1.0", "opentimelineio==0.18.1", "otio-fcp-adapter==1.0.0"]  # Task 15c: independent XML re-read in tests
 
 [project.scripts]
 motion-pipeline = "motion_pipeline.__main__:main"
