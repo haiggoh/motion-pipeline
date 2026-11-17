@@ -37,10 +37,11 @@ def sample_project(tmp_path_factory):
 
 def test_sample_generates_scenes_and_globe_assets(sample_project):
     src = os.path.join(sample_project, 'src')
-    assert os.path.isfile(os.path.join(src, 'scene_Welcome.html'))
+    scenes = json.load(open(os.path.join(src, 'scenes.json')))  # Task 12: scene_<NN>_<slug>.html
+    assert os.path.isfile(os.path.join(src, scenes[0]['file']))
     assert os.path.isfile(os.path.join(src, 'globe.js'))
     assert os.path.isfile(os.path.join(src, 'land-110m.js'))
-    page = open(os.path.join(src, 'scene_Welcome.html')).read()
+    page = open(os.path.join(src, scenes[0]['file'])).read()
     assert 'GLOBE.create' in page and 'paintBg' in page
 
 

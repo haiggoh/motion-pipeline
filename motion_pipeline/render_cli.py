@@ -137,7 +137,8 @@ def render(project_dir, mode, variant=None, out=None, dry_run=False):
     rc = 0
     for v in variants:
         print(f'[render_cli] generate variant {v}', flush=True)
-        generate.generate(project_dir, v)
+        # Task 12 test_frames mode: a test render caps every scene at 60 frames (E7)
+        generate.generate(project_dir, v, max_seconds=(60 / p['fps']) if mode == 'test' else None)
         cmd = ['bash', os.path.join(PKG_ROOT, 'tools', 'render_scene.sh'), '--project', project_dir,
                '--variant', v, '--mode', mode]
         if out:

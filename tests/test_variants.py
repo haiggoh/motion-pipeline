@@ -43,9 +43,10 @@ def test_generate_per_variant_differs_exactly_in_overridden_colour(tmp_path):
     pd = make_project(tmp_path / 'p')
     scheme.save_variant(pd, 'warm', dict(DARK, accent='#ff6a00'))
     generate.generate(pd, 'default')
-    a = open(os.path.join(pd, 'src', 'scene_Welcome.html')).read()
+    scenes = json.load(open(os.path.join(pd, 'src', 'scenes.json')))  # Task 12
+    a = open(os.path.join(pd, 'src', scenes[0]['file'])).read()
     generate.generate(pd, 'warm')
-    b = open(os.path.join(pd, 'src', 'scene_Welcome.html')).read()
+    b = open(os.path.join(pd, 'src', scenes[0]['file'])).read()
     assert '#ffb400' in a and '#ff6a00' not in a
     assert '#ff6a00' in b and '#ffb400' not in b
     assert a.replace('#ffb400', 'X').count('X') == b.replace('#ff6a00', 'X').count('X')

@@ -25,6 +25,9 @@ def test_render_scene_accepts_custom_out():
             {'name': 'p', 'aspect': '16:9', 'resolution': [1920, 1080], 'fps': 60,
              'variants': ['default'], 'zones': [], 'fonts': {}, 'transcript': 't', 'vo': None}))
         open(os.path.join(p, 'src', 'scene_A.html'), 'w').write('<html></html>')
+        # Task 12: render_scene reads the scene list from src/scenes.json
+        open(os.path.join(p, 'src', 'scenes.json'), 'w').write(json.dumps(
+            [{'index': 0, 'name': 'A', 'slug': 'a', 'start': 0.0, 'end': 1.0, 'file': 'scene_A.html'}]))
         out = os.path.join(td, 'custom-out')
         r = subprocess.run(['bash', os.path.join(ROOT, 'tools', 'render_scene.sh'),
                             '--project', p, '--variant', 'default', '--mode', 'test',

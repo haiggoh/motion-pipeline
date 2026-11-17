@@ -1,6 +1,7 @@
 """Task 11 SLOW tests (plan 2026-11-16): real renders proving the embedded face is used and
 the font gate exits 5 on a missing face. Need the render toolchain — run only in the full
 suite incl. slow (hyperframes on PATH); skipped otherwise."""
+import json
 import os
 import shutil
 import subprocess
@@ -41,7 +42,10 @@ def test_render_uses_embedded_font(tmp_path):
     r2 = _render(d2)
     assert r2.returncode == 0, r2.stderr[-500:]
     # frames are removed after packing; compare the masters' first frame via ffmpeg instead
-    m1, m2 = os.path.join(d1, 'renders', 'default', 'scene_Intro.mp4'), os.path.join(d2, 'renders', 'default', 'scene_Intro.mp4')
+    sj1 = json.load(open(os.path.join(d1, 'src', 'scenes.json')))
+    sj2 = json.load(open(os.path.join(d2, 'src', 'scenes.json')))
+    m1 = os.path.join(d1, 'renders', 'default', sj1[0]['file'].replace('.html', '.mp4'))
+    m2 = os.path.join(d2, 'renders', 'default', sj2[0]['file'].replace('.html', '.mp4'))
     assert os.path.isfile(m1) and os.path.isfile(m2)
     from PIL import Image
     import io

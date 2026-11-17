@@ -32,7 +32,8 @@ parts the menu has to keep editing.
 - `layer`: `above` (default) or `below` the generated text.
 
 3. In a script, read timing and anchors from `window.MP`:
-   `MP.timings[<word id>] = {start, end}` (seconds into the scene) and
+   `MP.timings[<word id>] = {start, end}` (seconds into the scene, scene-relative since Task 12)
+   and a word split by hyphenation publishes its FIRST piece id; later pieces get `-<k+1>` suffixes, and
    `MP.anchors[<your id>] = {element, layer, start?}`; the anchored element is
    `document.getElementById(MP.anchors[<your id>].element)`.
 4. Touch generated text ONLY through those published element ids. Never rely on other

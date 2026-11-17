@@ -21,10 +21,18 @@ def parse(text):
     words = []
     section = 'default'
     pos = 0
+    first_heading_line = None
+    seen = {}
     for lineno, line in enumerate(text.splitlines(), 1):
         m = SECTION_RE.match(line)
         if m:
             section = m.group(1)
+            if first_heading_line is None:
+                first_heading_line = lineno
+            if section in seen:  # Task 12: duplicate section names are refused, named
+                raise ValueError(f'duplicate section name "{section}" on line {lineno} '
+                                 f'(first on line {seen[section]})')
+            seen[section] = lineno
             sections.append({'name': section, 'char_start': pos, 'line': lineno})
             pos += len(line) + 1
             continue
@@ -41,6 +49,13 @@ def parse(text):
         stripped = SECTION_RE.sub('', line)
         if '*' in WORD_RE.sub('', stripped):
             raise ValueError(f'malformed emphasis markup on line {lineno}: {line!r}')
+    # Task 12: words before the first heading go into an 'Intro' section inserted first
+    if first_heading_line is not None:
+        pre = [w for w in words if w['line'] < first_heading_line]
+        if pre:
+            for w in pre:
+                w['section'] = 'Intro'
+            sections.insert(0, {'name': 'Intro', 'char_start': 0, 'line': pre[0]['line']})
     if not sections:
         sections.append({'name': 'default', 'char_start': 0})
     if not words:

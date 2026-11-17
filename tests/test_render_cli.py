@@ -52,7 +52,8 @@ def test_prepares_inputs_generates_and_hands_off_to_render_scene(tmp_path):
     r = _cli('--project', pd, '--mode', 'test', '--dry-run')
     assert r.returncode == 0, r.stdout + r.stderr
     assert os.path.isfile(os.path.join(pd, 'timing.json'))
-    assert os.path.isfile(os.path.join(pd, 'src', 'scene_Welcome.html'))
+    scenes = json.load(open(os.path.join(pd, 'src', 'scenes.json')))  # Task 12
+    assert os.path.isfile(os.path.join(pd, 'src', scenes[0]['file']))
     assert 'render_scene.sh' in r.stdout and '--variant default' in r.stdout and 'would: hyperframes' in r.stdout
 
 

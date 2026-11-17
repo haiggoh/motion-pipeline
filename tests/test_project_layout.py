@@ -82,12 +82,13 @@ async def test_ai_graphics_wired_in_and_untouched_by_menu_edits(tmp_path):
         assert 'saved' in str(app.screen.query_one('#preview').render())
     generate.generate(pd)
     assert _digest(_tree(os.path.join(pd, 'ai_graphics'))) == before   # byte-identical
-    page = _pages(pd)[f'scene_{w["section"]}.html']
+    scenes = json.load(open(os.path.join(pd, 'src', 'scenes.json')))  # Task 12: scene_<NN>_<slug>
+    page = _pages(pd)[next(s['file'] for s in scenes if s['name'] == w['section'])]
     assert f'data-ai-id="spark"' in page and f'data-anchor="el-{w["id"]}"' in page
     assert '<svg id="spark"' in page
     assert 'src="ai_graphics/pulse.js"' in page
     assert os.path.isfile(os.path.join(pd, 'src', 'ai_graphics', 'pulse.js'))
-    others = [p for n, p in _pages(pd).items() if n != f'scene_{w["section"]}.html']
+    others = [p for n, p in _pages(pd).items() if n != next(s['file'] for s in scenes if s['name'] == w['section'])]
     assert others and all('data-ai-id' not in p for p in others)  # only at its anchor's section
 
 

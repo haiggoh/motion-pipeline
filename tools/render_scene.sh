@@ -71,8 +71,10 @@ if [ $FRESH = 1 ]; then
   [ $DRY = 1 ] || rm -rf "$OUT"/work_* "$OUT"/.work_* "$OUT"/.stage_* "$OUT"/chunks_* "$OUT"/.chunks_* "$OUT"/.raw_* "$OUT"/.pl_* "$OUT"/.concat_* "$OUT"/.render_*.log "$OUT/render_info.json"
 fi
 
-SCENES=( "$PROJECT"/src/scene_*.html )
-[ ${#SCENES[@]} -gt 0 ] && [ -e "${SCENES[0]}" ] || { echo "no src/scene_*.html in $PROJECT" >&2; exit 3; }
+# Task 12: scene order comes from src/scenes.json (written by the generator), not the glob
+[ -f "$PROJECT/src/scenes.json" ] || { echo "no src/scenes.json in $PROJECT — run the generator first" >&2; exit 3; }
+SCENES=( $(python3 -c "import json; print(' '.join('$PROJECT/src/' + s['file'] for s in json.load(open('$PROJECT/src/scenes.json'))))") )
+[ ${#SCENES[@]} -gt 0 ] || { echo "no scenes in src/scenes.json" >&2; exit 3; }
 [ "$MODE" = test ] && SCENES=( "${SCENES[0]}" )
 [ -n "$FRAMES" ] || { [ "$MODE" = test ] && FRAMES="0-59" || FRAMES="all"; }
 
@@ -104,21 +106,9 @@ for scene in "${SCENES[@]}"; do
   # AI-owned graphics (ai_layer.py) the generator linked as ai_graphics/<file>
   [ -d "$PROJECT/src/ai_graphics" ] && cp -R "$PROJECT/src/ai_graphics" "$site/ai_graphics"
   if [ $STAGE = 1 ]; then echo "  site: $site"; continue; fi
-  # hyperframes 0.8.31 renders at preset resolutions whose aspect must match the composition
-  res="$(python3 - "$PROJECT/project.json" <<'PY'
-import json, sys
-p = json.load(open(sys.argv[1]))
-w, h = p['resolution']
-preset = {('16:9', False): 'landscape', ('16:9', True): 'landscape-4k',
-          ('9:16', False): 'portrait', ('9:16', True): 'portrait-4k',
-          ('1:1', False): 'square', ('1:1', True): 'square-4k'}.get((p['aspect'], w > 1920))
-if preset is None:
-    print('square', file=sys.stderr)  # 4:5 has no preset in hyperframes 0.8.31 — nearest aspect
-    preset = 'square'
-print(preset)
-PY
-)"
-  (cd "$site" && NODE_OPTIONS="--max-old-space-size=4096" hyperframes render . --fps "$(python3 -c "import json;print(json.load(open('$PROJECT/project.json'))['fps'])")" --resolution "$res" --quality high --format png-sequence --output "$work/frames" > "$work/render.log" 2>&1 < /dev/null) \
+  # P4: never pass --resolution — compositions are authored at the project's real resolution
+  # (hyperframes renders 1080x1350 natively when omitted, E5)
+  (cd "$site" && NODE_OPTIONS="--max-old-space-size=4096" hyperframes render . --fps "$(python3 -c "import json;print(json.load(open('$PROJECT/project.json'))['fps'])")" --quality high --format png-sequence --output "$work/frames" > "$work/render.log" 2>&1 < /dev/null) \
     || { echo "render FAILED $name (see $work/render.log)" >&2; exit 1; }
   [ -f "$work/frames/frame_000001.png" ] || { echo "$name: unexpected png naming (no frame_000001.png)" >&2; exit 1; }
   # Task 11 font gate: a role face that did not load is logged by the page as MP_FONT_MISSING

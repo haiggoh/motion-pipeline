@@ -40,7 +40,10 @@ def d(tmp_path):
 
 
 def read_scene(d, section):
-    return (open(os.path.join(d, 'src', f'scene_{section}.html')).read())
+    # Task 12: scene files are scene_<NN>_<slug>.html — resolve via scenes.json
+    scenes = json.load(open(os.path.join(d, 'src', 'scenes.json')))
+    name = next(s['file'] for s in scenes if s['name'] == section)
+    return open(os.path.join(d, 'src', name)).read()
 
 
 def test_page_declares_font_face_per_role(d):
@@ -72,9 +75,9 @@ def test_every_word_id_and_section_in_output(d):
     for w in [w for w in tr['words'] if w['section'] == 'Intro']:
         assert f'data-id="{w["id"]}"' in intro
         assert f'"{w["id"]}":' in intro  # timing anchored by id
-    assert 'card-Intro' in intro
+    assert 'card-intro' in intro  # Task 12: card ids come from slugs
     main = read_scene(d, 'Main')
-    assert 'card-Main' in main
+    assert 'card-main' in main  # Task 12: card ids come from slugs
     ids = json.load(open(os.path.join(d, 'src', 'element_ids.json')))
     assert set(ids) >= {w['id'] for w in tr['words']} | {'Intro', 'Main'}
 
@@ -118,7 +121,8 @@ def test_per_aspect_bounds_and_zone_routing(tmp_path):
 def test_uhd_and_25fps_project_settings(tmp_path):
     d, tr, timing = make_project(tmp_path / 'uhd', aspect='16:9', fps=25, res=[3840, 2160])
     generate.generate(d)
-    assert os.path.isfile(os.path.join(d, 'src', 'scene_Intro.html'))
+    scenes = json.load(open(os.path.join(d, 'src', 'scenes.json')))
+    assert os.path.isfile(os.path.join(d, 'src', scenes[0]['file']))
 
 
 def test_german_hyphenation(d):

@@ -10,6 +10,7 @@ absolutely-positioned DOM. All times anchor to word ids / section names (data
 attributes + embedded timing JSON keyed by id) — a re-take only changes times.
 Also writes src/element_ids.json (stable published ids for the AI layer).
 """
+import html
 import json
 import os
 
@@ -57,7 +58,7 @@ def layout_lines(words, max_chars_per_line, font_px, char_w=0.52):
                 lines.append(cur)
                 cur = []
                 cur_w = 0
-            cur.append((w, piece, k == len(pieces) - 1))
+            cur.append((w, piece, k))  # Task 12: k = piece index within the word
             cur_w += pw + font_px * char_w * 0.3
     if cur:
         lines.append(cur)
@@ -89,7 +90,60 @@ def place_text_block(lines, W, H, font_px, line_h, zones):
     return x, int(H * 0.55)
 
 
-def generate(project_path, variant='default'):
+def section_slug(name: str, taken: set) -> str:
+    """NFKD-fold to ASCII, lowercase, [^a-z0-9]+ -> '-', trimmed; empty -> 'section';
+    collisions get -2, -3. (Task 12)"""
+    import re as _re
+    import unicodedata
+    s = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode().lower()
+    s = _re.sub(r'[^a-z0-9]+', '-', s).strip('-') or 'section'
+    if s not in taken:
+        return s
+    i = 2
+    while f'{s}-{i}' in taken:
+        i += 1
+    return f'{s}-{i}'
+
+
+def scene_spans(timing, model, fps, tail=1.6):
+    """[{"index", "name", "slug", "start", "end"}] — scene 0 starts at 0.0, scene k at its
+    first word's start; each scene ends where the next starts; the last ends at the last
+    word's end + tail; all frame-aligned (P3). (Task 12)"""
+    times = {w['id']: w for w in timing['words']}
+    abs_end = max((times[w['id']]['end'] for w in model['words'] if w['id'] in times),
+                  default=0.0)
+    spans = []
+    taken = set()
+    for sec in model['sections']:
+        ws = [w for w in model['words'] if w['section'] == sec['name'] and w['id'] in times]
+        if not ws:
+            continue
+        start = 0.0 if not spans else times[ws[0]['id']]['start']
+        slug = section_slug(sec['name'], taken)
+        taken.add(slug)
+        spans.append({'index': len(spans), 'name': sec['name'], 'slug': slug, 'start': start})
+    out = []
+    for k, s in enumerate(spans):
+        end = spans[k + 1]['start'] if k + 1 < len(spans) else abs_end + tail
+        out.append({'index': s['index'], 'name': s['name'], 'slug': s['slug'],
+                    'start': round(s['start'] * fps) / fps, 'end': round(end * fps) / fps})
+    return out
+
+
+def _avoids_zones(lines, W, H, font_px, line_h, zones):
+    """True when some candidate y puts the text block inside 0.9*H and clear of the zones."""
+    x = int(W * 0.08)
+    max_w = max(len(''.join(p for _, p, _ in ln)) for ln in lines) if lines else 1
+    block_w = int(max_w * font_px * 0.52)
+    if len(lines) * line_h > 0.9 * H:
+        return False
+    for y in (int(H * 0.55), int(H * 0.30), int(H * 0.70), int(H * 0.15)):
+        if not any(_rects_intersect((x, y, block_w, len(lines) * line_h), z['rect']) for z in zones):
+            return True
+    return False
+
+
+def generate(project_path, variant='default', max_seconds=None):
     """Generate src/ for one project+variant (the variant's colour overlay applied to the base
     scheme — scheme.resolve_variant). Returns the list of written files."""
     from .scheme import resolve_variant
@@ -106,7 +160,6 @@ def generate(project_path, variant='default'):
     bg_js = background_js(palette, W, H)
     roles = font_gate(project_path, pj)
     font_px = int(H / 12 * ASPECT_FONT_SCALE.get(aspect, 1.0))
-    line_h = int(font_px * 1.25)
     from .project import active_zones
     zones = active_zones(pj)
     out_dir = os.path.join(project_path, 'src')
@@ -141,7 +194,6 @@ def generate(project_path, variant='default'):
         _sh.copy2(os.path.join(project_path, ai_layer.DIR, g['file']), dst)
     element_ids = {}
     written = []
-    timings_by_id = {w['id']: w for w in timing['words']}
     graphics_html = ''
     for g in pj.get('graphics', []):
         if g == 'globe':
@@ -161,31 +213,54 @@ def generate(project_path, variant='default'):
                 'const gt = () => G.draw(performance.now() / 1000 * 12); '
                 'if (window.gsap && gsap.ticker) { gsap.ticker.add(gt); } '
                 'else { const loop = () => { gt(); requestAnimationFrame(loop); }; loop(); }</script>\n')
-    for sec in tr['sections']:
-        words = [w for w in tr['words'] if w['section'] == sec['name']]
-        if not words:
-            continue
-        lines = layout_lines(words, max(8, int(W * 0.84 / (font_px * 0.52))), font_px)
-        zs = [z for z in zones if z['section'] == sec['name']]
-        x, y = place_text_block(lines, W, H, font_px, line_h, zs)
-        # build DOM: one absolutely positioned line per layout line; each word a span with data-id
+    # Task 12 scene model: scenes.json drives the render order; pages are scene_<NN>_<slug>.html
+    # with scene-relative timings, a registered paused timeline and dimming.
+    times = {w['id']: w for w in timing['words']}
+    scenes = scene_spans(timing, tr, pj['fps'])
+    if max_seconds is not None:  # test_frames mode: cap every scene (render_cli passes 60/fps)
+        scenes = [dict(s, end=min(s['end'], s['start'] + max_seconds)) for s in scenes]
+    scenes_json = [dict(s, file=f"scene_{i:02d}_{s['slug']}.html") for i, s in enumerate(scenes)]
+    with open(os.path.join(out_dir, 'scenes.json'), 'w') as f:
+        json.dump(scenes_json, f, indent=2)
+        f.write('\n')
+    written.append('src/scenes.json')
+    for sp in scenes:
+        sec_name = sp['name']
+        slug = sp['slug']
+        start, end = sp['start'], sp['end']
+        words = [w for w in tr['words'] if w['section'] == sec_name]
+        rel = {w['id']: {'start': times[w['id']]['start'] - start,
+                         'end': times[w['id']]['end'] - start} for w in words}
+        zs = [z for z in zones if z['section'] == sec_name]
+        # fit: shrink font by 0.9 until the block fits 0.9*H and avoids the zones (floor 0.5x)
+        f_px = font_px
+        while True:
+            lines = layout_lines(words, max(8, int(W * 0.84 / (f_px * 0.52))), f_px)
+            lh = int(f_px * 1.25)
+            if _avoids_zones(lines, W, H, f_px, lh, zs):
+                break
+            if f_px <= max(1, font_px // 2):
+                raise ValueError(f'section "{sec_name}" does not fit one frame at {aspect} — '
+                                 'split it with a # heading or move the zone')
+            f_px = max(1, int(f_px * 0.9))
+        x, y = place_text_block(lines, W, H, f_px, lh, zs)
+        # DOM: one absolutely positioned line per layout line; words html-escaped; hyphenation
+        # piece k>0 gets id el-<id>-<k+1>; element_ids maps the word id to the FIRST piece id
         line_html = []
         for li, ln in enumerate(lines):
             spans = []
-            for w, piece, _is_last in ln:
+            for w, piece, k in ln:
                 emph = ' class="emph"' if w['emphasized'] else ''
-                # the published id (element_ids.json) must exist on the element — v0.1-0.4
-                # published el-<id> but only set data-id, so an AI layer found nothing
-                spans.append(f'<span id="el-{w["id"]}" data-id="{w["id"]}"{emph}>{piece}</span>')
-                element_ids[w['id']] = f'el-{w["id"]}'
-            line_html.append(f'<div class="line" style="left:{x}px;top:{y + li * line_h}px;'
-                             f'font-size:{font_px}px">{ " ".join(spans) }</div>')
-        card_id = f'card-{sec["name"]}'
-        element_ids[sec['name']] = card_id
-        tj = json.dumps({w['id']: {'start': timings_by_id[w['id']]['start'],
-                                    'end': timings_by_id[w['id']]['end']} for w in words})
-        duration = max(t['end'] for t in timings_by_id.values()) + 1.6
-        mine = [g for g in ai if g['section'] == sec['name']]
+                pid = f'el-{w["id"]}' if k == 0 else f'el-{w["id"]}-{k + 1}'
+                element_ids.setdefault(w['id'], pid)
+                spans.append(f'<span id="{pid}" data-id="{w["id"]}"{emph}>{html.escape(piece)}</span>')
+            line_html.append(f'<div class="line" data-line="{li}" style="left:{x}px;top:{y + li * lh}px;'
+                             f'font-size:{f_px}px">{" ".join(spans)}</div>')
+        card_id = f'card-{slug}'  # ids only from slugs (Task 12) — never the raw section name
+        element_ids[sec_name] = card_id
+        tj = json.dumps({w['id']: rel[w['id']] for w in words})  # scene-relative (Task 12)
+        duration = end - start
+        mine = [g for g in ai if g['section'] == sec_name]
         ai_html = ''.join(
             f'<div class="ai-graphic ai-{g["layer"]}" data-ai-id="{g["id"]}" data-anchor="{g["element"]}">'
             f'{open(os.path.join(project_path, ai_layer.DIR, g["file"])).read()}</div>\n'
@@ -197,8 +272,16 @@ def generate(project_path, variant='default'):
         ai_css = ('.ai-graphic{position:absolute;inset:0;pointer-events:none}\n' if layers else '') + \
             ''.join(f".ai-{l}{{z-index:{1 if l == 'below' else 3}}}\n" for l in layers)
         ai_anchors = json.dumps({g['id']: {'element': g['element'], 'layer': g['layer'],
-                                           **({'start': timings_by_id[g['anchor']['word']]['start']}
+                                           **({'start': rel[g['anchor']['word']]['start']}
                                               if 'word' in g['anchor'] else {})} for g in mine})
+        # dimming (README "dimming as the next lands"): every line except the last dims its
+        # spans at the NEXT line's first word start
+        dim_js = []
+        for li in range(len(lines) - 1):
+            t0 = rel[lines[li + 1][0][0]['id']]['start']
+            dim_js.append(f"tl.to(document.querySelectorAll('.line[data-line=\"{li}\"] span'), "
+                          f"{{color: '{palette['secondary_text']}', duration: 0.3, delay: {t0:.3f}}});")
+        dim_js_s = '\n'.join(dim_js)
         page = f"""<!doctype html><html><head><meta charset="utf-8"><style>
 {font_css}
 body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;
@@ -206,16 +289,16 @@ font-family:'mp-body';color:{palette['text']}}}
 #root{{position:absolute;width:{W}px;height:{H}px;overflow:hidden}}
 #bg{{position:absolute;inset:0}}
 .line{{position:absolute;z-index:2;font-weight:{roles['body']['weight']};white-space:nowrap;
-overflow:hidden;height:{line_h}px}}
+overflow:hidden;height:{lh}px}}
 {ai_css}.line span{{display:inline-block;transform:translateY(110%);opacity:0}}
 .line span.emph{{font-family:'mp-emphasis';font-weight:{roles['emphasis']['weight']};color:{palette['accent']}}}
 .card{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
 font-family:'mp-headline';font-size:{int(H / 8)}px;font-weight:{roles['headline']['weight']};color:{palette['text']};
 background:{palette['background_dark']};opacity:0}}
 </style></head><body>
-<div id="root" data-composition-id="{card_id}" data-width="{W}" data-height="{H}" data-fps="{pj['fps']}" data-duration="{duration:.3f}">
+<div id="root" data-composition-id="{slug}" data-width="{W}" data-height="{H}" data-fps="{pj['fps']}" data-duration="{duration:.3f}">
 <canvas id="bg" width="{W}" height="{H}"></canvas>
-<div id="{card_id}" class="card">{sec['name']}</div>
+<div id="{card_id}" class="card">{html.escape(sec_name)}</div>
 {ai_html}
 {chr(10).join(line_html)}
 </div>
@@ -233,18 +316,21 @@ background:{palette['background_dark']};opacity:0}}
 {bg_js}
 const T = {tj};
 window.MP = {{timings: T, anchors: {ai_anchors}}};
+const tl = gsap.timeline({{paused: true}});
+window.__timelines['{slug}'] = tl;
 const card = document.getElementById('{card_id}');
-gsap.to(card, {{duration: 0.6, opacity: 1, ease: 'power2.out'}});
-gsap.to(card, {{duration: 0.4, opacity: 0, delay: 1.2, ease: 'power2.in'}});
+tl.to(card, {{duration: 0.6, opacity: 1, ease: 'power2.out'}});
+tl.to(card, {{duration: 0.4, opacity: 0, delay: 1.2, ease: 'power2.in'}});
 for (const el of document.querySelectorAll('.line span')) {{
   const t = T[el.dataset.id];
-  gsap.to(el, {{duration: 0.35, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'}});
+  tl.to(el, {{duration: 0.35, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'}});
 }}
+{dim_js_s}
 }})();
 </script>
 {ai_js}</body></html>
 """
-        name = f'scene_{sec["name"]}.html'
+        name = scenes_json[sp['index']]['file']
         with open(os.path.join(out_dir, name), 'w') as f:
             f.write(page)
         written.append(os.path.join('src', name))
