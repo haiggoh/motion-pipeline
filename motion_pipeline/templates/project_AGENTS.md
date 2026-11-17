@@ -30,6 +30,13 @@ parts the menu has to keep editing.
   seconds. Word ids and section card ids are listed in `src/element_ids.json` (after a
   generate); a new voiceover take re-times everything anchored this way automatically.
 - `layer`: `above` (default) or `below` the generated text.
+- `sfx` (optional, the AI stage declares them — the menu NEVER writes SFX): a LIST of cues,
+  `"sfx": [{"file": "sfx/whoosh.wav", "offset": 0.0, "gain_db": -3.0}]` — `file` is relative
+  inside `ai_graphics/` (.wav .aif .aiff .flac .mp3 .m4a), `offset` seconds (-5..30) relative to
+  the graphic's anchor (word start or section start), `gain_db` -60..12. A single object is
+  accepted as a one-item list. Every file needs a line in `ai_graphics/sfx/LICENSES.md`:
+  `<file> — <source/author> — <licence>`. Example:
+  `{"id": "intro-icon", "file": "intro.html", "anchor": {"section": "Intro"}, "layer": "above", "sfx": [{"file": "sfx/whoosh.wav", "offset": 0.0, "gain_db": -3.0}, {"file": "sfx/tick.wav", "offset": 1.2, "gain_db": -12.0}]}`
 
 3. In a script, read timing and anchors from `window.MP`:
    `MP.timings[<word id>] = {start, end}` (seconds into the scene, scene-relative since Task 12)

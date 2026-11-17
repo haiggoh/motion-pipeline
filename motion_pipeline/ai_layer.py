@@ -72,6 +72,52 @@ def load_manifest(project_dir, words):
         layer = g.get('layer', 'above')
         if layer not in LAYERS:
             raise ValueError(f'{where}: layer must be one of {list(LAYERS)}, got {layer!r}')
+        # Task 15b (D4): optional per-graphic SFX cue list, validated here; timed in audio_mux
+        sfx = g.get('sfx', [])
+        if isinstance(sfx, dict):
+            sfx = [sfx]  # a single object normalises to a one-item list
+        if not isinstance(sfx, list):
+            raise ValueError(f'{where}: sfx must be a list of cue objects')
+        licences = _licence_files(project_dir)
+        cues = []
+        for ci, cue in enumerate(sfx):
+            cwhere = f'{where} sfx cue {ci}'
+            if not isinstance(cue, dict):
+                raise ValueError(f'{cwhere}: cue must be an object')
+            cf = cue.get('file')
+            if not isinstance(cf, str) or os.path.isabs(cf) or '..' in cf.split('/'):
+                raise ValueError(f'{cwhere}: file must be a relative path inside {DIR}/')
+            if not cf.endswith(('.wav', '.aif', '.aiff', '.flac', '.mp3', '.m4a')):
+                raise ValueError(f'{cwhere}: file {cf!r} must be .wav .aif .aiff .flac .mp3 .m4a')
+            if not os.path.isfile(os.path.join(project_dir, DIR, cf)):
+                raise ValueError(f'{cwhere}: file {cf!r} not found in {DIR}/')
+            if cf not in licences:
+                raise ValueError(f'{cwhere}: {cf!r} has no line in {DIR}/sfx/LICENSES.md '
+                                 f'(<file> — <source/author> — <licence>)')
+            off = cue.get('offset', 0.0)
+            if not isinstance(off, (int, float)) or isinstance(off, bool) or not -5 <= off <= 30:
+                raise ValueError(f'{cwhere}: offset must be -5..30 seconds, got {off!r}')
+            gd = cue.get('gain_db', 0.0)
+            if not isinstance(gd, (int, float)) or isinstance(gd, bool) or not -60 <= gd <= 12:
+                raise ValueError(f'{cwhere}: gain_db must be -60..12, got {gd!r}')
+            cues.append({'file': cf, 'offset': float(off), 'gain_db': float(gd)})
         out.append({'id': gid, 'file': fname, 'section': section, 'element': element,
-                    'anchor': anchor, 'layer': layer})
+                    'anchor': anchor, 'layer': layer, 'sfx': cues})
+    return out
+
+
+SFX_EXTS = ('.wav', '.aif', '.aiff', '.flac', '.mp3', '.m4a')
+
+
+def _licence_files(project_dir):
+    """File names listed in ai_graphics/sfx/LICENSES.md (one '<file> — <source> — <licence>' per line)."""
+    path = os.path.join(project_dir, DIR, 'sfx', 'LICENSES.md')
+    if not os.path.isfile(path):
+        return set()
+    out = set()
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                out.add(line.split('—')[0].strip())
     return out
