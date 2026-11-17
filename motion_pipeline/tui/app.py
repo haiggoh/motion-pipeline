@@ -270,13 +270,13 @@ class BgTestScreen(_RenderScreenBase):
 
 class InputsScreen(SubmenuScreen):
     TITLE = 'Transcript + voiceover'
-    ACTIONS = [('save', 'Save inputs')]
+    ACTIONS = [('save', 'Save inputs'), ('model', 'Install speech model')]  # Task 17
+    CSS = '#actions { margin: 0; }'  # fit 80x24 with the engine-status line (Task 17)
 
     def compose_body(self):
         from textual.containers import Horizontal
         from textual.widgets import Input, Select
-        yield Label('Tip: drag a file/folder from Finder into a field to paste its path')
-        yield Label('transcript.txt path')
+        yield Label('transcript.txt path (drag a file/folder from Finder to paste)')
         yield PathInput(id='transcript', value='transcript.txt')
         yield Label('voiceover file (optional)')
         yield PathInput(id='vo', placeholder='audio/vo.wav')
@@ -291,11 +291,13 @@ class InputsScreen(SubmenuScreen):
                          ('Speech model', 'whisper')], id='aligner', allow_blank=False)
         yield Static('', id='status', classes='feedback')
         yield Static('', id='error', classes='feedback-error')
+        yield Static('', id='engine-status', classes='muted')  # Task 17: speech-model engine line
 
     def on_mount(self):
         from textual.widgets import Input, Select
 
         from .. import project as project_mod
+        self._update_engine_status()
         pd = getattr(self.app, 'project_dir', None)
         if not pd:
             return
@@ -311,7 +313,37 @@ class InputsScreen(SubmenuScreen):
         self.query_one('#language', Select).value = p.get('language', 'de')
         self.query_one('#aligner', Select).value = p.get('aligner', 'auto')
 
+    def _update_engine_status(self):
+        """Task 17: 'speech model: ggml-… (found)' / 'not installed — classical aligner in use'."""
+        from .. import align_whisper
+        try:
+            eng = align_whisper.find_engine()
+        except ValueError as e:
+            self.query_one('#engine-status', Static).update(f'error: {e}')
+            return
+        if not self.query('#engine-status'):
+            return
+        if eng:
+            self.query_one('#engine-status', Static).update(
+                f'speech model: {os.path.basename(eng[1])} (found)')
+        else:
+            self.query_one('#engine-status', Static).update(
+                'not installed — classical aligner in use')
+
     def on_action(self, action_id):
+        if action_id == 'model':
+            # user-triggered download of ggml-base into the models dir (Task 17)
+            from .. import align_whisper
+            mdir = os.environ.get('MP_MODELS_DIR') or os.path.join(
+                os.path.expanduser('~'), '.cache', 'motion-pipeline', 'models')
+
+            def _dl():
+                align_whisper.download_model(
+                    mdir, log=lambda m: self.app.call_from_thread(
+                        self.query_one('#status', Static).update, m))
+            self.run_worker(_dl, thread=True, exclusive=True, name='model-download')
+            self.query_one('#status', Static).update('downloading speech model… (~150 MB)')
+            return
         if action_id != 'save':
             return
         import json

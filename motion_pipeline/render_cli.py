@@ -126,7 +126,7 @@ def prepare_inputs(project_dir):
         vpath = vo if os.path.isabs(vo) else os.path.join(project_dir, vo)
         if not os.path.isfile(vpath):
             raise Missing(f'voiceover {vpath} — fix it in step 5 or clear the field')
-        timing = align.align(vpath, model)
+        timing = align.align_auto(vpath, model, p)  # Task 17: whisper engine when installed
     else:
         timing = align.estimate_timings(model, wpm=p.get('wpm', 140))
     align.save_timing(os.path.join(project_dir, 'timing.json'), timing)

@@ -14,6 +14,7 @@ Without VO: estimate_timings(model, wpm) — monotonically increasing, method "e
 Re-attaching the VO later re-aligns and only the times change; ids are untouched.
 """
 import json
+import os
 import subprocess
 
 import numpy as np
@@ -242,6 +243,32 @@ def estimate_timings(transcript_model, wpm=150):
         sections[s['name']] = round(out_words[words.index(first)]['start'], 3) if first else 0.0
     return {'source': 'estimated', 'method': f'estimated ({wpm} wpm)',
             'sections': sections, 'words': out_words}
+
+
+def align_auto(audio_path, transcript_model, project=None):
+    """Choose the engine per the project's `aligner` key: 'auto' = whisper when find_engine()
+    returns a pair, else classical; explicit 'whisper' without an engine -> Missing naming it.
+    (Task 17)"""
+    from . import align_whisper
+    choice = (project or {}).get('aligner', 'auto')
+    eng = align_whisper.find_engine()
+    if choice == 'whisper' and not eng:
+        raise align_whisper.Missing('speech model — install it in step 5 or set aligner to Classical')
+    if (choice == 'whisper' or choice == 'auto') and eng:
+        classical = align(audio_path, transcript_model)
+        # decode to a 16 kHz wav for whisper
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            wav = os.path.join(td, 'vo.wav')
+            r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', audio_path, '-ar', '16000',
+                                '-ac', '1', wav], capture_output=True)
+            if r.returncode != 0:
+                raise ValueError(f'cannot decode {audio_path} to 16k wav: {r.stderr.decode()[-200:]}')
+            prompt = ' '.join(w['text'] for w in transcript_model['words'][:120])
+            rec = align_whisper.transcribe(eng[0], eng[1], wav,
+                                           (project or {}).get('language', 'de'), prompt)
+        return align_whisper.snap(rec, transcript_model['words'], classical, eng[1])
+    return align(audio_path, transcript_model)
 
 
 def validate_timing(doc):
