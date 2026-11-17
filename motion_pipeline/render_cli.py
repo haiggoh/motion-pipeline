@@ -112,7 +112,8 @@ def preflight():
 
 
 def prepare_inputs(project_dir):
-    """Build transcript_model.json + timing.json from the project's transcript (+ voiceover)."""
+    """Build transcript_model.json + timing.json from the project's transcript (+ voiceover).
+    Task 21: when timing.json is fresh (inputs fingerprint matches), re-aligning is skipped."""
     from . import align, project, transcript
     p = project.load(project_dir)
     tpath = os.path.join(project_dir, p.get('transcript') or 'transcript.txt')
@@ -121,15 +122,20 @@ def prepare_inputs(project_dir):
     model = transcript.load(tpath)
     with open(os.path.join(project_dir, 'transcript_model.json'), 'w') as f:
         json.dump(model, f)
-    vo = p.get('vo')
-    if vo:
-        vpath = vo if os.path.isabs(vo) else os.path.join(project_dir, vo)
-        if not os.path.isfile(vpath):
-            raise Missing(f'voiceover {vpath} — fix it in step 5 or clear the field')
-        timing = align.align_auto(vpath, model, p)  # Task 17: whisper engine when installed
+    if align.timing_is_fresh(project_dir, p):
+        timing = json.load(open(os.path.join(project_dir, 'timing.json')))
+        print('timing.json is current', flush=True)
     else:
-        timing = align.estimate_timings(model, wpm=p.get('wpm', 140))
-    align.save_timing(os.path.join(project_dir, 'timing.json'), timing)
+        vo = p.get('vo')
+        if vo:
+            vpath = vo if os.path.isabs(vo) else os.path.join(project_dir, vo)
+            if not os.path.isfile(vpath):
+                raise Missing(f'voiceover {vpath} — fix it in step 5 or clear the field')
+            timing = align.align_auto(vpath, model, p)  # Task 17: whisper engine when installed
+        else:
+            timing = align.estimate_timings(model, wpm=p.get('wpm', 140))
+        timing['inputs'] = align.inputs_fingerprint(project_dir, p)  # Task 21
+        align.save_timing(os.path.join(project_dir, 'timing.json'), timing)
     return p
 
 
@@ -262,6 +268,8 @@ def main(argv=None):
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--setup', action='store_true')
+    ap.add_argument('--prepare-only', action='store_true',
+                   help='transcript model + timing + generate the default variant, no render')
     ap.add_argument('--full-master', dest='full_master', action='store_true', default=None,
                    help='override the joined-master opt-in for this run')
     ap.add_argument('--no-full-master', dest='full_master', action='store_false')
@@ -277,6 +285,16 @@ def main(argv=None):
             ap.error('--project and --mode are required (or use --check / --setup)')
         if a.mode == 'remux':
             return remux(os.path.abspath(a.project), a.variant, a.out)
+        if a.prepare_only:
+            from . import generate
+            p = prepare_inputs(os.path.abspath(a.project))
+            generate.generate(os.path.abspath(a.project), 'default')
+            import json as _json
+            timing = _json.load(open(os.path.join(os.path.abspath(a.project), 'timing.json')))
+            model = _json.load(open(os.path.join(os.path.abspath(a.project), 'transcript_model.json')))
+            print(f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
+                  f'engine {timing["method"]}', flush=True)
+            return 0
         return render(os.path.abspath(a.project), a.mode, a.variant, a.out, a.dry_run,
                       full_master=a.full_master)
     except Missing as e:

@@ -270,7 +270,7 @@ class BgTestScreen(_RenderScreenBase):
 
 class InputsScreen(SubmenuScreen):
     TITLE = 'Transcript + voiceover'
-    ACTIONS = [('save', 'Save inputs'), ('model', 'Install speech model')]  # Task 17
+    ACTIONS = [('save', 'Save inputs + compute timings'), ('model', 'Install speech model')]  # Task 17/21
     CSS = '#actions { margin: 0; }'  # fit 80x24 with the engine-status line (Task 17)
 
     def compose_body(self):
@@ -312,6 +312,21 @@ class InputsScreen(SubmenuScreen):
         self.query_one('#wpm', Input).value = str(p.get('wpm', 140))
         self.query_one('#language', Select).value = p.get('language', 'de')
         self.query_one('#aligner', Select).value = p.get('aligner', 'auto')
+
+    def _on_timing_saved(self, job):
+        """Task 21: after the prepare-only job, report the saved timing counts."""
+        import json as _json
+        pd = getattr(self.app, 'project_dir', None)
+        try:
+            timing = _json.load(open(os.path.join(pd, 'timing.json')))
+            model = _json.load(open(os.path.join(pd, 'transcript_model.json')))
+            self.app.call_from_thread(
+                self.query_one('#status', Static).update,
+                f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
+                f'engine {timing["method"]}')
+        except Exception as e:
+            self.app.call_from_thread(
+                self.query_one('#error', Static).update, f'error: {e}')
 
     def _update_engine_status(self):
         """Task 17: 'speech model: ggml-… (found)' / 'not installed — classical aligner in use'."""
@@ -361,7 +376,16 @@ class InputsScreen(SubmenuScreen):
             p['language'] = self.query_one('#language', Select).value
             p['aligner'] = self.query_one('#aligner', Select).value
             project_mod.save(pd, p)
-            self.query_one('#status', Static).update(f'saved inputs to {pj}')
+            # Task 21: compute timings in a job (prepare-only) so the graphics step can gate on them
+            import subprocess
+            import sys
+            self._timing_job = self.run_worker(
+                lambda: subprocess.run(
+                    [sys.executable, '-P', '-m', 'motion_pipeline.render_cli',
+                     '--project', pd, '--prepare-only'],
+                    capture_output=True, text=True),
+                thread=True, exclusive=True, name='prepare-only')
+            self.query_one('#status', Static).update('saving inputs… computing timings')
         except (ValueError, json.JSONDecodeError) as e:
             self.query_one('#error', Static).update(f'error: {e}')
 
@@ -431,6 +455,18 @@ class FirstRunScreen(Screen):
 
 class MenuApp(MenuAppBase):
     SCREENS = {}  # filled in on_mount to avoid import cycles
+
+    def graphics_step_enabled(self):
+        """Task 21 gate: the 'Add motion graphics' step needs fresh saved timings."""
+        pd = getattr(self, 'project_dir', None)
+        if not pd:
+            return False
+        from .. import align
+        from .. import project as pm
+        try:
+            return align.timing_is_fresh(pd, pm.load(pd))
+        except Exception:
+            return False
 
     def __init__(self, test_render_cmd=None, full_render_cmd=None):
         super().__init__()

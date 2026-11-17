@@ -271,6 +271,44 @@ def align_auto(audio_path, transcript_model, project=None):
     return align(audio_path, transcript_model)
 
 
+def inputs_fingerprint(project_dir, p):
+    """sha256 over the transcript bytes + the VO file bytes (or "no-vo") + wpm + language +
+    aligner — stored in timing.json as "inputs" (Task 21 freshness gate)."""
+    import hashlib
+    h = hashlib.sha256()
+    tpath = os.path.join(project_dir, p.get('transcript') or 'transcript.txt')
+    h.update(open(tpath, 'rb').read() if os.path.isfile(tpath) else b'<missing>')
+    vo = p.get('vo')
+    if vo:
+        vpath = vo if os.path.isabs(vo) else os.path.join(project_dir, vo)
+        h.update(open(vpath, 'rb').read() if os.path.isfile(vpath) else b'<missing-vo>')
+    else:
+        h.update(b'no-vo')
+    h.update(f"{p.get('wpm', 140)}|{p.get('language', 'de')}|{p.get('aligner', 'auto')}".encode())
+    return h.hexdigest()
+
+
+def timing_is_fresh(project_dir, p=None):
+    """True when timing.json exists and its "inputs" fingerprint matches the current inputs."""
+    tp = os.path.join(project_dir, 'timing.json')
+    if not os.path.isfile(tp):
+        return False
+    try:
+        doc = json.load(open(tp))
+    except (OSError, json.JSONDecodeError):
+        return False
+    stored = doc.get('inputs')
+    if not stored:
+        return False
+    if p is None:
+        from . import project as pm
+        try:
+            p = pm.load(project_dir)
+        except Exception:
+            return False
+    return stored == inputs_fingerprint(project_dir, p)
+
+
 def validate_timing(doc):
     """Schema check for the pinned G5 shape (with id)."""
     for k in ('source', 'method', 'sections', 'words'):
