@@ -58,9 +58,13 @@ async def test_failed_job_says_failed(tmp_path):
         await pilot.pause()
         scr = app.screen
         await choose(pilot, scr, 'run')
-        await pilot.pause(1.5)
-        lines = log_text(scr.query_one('#log', RichLog))
-        assert lines[-1] == 'failed (exit 3)', lines[-3:]
+        lines = []
+        for _ in range(100):  # poll with real time — under -n auto the worker thread may be slow
+            await pilot.pause(0.05)
+            lines = log_text(scr.query_one('#log', RichLog))
+            if lines and 'exit' in lines[-1]:
+                break
+        assert lines and lines[-1] == 'failed (exit 3)', lines[-3:]
         status = str(scr.query_one('#status', Static).render())
         assert 'failed (exit 3)' in status, status
         assert not scr.query_one('#actions').get_option('run').disabled
@@ -77,8 +81,11 @@ async def test_long_log_line_wraps(tmp_path):
         await pilot.pause()
         scr = app.screen
         await choose(pilot, scr, 'run')
-        await pilot.pause(1.5)
         log = scr.query_one('#log', RichLog)
+        for _ in range(100):
+            await pilot.pause(0.05)
+            if line in ''.join(log_text(log)):
+                break
         assert log.wrap is True and log.markup is False
         assert log.max_scroll_x == 0, 'wrapped log must not scroll horizontally'
         content = ''.join(log_text(log))
