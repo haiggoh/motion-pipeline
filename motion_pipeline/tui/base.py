@@ -107,8 +107,9 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 .role-row { height: 3; }
 .role-label { width: 11; padding: 1 1 0 0; }
 .weight { width: 16; }
+.role-row > Static { width: 1fr; }  /* role family label takes what is left (Task 9 row) */
 #fontlist { width: 1fr; }
-#editor { width: 30; padding: 0 0 0 1; }
+#editor { width: 46; padding: 0 0 0 1; }
 #family { height: 2; padding: 0 0 1 0; }
 .zone-list { width: 30; }
 .zone-editor { width: 1fr; padding: 0 0 0 1; }

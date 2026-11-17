@@ -1,43 +1,30 @@
-"""FontsScreen — font family with live search over system-installed fonts + bundled OFL
-(Task 3, G4; user request 2026-11-09: search and choose any font installed on the system).
+"""FontsScreen — role-by-role font choice over the font index (Task 9, design G4).
 
-Type in the filter to search all fonts found in /Library/Fonts, ~/Library/Fonts and
-/System/Library/Fonts (family names read from the font files via PIL). Bundled OFL
-families are always listed first. Choosing a system (client) font copies the face file
-into the project's gitignored fonts/ folder (never committed to this repo) and shows the
-licence warning (decide-question 2). Role->weight selects + save into project.json.
+The font list comes from font_index.scan (recursive, cached, background worker with the loader
+IN the list area — never a bottom status row). Picking a family assigns it to the role chosen in
+#edit-role (or all roles). Browsing copies NOTHING (P5): a system/client face is copied into the
+project's gitignored fonts/ only on Save, via fonts.copy_client_faces, and flagged non-OFL.
+Save: project.load → copy_client_faces → font_gate (validate BEFORE write) → project.save.
 """
-import glob
 import os
-import shutil
 
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Input, Label, ListItem, ListView, Select, Static
+from textual.widgets import Input, Label, ListItem, ListView, LoadingIndicator, Select, Static
 
+from .. import font_index
 from .. import fonts as fonts_mod
+from .. import project as project_mod
 from .base import SubmenuScreen
-
-FONT_DIRS = ['/Library/Fonts', os.path.expanduser('~/Library/Fonts'), '/System/Library/Fonts']
-
-
-def system_fonts():
-    """{family: path} of every font file in the system font dirs (family read via PIL)."""
-    from PIL import ImageFont
-    out = {}
-    for d in FONT_DIRS:
-        for f in glob.glob(os.path.join(d, '*')):
-            if not f.lower().endswith(('.ttf', '.otf', '.ttc', '.dfont')):
-                continue
-            try:
-                name = ImageFont.truetype(f, 12).getname()[0]
-            except Exception:
-                continue
-            out.setdefault(name, f)
-    return out
 
 
 def project_json_path(project_dir):
     return os.path.join(project_dir, 'project.json')
+
+
+def bundled_ref(abs_path):
+    """'motion_pipeline/fonts/...' ref for a bundled face's abs path."""
+    pkg = os.path.dirname(os.path.abspath(fonts_mod.__file__))
+    return 'motion_pipeline/' + os.path.relpath(abs_path, pkg)
 
 
 class FontsScreen(SubmenuScreen):
@@ -55,35 +42,87 @@ class FontsScreen(SubmenuScreen):
                 yield Static('Family: (none)', id='family')
                 for role in fonts_mod.ROLES:
                     with Horizontal(classes='role-row'):
-                        yield Label(f'{role}', classes='role-label')
-                        yield Select([(str(w), w) for w in (400, 600, 700, 900)],
-                                     id=f'role-{role}', value=fonts_mod.DEFAULT_WEIGHTS[role],
-                                     allow_blank=False, classes='weight')
+                        yield Label(role, classes='role-label')
+                        yield Static('(none)', id=f'role-{role}-family')
+                        yield Select([], id=f'role-{role}-weight', allow_blank=True, classes='weight')
+                yield Select([('Headline', 'headline'), ('Label', 'label'), ('Body', 'body'),
+                             ('Emphasis', 'emphasis'), ('All roles', 'all')],
+                            id='edit-role', value='headline', allow_blank=False)
                 yield Static('', id='licence-warning', classes='feedback')
                 yield Static('', id='status', classes='feedback')
                 yield Static('', id='error', classes='feedback-error')
 
     def on_mount(self):
-        self._all = {f: None for f in fonts_mod.bundled_families()}  # bundled OFL wins over system copies
-        for fam, path in system_fonts().items():
-            self._all.setdefault(fam, path)
-        self._all = dict(sorted(self._all.items(), key=lambda kv: (kv[1] is not None, kv[0])))
+        self._all = {}       # family -> list[Face]
+        self._selected = None
+        self._shown = []     # (family, seq)
+        self._seq = 0
+        self._role_family = {r: None for r in fonts_mod.ROLES}
         self._refresh_list('')
+        # the loader sits where the list will appear (never a bottom status row)
+        fl = self.query_one('#fontlist')
+        self._scan_status = Static('scanning fonts…', id='scan-status', classes='muted')
+        self._scan_loader = LoadingIndicator(id='scan-loader')
+        fl.mount(self._scan_status)
+        fl.mount(self._scan_loader)
+        self._scan_worker = self.run_worker(self._scan, thread=True, exclusive=True, name='font-scan')
+
+    def _scan(self):
+        def prog(done, total):
+            self.app.call_from_thread(self._on_scan_progress, done, total)
+        faces = font_index.scan(progress=prog)
+        self.app.call_from_thread(self._on_scan_done, faces)
+
+    def _on_scan_progress(self, done, total):
+        self._scan_status.update(f'scanning fonts… {done}/{total}')
+
+    def _on_scan_done(self, faces):
+        fams = font_index.families(faces)
+        self._all = dict(sorted(fams.items(),
+                                key=lambda kv: (not any(f['bundled'] for f in kv[1]), kv[0])))
+        self._scan_status.display = False
+        self._scan_loader.display = False
+        self._refresh_list(self.query_one('#font-search', Input).value)
+        self._prefill_from_project()
+
+    def _prefill_from_project(self):
+        pd = getattr(self.app, 'project_dir', None)
+        if not pd:
+            return
+        try:
+            p = project_mod.load(pd)
+            cfg = fonts_mod.normalise_fonts(p.get('fonts', {}), pd)
+        except Exception:
+            return
+        for role, r in cfg['roles'].items():
+            self._set_role_family(role, r['family'], r['weight'])
+
+    def _set_role_family(self, role, family, weight=None):
+        self._role_family[role] = family
+        faces = [f for f in self._all.get(family, []) if not f['italic']]
+        sel = self.query_one(f'#role-{role}-weight', Select)
+        # Select options are (prompt, value) tuples in Textual 8
+        sel.set_options([(font_index.weight_label(f), f['weight']) for f in faces])
+        if weight is not None and any(f['weight'] == weight for f in faces):
+            sel.value = weight
+        elif faces:
+            default_w = fonts_mod.DEFAULT_WEIGHTS[role]
+            sel.value = default_w if any(f['weight'] == default_w for f in faces) else faces[0]['weight']
+        label = f'{family} · {font_index.weight_label(faces[0])}' if faces else family
+        self.query_one(f'#role-{role}-family', Static).update(label)
 
     def _refresh_list(self, query):
         lv = self.query_one('#fonts', ListView)
         lv.clear()
         q = query.strip().lower()
         self._shown = []
-        for fam, path in self._all.items():
+        for fam in self._all:
             if q and q not in fam.lower():
                 continue
-            tag = ' (OFL bundled)' if path is None else ''
-            # unique ever-increasing ids: lv.clear() is async, so re-using font-0 would
-            # raise DuplicateIds (same trap as the scheme list earlier)
-            self._seq = getattr(self, '_seq', 0) + 1
-            lv.append(ListItem(Label(fam + tag), id=f'font-{self._seq}'))
-            self._shown.append((fam, path, self._seq))
+            self._seq += 1  # ever-increasing ids (lv.clear() is async — DuplicateIds trap)
+            bundled = any(f['bundled'] for f in self._all[fam])
+            lv.append(ListItem(Label(fam + (' (OFL bundled)' if bundled else '')), id=f'font-{self._seq}'))
+            self._shown.append((fam, self._seq))
 
     def on_input_changed(self, event):
         if event.input.id == 'font-search':
@@ -91,51 +130,45 @@ class FontsScreen(SubmenuScreen):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         seq = int(event.item.id.removeprefix('font-'))
-        fam, _src, _seq = next(s for s in self._shown if s[2] == seq)
-        path = self._all[fam]
+        fam = next(s[0] for s in self._shown if s[1] == seq)
         self._selected = fam
         self.query_one('#family', Static).update(f'Family: {fam}')
-        path = self._all.get(fam)
+        target = self.query_one('#edit-role', Select).value
+        for role in (fonts_mod.ROLES if target == 'all' else (target,)):
+            self._set_role_family(role, fam)
+        # P5: browsing copies NOTHING — a client face is copied into the project only on Save
+        bundled = any(f['bundled'] for f in self._all[fam])
         warn = self.query_one('#licence-warning', Static)
-        if path is None:
-            warn.update('')
-        else:
-            # copy the client/system font into the project's gitignored fonts/ (decide-question 2)
-            pdir = getattr(self.app, 'project_dir', None)
-            if not pdir:
-                warn.update('pick or create a project in step 0 first — the font file is copied into it')
-                return
-            os.makedirs(os.path.join(pdir, 'fonts'), exist_ok=True)
-            dst = os.path.join(pdir, 'fonts', os.path.basename(path))
-            if not os.path.isfile(dst):
-                shutil.copy(path, dst)
+        if not bundled:
             warn.update(f'LICENCE WARNING: {fam} is a system/client font (licence not OFL-verified). '
-                        f'Copied to the project\'s gitignored fonts/ ({dst}); never committed to this repo.')
+                        'Copied into the project\'s gitignored fonts/ only on Save; never committed to this repo.')
+        else:
+            warn.update('')
 
     def on_action(self, action_id):
         if action_id != 'save':
             return
-        import json
         err = self.query_one('#error', Static)
         err.update('')
         try:
-            fam = getattr(self, '_selected', None)
-            if not fam:
-                raise ValueError('pick a font family from the list')
-            roles = {role: self.query_one(f'#role-{role}', Select).value for role in fonts_mod.ROLES}
             pdir = self.require_project()
-            path = project_json_path(pdir)
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            cfg = {}
-            if os.path.isfile(path):
-                cfg = json.loads(open(path).read())
-            cfg['fonts'] = {'family': fam, 'roles': roles}
-            tmp = path + '.tmp'
-            with open(tmp, 'w') as f:
-                json.dump(cfg, f, indent=2)
-                f.write('\n')
-            os.replace(tmp, path)
-            fonts_mod.font_gate(pdir, cfg)
-            self.query_one('#status', Static).update(f'saved {path}')
-        except (ValueError, json.JSONDecodeError) as e:
+            roles = {}
+            for role in fonts_mod.ROLES:
+                fam = self._role_family[role] or self._selected
+                if not fam:
+                    raise ValueError(f'role {role!r} has no family — pick a font in the list first')
+                w = self.query_one(f'#role-{role}-weight', Select).value
+                faces = [f for f in self._all.get(fam, []) if not f['italic'] and f['weight'] == w]
+                if not faces:
+                    raise ValueError(f'font gate: no face {fam} {w} — pick a weight from the list')
+                face = next((f for f in faces if f['bundled']), faces[0])
+                roles[role] = {'family': fam, 'weight': w, 'index': face['index'],
+                               'file': bundled_ref(face['path']) if face['bundled'] else face['path']}
+            p = project_mod.load(pdir)
+            cfg = {'roles': fonts_mod.copy_client_faces(pdir, roles)}  # P5: copy client faces at SAVE
+            fonts_mod.font_gate(pdir, {'fonts': cfg})                   # validate BEFORE write (finding 5)
+            p['fonts'] = cfg
+            project_mod.save(pdir, p)
+            self.query_one('#status', Static).update(f'saved {project_json_path(pdir)}')
+        except (ValueError, OSError, KeyError) as e:
             err.update(f'error: {e}')

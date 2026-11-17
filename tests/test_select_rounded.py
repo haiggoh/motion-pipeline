@@ -16,13 +16,13 @@ async def test_weight_selects_have_one_round_frame_and_rounded_overlay(tmp_path)
         app.push_screen(app.SCREENS['fonts']()); await pilot.pause(0.5)
         scr = app.screen
         for role in fonts_mod.ROLES:
-            sel = scr.query_one(f'#role-{role}', Select)
+            sel = scr.query_one(f'#role-{role}-weight', Select)  # Task 9 layout: weight select per role
             cur = sel.query_one(SelectCurrent)
             assert sel.styles.border_top[0] in ('', 'none'), f'{role}: wrapper has a frame {sel.styles.border_top}'
             assert cur.styles.border_top[0] == 'round', f'{role}: field frame {cur.styles.border_top}'
             assert bg_is_default(cur.rich_style), f'{role}: field filled {cur.rich_style}'
             assert on_screen(app, sel), f'{role} weight field off-screen at 80x24: {sel.region}'
-        sel = scr.query_one('#role-headline', Select)
+        sel = scr.query_one('#role-headline-weight', Select)
         sel.focus(); await pilot.pause()
         fb = sel.query_one(SelectCurrent).styles.border_top
         assert fb[0] == 'round' and fb[1].ansi == 12, f'focused field frame not bright-blue: {fb}'
