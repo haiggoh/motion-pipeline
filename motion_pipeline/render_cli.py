@@ -73,14 +73,23 @@ def find_hyperframes():
 
 
 def node_bin_dir():
+    """fnm pin first; else a PATH node with major >= 22 (Task 14); else Missing naming it."""
     fnm = os.path.join(os.path.expanduser('~'), '.local', 'share', 'fnm', 'node-versions',
                        f'v{NODE_PIN}', 'installation', 'bin')
     if os.access(os.path.join(fnm, 'node'), os.X_OK):
         return fnm
     node = shutil.which('node')
     if node:
-        return os.path.dirname(node)
-    raise Missing(f'node — run: brew install fnm && fnm install {NODE_PIN}')
+        try:
+            v = subprocess.run([node, '--version'], capture_output=True, text=True,
+                               timeout=10).stdout.strip()
+            major = int(v.lstrip('v').split('.')[0])
+        except Exception:
+            major = 0
+        if major >= 22:
+            return os.path.dirname(node)
+        raise Missing(f'node ≥22 — run: brew install node (found {v} at {node})')
+    raise Missing('node ≥22 — run: brew install node (the fnm pin is used when present)')
 
 
 def preflight():

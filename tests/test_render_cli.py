@@ -45,6 +45,39 @@ def test_invalid_override_and_missing_dependency_are_named(tmp_path):
     assert r.returncode == 3 and 'missing dependency: ffmpeg' in r.stderr and 'brew install' in r.stderr
 
 
+def test_setup_dry_run_runs_nothing(tmp_path, monkeypatch, capsys):
+    """--setup --dry-run prints the commands and runs NOTHING (fake npm/npx exit 99)."""
+    from motion_pipeline import render_cli
+    b = tmp_path / 'bin'
+    b.mkdir()
+    log = tmp_path / 'calls.log'
+    for tool in ('npm', 'npx'):
+        f = b / tool
+        f.write_text(f'#!/bin/bash\necho "{tool} $*" >> "{log}"\nexit 99\n')
+        f.chmod(0o755)
+    monkeypatch.setenv('PATH', f'{b}:{os.environ["PATH"]}')
+    monkeypatch.setenv('HOME', str(tmp_path))  # isolate the fnm pin
+    rc = render_cli.main(['--setup', '--dry-run'])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert '[render_cli] npm install' in out and 'hyperframes@' in out
+    assert not log.exists() or log.read_text() == '', 'dry-run must not run npm/npx'
+
+
+def test_old_node_refused(tmp_path, monkeypatch):
+    """A PATH node older than 22 is refused loudly (fnm pin absent -> HOME isolated)."""
+    from motion_pipeline import render_cli
+    b = tmp_path / 'bin'
+    b.mkdir()
+    node = b / 'node'
+    node.write_text('#!/bin/bash\necho v20.11.0\n')
+    node.chmod(0o755)
+    monkeypatch.setenv('PATH', f'{b}:{os.environ["PATH"]}')
+    monkeypatch.setenv('HOME', str(tmp_path))
+    with pytest.raises(render_cli.Missing, match='node ≥22'):
+        render_cli.node_bin_dir()
+
+
 def test_prepares_inputs_generates_and_hands_off_to_render_scene(tmp_path):
     pd = make_project(tmp_path / 'p')
     for f in ('transcript_model.json', 'timing.json'):

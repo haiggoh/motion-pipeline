@@ -74,7 +74,8 @@ class _RenderScreenBase(SubmenuScreen):
     """Shared by the background test and the full render: output dir field, actions
     (run / cancel / open in Finder), then — BELOW the actions — the log, status, link, image."""
 
-    ACTIONS = [('run', 'Run'), ('cancel', 'Cancel'), ('open', 'Open output in Finder')]
+    ACTIONS = [('run', 'Run'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
+               ('setup', 'Install render toolchain')]
     OUT_PLACEHOLDER = '<project>/renders/default'
 
     def compose_body(self):
@@ -93,7 +94,10 @@ class _RenderScreenBase(SubmenuScreen):
         menu = self.query_one('#actions', ActionMenu)
         menu.set_enabled('open', False)
         menu.set_enabled('cancel', False)
-        self._job_running = False  # BISECT: no worker attr
+        menu.set_enabled('setup', False)  # enabled when the log reports a missing toolchain
+        self.worker = None
+        self._job_running = False
+        self.set_interval(0.5, self._update_setup_row)  # Task 14: watch the streaming log
 
     def outdir(self):
         from textual.widgets import Input
@@ -131,6 +135,54 @@ class _RenderScreenBase(SubmenuScreen):
         elif action_id == 'open':
             import subprocess
             subprocess.Popen(['open', self.open_target()])
+        elif action_id == 'setup':
+            if self._job_running:
+                return
+            import sys
+            self._job_running = True
+            menu.set_enabled('run', False)
+            menu.set_enabled('cancel', True)
+            self.worker = run_command(self.app, [sys.executable, '-P', '-m',
+                                                 'motion_pipeline.render_cli', '--setup'],
+                                      self.query_one('#log', RichLog),
+                                      on_finish=self._on_setup_done)
+            self.query_one('#status', Static).update('installing render toolchain…')
+
+    def _update_setup_row(self):
+        """Enable 'Install render toolchain' when the last log line reports a missing dep."""
+        from textual.widgets import RichLog
+        if not self.query('#actions'):
+            return
+        log = self.query_one('#log', RichLog)
+        lines = [x.text if hasattr(x, 'text') else str(x) for x in log.lines]
+        # the newest 'missing dependency:' line decides (the final 'failed (exit N)' follows it)
+        missing = any(line.startswith(('missing dependency: hyperframes', 'missing dependency: node'))
+                      for line in reversed(lines))
+        self.query_one('#actions', ActionMenu).set_enabled('setup', missing)
+
+    def _on_setup_done(self, rc):
+        self._job_running = False
+        menu = self.query_one('#actions', ActionMenu)
+        menu.set_enabled('run', True)
+        menu.set_enabled('cancel', False)
+        if rc != 0:
+            self.query_one('#status', Static).update(f'setup failed (exit {rc}) — see the log below')
+            return
+        import sys
+        self.worker = run_command(self.app, [sys.executable, '-P', '-m',
+                                             'motion_pipeline.render_cli', '--check'],
+                                  self.query_one('#log', RichLog),
+                                  on_finish=self._on_check_done)
+
+    def _on_check_done(self, rc):
+        self._job_running = False
+        menu = self.query_one('#actions', ActionMenu)
+        menu.set_enabled('cancel', False)
+        if rc == 0:
+            self.query_one('#status', Static).update('toolchain ready — run the test render again')
+        else:
+            self.query_one('#status', Static).update(f'check still failing (exit {rc}) — see the log below')
+        self._update_setup_row()
 
     def on_render_done(self, rc):
         from textual.widgets import RichLog
@@ -158,7 +210,8 @@ class BgTestScreen(_RenderScreenBase):
     """Background test — runs the SAME render path as the full render (anti-goal)."""
 
     TITLE = 'Background test render (same code path as the full render)'
-    ACTIONS = [('run', 'Run test render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder')]
+    ACTIONS = [('run', 'Run test render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
+               ('setup', 'Install render toolchain')]
 
     def command(self):
         return self.app.test_render_cmd()
@@ -251,7 +304,8 @@ class InputsScreen(SubmenuScreen):
 
 class RenderScreen(_RenderScreenBase):
     TITLE = 'Full render (all variants)'
-    ACTIONS = [('run', 'Render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder')]
+    ACTIONS = [('run', 'Render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
+               ('setup', 'Install render toolchain')]
     OUT_PLACEHOLDER = '<project>/renders/<variant>'
 
     def command(self):

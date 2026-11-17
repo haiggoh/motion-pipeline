@@ -92,6 +92,28 @@ async def test_long_log_line_wraps(tmp_path):
         assert line in content  # all 200 chars present, wrapped not clipped
 
 
+@pytest.mark.asyncio
+async def test_setup_row_appears_on_missing_hyperframes(tmp_path):
+    """A render log ending in 'missing dependency: hyperframes …' enables the setup row."""
+    d = mk(tmp_path / 'proj')
+    app = MenuApp(test_render_cmd=['bash', '-c',
+                                   'echo "missing dependency: hyperframes — run: motion-pipeline --setup-render" >&2; exit 3'])
+    app.project_dir = d
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(app.SCREENS['bgtest']())
+        await pilot.pause()
+        scr = app.screen
+        menu = scr.query_one('#actions')
+        assert menu.get_option('setup').disabled  # nothing logged yet
+        await choose(pilot, scr, 'run')
+        for _ in range(100):
+            await pilot.pause(0.05)
+            if not menu.get_option('setup').disabled:
+                break
+        assert not menu.get_option('setup').disabled, 'setup row must enable on missing hyperframes'
+        assert 'failed (exit 3)' in str(scr.query_one('#status', Static).render())
+
+
 class _DummyPopen:
     pass
 
