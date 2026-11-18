@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.6.0 — 2026-11-18 — M1–M5: menu UX, fonts, render correctness, audio/Premiere/aligners, motion graphics
+
+- **M1 — menu UX (Tasks 1–6):** zones screen crash fix + delete + select-to-edit + per-aspect
+  zones + loud validation; inputs screen prefills every field, adds wpm/language/aligner, save
+  keeps the VO; project screen step-0 picker (create refuses an existing dir, apply format,
+  create from sample); menu chrome (nav gap, new nav labels, dimmed/red feedback lines); render
+  screens (one job at a time, honest done/failed log line, wrapped log, right open target);
+  dev/brew launcher hardened with `python -P` so a cwd package can no longer shadow the checkout.
+- **M2 — fonts (Tasks 7–10):** font_index — recursive scan, real OS/2 weights, mtime/size cache;
+  per-role font model with legacy migration and content-resolved client faces; role-by-role
+  fonts screen with background scan; inline half-block preview + sharp Quick Look PNG.
+- **M3 — render correctness (Tasks 11–14):** role faces embedded per page + font gate (exit 5);
+  section-relative scene model (slug ids, registered paused timelines, next-line dimming, fit
+  guard); zone + chroma + disk gates on every render; toolchain install-from-menu
+  (`--setup-render`, `--dry-run`) with the node ≥ 22 rule.
+- **M4 — audio/Premiere/aligners (Tasks 15–17):** .mov masters with VO+SFX tracks, opt-in joined
+  full-length master, preview, bit-exact re-mux (video stream copied, never re-encoded); SFX cue
+  declarations validated in the AI manifest; Premiere import via FCP 7 XML
+  `<variant>_sequence.xml`; classical aligner (pause runs, syllable nuclei, DP assignment) plus
+  an optional whisper.cpp engine snapped to the transcript.
+- **M5 — Add motion graphics (Tasks 21–23):** inputs fingerprint + timings freshness gate (the
+  step stays disabled until timings are fresh); every scene page defines `window.MP` (timeline,
+  timings, anchors, scene, frame, palette, fonts, zones, sfx, `at()`) BEFORE any ai_graphics
+  script loads, with `mp_lib.js` helpers (enter/exit/drawOn/float/inZone/el/random — seeded
+  mulberry32, no rAF/setTimeout/Date/unseeded random/network) and vendored DrawSVGPlugin 3.14.2
+  (sha equals the P&G project copy); the menu-owned `MOTION_GRAPHICS_PLAYBOOK.md` renders live
+  facts and regenerates on every visit/save; `motion-pipeline --check-graphics DIR` (exit 0/1/3)
+  and `--render-test DIR --section NAME [--from S --to E] [--draft] [--dry-run]` render one
+  scene span into `<project>/scratch/ai-test/`; the new step 6 offers open/reveal/copy(pbcopy)/
+  check actions and — only when free-agents is detected — model + effort Selects (ladder
+  resolved live: session prefs → dispatch preferences → inventory; trial/retired/no-key rows
+  filtered) and "Start a free AI session" opening a NEW Terminal window via osascript with a
+  shlex-quoted argv, link-form `--prompt`, explicit `--effort`, `FA_PRE_TRUST=1`.
+- **Fixes:** `audio_mux.sfx_cues` resolves manifest anchors from the transcript model (aligner
+  timing words drop `section` — generated pages crashed with KeyError on any manifest project);
+  `--prepare-only` no longer requires `--mode` (the menu's real argv, caught during dogfood prep).
+- **Quality:** outcome-shaped tests throughout (generated page bytes, node-executed page API
+  incl. mulberry32 known vectors, real subprocess exit codes, frame luma in the slow render
+  test); mutation discriminants (ordering, `MP.at`, dry-run, `--prompt`, version sort) watched
+  RED then reverted; milestone QC via out-of-family dispatches (Playbook-milestone-qc-offload-
+  test-proof). Full suite 270 passed, 2 environmental skips.
+
 ## v0.5.3 — 2026-11-11
 
 - test(ui): QC hardening of the 0.5.2 launch-UX tests after an independent out-of-family
