@@ -26,6 +26,7 @@ STEPS = [
     ('zones', 'Keep-out zones'),
     ('bgtest', 'Background test'),
     ('inputs', 'Transcript + voiceover'),
+    ('graphics', 'Add motion graphics'),   # Task 23 / M5 — gated on fresh saved timings
     ('render', 'Render'),
 ]
 
@@ -39,9 +40,12 @@ class MenuScreen(Screen):
         with Vertical(classes='panel'):
             yield Static('motion-pipeline — Project Menu', classes='title')
             yield Static(self.subtitle(), classes='subtitle', id='subtitle')
-            yield ActionMenu(STEPS + [('quit', 'Quit')], spaced=True, first_number=0, nav_gap=0, id='actions')  # Quit is not a nav row
+            menu = ActionMenu(STEPS + [('quit', 'Quit')], spaced=True, first_number=0, nav_gap=0, id='actions')  # Quit is not a nav row
+            if not self.app.graphics_step_enabled():
+                menu.set_enabled('graphics', False)  # Task 21/23 gate: needs fresh saved timings
+            yield menu
             with Vertical(classes='footer'):
-                yield Static('↑↓ move · Enter/click select · 0-6 step · q quit', classes='hint')
+                yield Static('↑↓ move · Enter/click select · 0-7 step · q quit', classes='hint')
                 yield Static(f'motion-pipeline v{__version__}', classes='version')
 
     def subtitle(self):
@@ -66,7 +70,9 @@ class MenuScreen(Screen):
     def on_key(self, event):
         menu = self.query_one('#actions', ActionMenu)
         if event.key in menu.numbers:
-            self.app.push_screen(self.app.SCREENS[menu.numbers[event.key]]())
+            aid = menu.numbers[event.key]
+            if not menu.get_option(aid).disabled:
+                self.app.push_screen(self.app.SCREENS[aid]())
             event.stop()
 
 
@@ -494,11 +500,12 @@ class MenuApp(MenuAppBase):
         from .. import config
         from .colours_screen import ColoursScreen
         from .fonts_screen import FontsScreen
+        from .graphics_screen import GraphicsScreen
         from .project_screen import ProjectScreen
         from .zones_screen import ZonesScreen
         self.SCREENS = {'menu': MenuScreen, 'project': ProjectScreen, 'colours': ColoursScreen,
                         'fonts': FontsScreen, 'zones': ZonesScreen, 'bgtest': BgTestScreen,
-                        'inputs': InputsScreen, 'render': RenderScreen}
+                        'inputs': InputsScreen, 'graphics': GraphicsScreen, 'render': RenderScreen}
         if self.project_dir is None:
             self.project_dir = config.last_project()
         if config.projects_root() is None:

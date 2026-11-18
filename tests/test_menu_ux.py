@@ -64,7 +64,8 @@ async def test_main_menu_is_csl_style_quit_last_no_back():
         last = menu.get_option_at_index(menu.option_count - 1)
         assert last.id == 'quit' and str(last.prompt) == 'Quit'
         prompts = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
-        assert prompts[0] == '0) New / load project' and '6) Render' in prompts
+        assert prompts[0] == '0) New / load project' and '7) Render' in prompts
+        assert '6) Add motion graphics' in prompts  # Task 23: graphics step between inputs and render
         # a blank row between EVERY pair of real rows
         for i in range(1, menu.option_count, 2):
             assert prompts[i].strip() == '' and menu.get_option_at_index(i).disabled, prompts
