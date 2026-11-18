@@ -95,3 +95,22 @@ def test_motion_graphics_step_disabled_until_fresh(tmp_path):
     assert app.graphics_step_enabled() is False  # no timing -> disabled
     app.project_dir = None
     assert app.graphics_step_enabled() is False  # no project -> disabled
+
+
+def test_menu_prepare_only_argv_exits_zero(tmp_path, monkeypatch):
+    """Dogfood 2026-11-18: the menu's Task 21 job builds [--project, pd, --prepare-only] with NO
+    --mode; the argparse guard required --mode, so every real Save-inputs failed (exit 2) and
+    the graphics step never enabled. Delivery-shaped: the exact shipped argv, run for real."""
+    import subprocess
+    import sys
+
+    from projfix import ROOT, make_project
+
+    pd = make_project(tmp_path / 'p')
+    env = dict(os.environ, PYTHONPATH=ROOT)
+    r = subprocess.run([sys.executable, '-P', '-m', 'motion_pipeline.render_cli',
+                        '--project', pd, '--prepare-only'],
+                       capture_output=True, text=True, cwd=ROOT, env=env)
+    assert r.returncode == 0, r.stderr
+    assert 'timings saved' in r.stdout
+    assert os.path.isfile(os.path.join(pd, 'timing.json'))

@@ -386,13 +386,9 @@ def main(argv=None):
         if a.render_test:
             return render_test(os.path.abspath(a.render_test), a.section, a.from_s, a.to_s, a.draft,
                                a.dry_run)
-        if not a.project or not a.mode:
-            ap.error('--project and --mode are required (or use --check / --check-graphics / --render-test / --setup)')
-        if a.mode == 'remux':
-            return remux(os.path.abspath(a.project), a.variant, a.out)
         if a.prepare_only:
             from . import generate
-            p = prepare_inputs(os.path.abspath(a.project))
+            prepare_inputs(os.path.abspath(a.project))  # transcript model + timing (writes them)
             generate.generate(os.path.abspath(a.project), 'default')
             import json as _json
             timing = _json.load(open(os.path.join(os.path.abspath(a.project), 'timing.json')))
@@ -400,6 +396,10 @@ def main(argv=None):
             print(f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
                   f'engine {timing["method"]}', flush=True)
             return 0
+        if not a.project or not a.mode:
+            ap.error('--project and --mode are required (or use --check / --check-graphics / --render-test / --prepare-only / --setup)')
+        if a.mode == 'remux':
+            return remux(os.path.abspath(a.project), a.variant, a.out)
         return render(os.path.abspath(a.project), a.mode, a.variant, a.out, a.dry_run,
                       full_master=a.full_master)
     except Missing as e:
