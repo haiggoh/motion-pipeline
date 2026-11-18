@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.0 — 2026-11-18 — M1–M5: menu UX, fonts, render correctness, audio/Premiere/aligners, motion graphics
+## [0.6.0] — 2026-11-18 — M1–M5: menu UX, fonts, render correctness, audio/Premiere/aligners, motion graphics
 
 - **M1 — menu UX (Tasks 1–6):** zones screen crash fix + delete + select-to-edit + per-aspect
   zones + loud validation; inputs screen prefills every field, adds wpm/language/aligner, save
