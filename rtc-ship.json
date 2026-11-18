@@ -1,0 +1,19 @@
+{
+  "_comment": "How rtc-ship.sh ships motion-pipeline (plain Python app, run-to-completion 1.6.2 wiring added 2026-11-18). The release asset is a DETERMINISTIC git-archive tarball (.rtc/pre-package.sh); the auto-generated GitHub tag tarball is not byte-stable, and the tap formula pins its sha256 (.rtc/post-release.sh bumps the tap and pushes it — for the tap, merging IS shipping).",
+
+  "tag_prefix": "v",
+  "default_branch": "main",
+
+  "manifest": "release-manifest.json",
+  "changelog": "CHANGELOG.md",
+  "version_file": "VERSION",
+
+  "assets": "dist/mp-*.tar.gz",
+
+  "test_workers": 12,
+  "stall_seconds": 900,
+
+  "require_default_branch_checkout": true,
+
+  "_comment_versions": "rtc_version_surface.py has no reader for a .py file or a PEP 621 [project] table (its toml-package kind is scoped to [package]), so pyproject.toml and motion_pipeline/__init__.py are NOT tool-bumped surfaces: tests/test_version_consistency.py pins VERSION == release-manifest.json == pyproject.toml == __init__.py == CHANGELOG top, so an incomplete bump fails the suite gate instead of shipping drifted."
+}
