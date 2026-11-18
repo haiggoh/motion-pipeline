@@ -20,8 +20,9 @@
   declarations validated in the AI manifest; Premiere import via FCP 7 XML
   `<variant>_sequence.xml`; classical aligner (pause runs, syllable nuclei, DP assignment) plus
   an optional whisper.cpp engine snapped to the transcript.
-- **M5 — Add motion graphics (Tasks 21–23):** inputs fingerprint + timings freshness gate (the
-  step stays disabled until timings are fresh); every scene page defines `window.MP` (timeline,
+- **M5 — Add motion graphics (Tasks 21–23):** inputs fingerprint + timings freshness gate, and
+  step 5's Save now computes and saves the timings via `--prepare-only` (the step stays
+  disabled until they are fresh); every scene page defines `window.MP` (timeline,
   timings, anchors, scene, frame, palette, fonts, zones, sfx, `at()`) BEFORE any ai_graphics
   script loads, with `mp_lib.js` helpers (enter/exit/drawOn/float/inZone/el/random — seeded
   mulberry32, no rAF/setTimeout/Date/unseeded random/network) and vendored DrawSVGPlugin 3.14.2
@@ -38,9 +39,12 @@
   `--prepare-only` no longer requires `--mode` (the menu's real argv, caught during dogfood prep).
 - **Quality:** outcome-shaped tests throughout (generated page bytes, node-executed page API
   incl. mulberry32 known vectors, real subprocess exit codes, frame luma in the slow render
-  test); mutation discriminants (ordering, `MP.at`, dry-run, `--prompt`, version sort) watched
-  RED then reverted; milestone QC via out-of-family dispatches (Playbook-milestone-qc-offload-
-  test-proof). Full suite 270 passed, 2 environmental skips.
+  test), plus two test-hardening commits: render-log polling switched to real time (810c630,
+  flaky under xdist CPU contention) and a CSS at-rule selector guard (fdde8e2); mutation
+  discriminants (ordering, `MP.at`, dry-run, `--prompt`, version sort) watched RED then
+  reverted; milestone QC via out-of-family dispatches (Playbook-milestone-qc-offload-test-
+  proof), including one on THIS release's changelog and ship wiring. Full suite 270 passed,
+  2 environmental skips.
 
 ## v0.5.3 — 2026-11-11
 
