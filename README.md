@@ -34,21 +34,33 @@ was extracted from: the old 8-bit-intermediate masters showed chroma staircases 
 
 - Formats: **16:9, 9:16, 1:1, 4:5**; fps **25/30/50/60**; 16:9 also **UHD 3840×2160**.
   Resolution and fps are project settings, never constants. (hyperframes 0.8.31 renders at
-  preset resolutions matching the composition aspect; 4:5 currently falls back to square —
-  documented limitation.)
+  preset resolutions matching the composition aspect, 4:5 native included.)
 - Colourway variants per project (one by default, checkbox adds more).
-- Masters: H.264 High 4:2:2, 10-bit `yuv422p10le`, per scene → `renders/<variant>/`.
+- Masters: H.264 High 4:2:2, 10-bit `yuv422p10le`, per scene `.mov` in
+  `renders/<variant>/` with the **VO and SFX as separate audio tracks** (muxed, never
+  re-encoded video), a `<variant>_preview.mp4`, `timeline.json` for downstream tools, and
+  `<variant>_sequence.xml` (Final Cut Pro 7 XML) for Premiere/DaVinci import — relink only if
+  the renders folder moves. An opt-in (default **off**) joined full-length master duplicates
+  only the concatenation input; `--mode remux` re-muxes a new VO take with **bit-exact**
+  video copies instead of re-rendering.
 - Timed keep-out zones (rectangle per aspect, anchored to transcript sections) keep text
   out of graphic areas; post-render gates: chroma staircase, zone, font, asset audit.
 
 ## What works out of the box vs what needs an AI model
 
 Out of the box, zero AI: CI scheme, fonts, background, VO alignment, text animation,
-rendering, gates. Needs an AI model (your own session, e.g. via
-[free-agents](https://github.com/haiggoh/free-agents)): additional creative graphics at key
-moments. They live in the project's `ai_graphics/` folder, which the generator never touches;
-they can reference generated text only via the stable element ids in `src/element_ids.json`,
-and everything time-based anchors to word ids / section names, not seconds.
+rendering, gates. Needs an AI model (your own session, or, when
+[free-agents](https://github.com/haiggoh/free-agents) is installed, the menu can launch one
+for you): additional creative graphics at key moments. Step **6 "Add motion graphics"**
+(enabled once timings are saved) writes the menu-owned `MOTION_GRAPHICS_PLAYBOOK.md` into
+your project — every live fact, the page API the AI scripts use (`window.MP`, `MP.at`,
+`mp_lib.js`, vendored DrawSVG), the determinism rules and the exact commands
+`motion-pipeline --check-graphics <project>` and
+`motion-pipeline --render-test <project> --section <name>` it must run — and hands you the
+playbook plus the project folder for the AI of your choice, or offers to open a free session
+in a new Terminal window directly. AI graphics live in `ai_graphics/`, which the generator
+never touches; they reference generated text only via the stable element ids in
+`src/element_ids.json`, and everything time-based anchors to word ids / section names.
 
 ## Quickstart
 
@@ -57,15 +69,18 @@ brew install fnm uv ffmpeg
 fnm install 24.19.0
 uv venv --python /opt/homebrew/bin/python3.11 .venv
 uv pip install --python .venv/bin/python -e '.[dev]'
-npm install                                   # pinned hyperframes 0.8.31
-npx --yes @puppeteer/browsers install chrome-headless-shell@156.0.8078.4 --path ~/.cache/motion-pipeline/chrome
 bash tools/test_portability.sh                 # == PORTABLE
-.venv/bin/python -m pytest tests/ -q           # 57 passed (includes a real e2e render)
+.venv/bin/python -m pytest tests/ -q           # the suite passes, incl. a real e2e render
 # new project from the sample:
 cp -r samples/globe projects/my-globe
-# then run the menu: .venv/bin/python -m motion_pipeline  (steps 1-6: colours, font, zones,
-# background test, transcript+VO, render) — or drive it headless via tools/render_scene.sh
+# then run the menu: .venv/bin/python -m motion_pipeline  (steps 0-7: project, colours,
+# font, zones, background test, transcript+VO, add motion graphics, render) — or drive it
+# headless via tools/render_scene.sh
 ```
+
+The render toolchain (pinned hyperframes 0.8.31 + chrome-headless-shell) installs into the
+user cache — never into the package — with `motion-pipeline --setup-render` (or the menu's
+"Install render toolchain" row; `--dry-run` prints the commands first).
 
 macOS first (Apple Silicon); Linux assumed. See `docs/` for architecture, the scheme
 derivation rules, the transcript markup reference, and the timing-JSON reference.
