@@ -75,7 +75,9 @@ def test_real_test_render_and_chroma_gate(sample_project):
                        capture_output=True, text=True, timeout=560, env=env)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-1000:]
     import glob
-    masters = glob.glob(os.path.join(sample_project, 'renders', 'default', 'scene_*.mp4'))
+    # Task 15: masters are .mov (VO+SFX muxed) — the old .mp4 glob hid behind the slow
+    # marker until the unfiltered gate ran it (2026-11-19)
+    masters = glob.glob(os.path.join(sample_project, 'renders', 'default', 'scene_*.mov'))
     assert masters, r.stdout[-1500:]
     master = masters[0]
     prof = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',

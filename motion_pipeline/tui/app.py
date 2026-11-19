@@ -260,7 +260,9 @@ class BgTestScreen(_RenderScreenBase):
         super().on_render_done(rc)
         out = self.outdir() or self.app.default_out()
         # show the rendered test frame inside the terminal (Rich ANSI half-block image)
-        masters = sorted(glob.glob(os.path.join(out, 'scene_*.mp4')))
+        # Task 15: masters are .mov — the old .mp4-only glob went stale; fixtures may use .mp4
+        masters = sorted(glob.glob(os.path.join(out, 'scene_*.mov'))
+                         + glob.glob(os.path.join(out, 'scene_*.mp4')))
         if masters:
             png = os.path.join(out, '_test_frame.png')
             subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', masters[0],

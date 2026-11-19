@@ -133,8 +133,15 @@ async def test_brew_launcher_runs_menu_and_fonts_without_crash(tmp_path):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     venv = tmp_path / 'venv'
     subprocess.run([sys.executable, '-m', 'venv', str(venv)], check=True)
-    subprocess.run([str(venv / 'bin' / 'pip'), 'install', '--quiet',
-                    'textual>=0.80', 'numpy>=1.26', 'pillow>=10'], check=True, timeout=300)
+    # Pin to the versions THIS suite runs against (importlib.metadata of the current
+    # interpreter): an unpinned venv installs whatever textual is latest the day the gate
+    # runs, and a newer major silently empties the fonts list (2026-11-19: FONTS_OK False
+    # with a fresh textual on the SAME machine where the dev venv lists 626 families).
+    from importlib.metadata import version as _pkg_version
+
+    pins = [f'{m}=={_pkg_version(m)}' for m in ('textual', 'numpy', 'pillow')]
+    subprocess.run([str(venv / 'bin' / 'pip'), 'install', '--quiet', *pins],
+                   check=True, timeout=300)
     code = (
         "import asyncio\n"
         "from motion_pipeline.tui.app import MenuApp\n"
@@ -145,6 +152,10 @@ async def test_brew_launcher_runs_menu_and_fonts_without_crash(tmp_path):
         "        app.push_screen(app.SCREENS['fonts']())\n"
         "        await pilot.pause()\n"
         "        lv = app.screen.query_one('#fonts')\n"
+        "        for _ in range(150):\n"  # scan is a background worker — poll the condition
+        "            if len(lv.children) > 20:\n"   # (one bare pause() measures mid-scan)
+        "                break\n"
+        "            await pilot.pause(0.1)\n"
         "        print('FONTS_OK', len(lv.children) > 20)\n"
         "asyncio.run(go())\n"
     )

@@ -228,7 +228,8 @@ def render_test(project_dir, section=None, from_s=None, to_s=None, draft=False, 
            '--variant', 'default', '--mode', 'test', '--out', os.path.join(out_dir, f'{scene["slug"]}_{S:.1f}-{E:.1f}.mov')]
     if draft:
         cmd.append('--banded')  # placeholder for draft quality; real draft flag handled by toolchain
-    rc = subprocess.call(cmd)
+    # helper scripts need this interpreter's deps (numpy/PIL) — same MP_PYTHON contract as render()
+    rc = subprocess.call(cmd, env={**os.environ, 'MP_PYTHON': sys.executable})
     return rc
 
 
@@ -291,6 +292,11 @@ def render(project_dir, mode, variant=None, out=None, dry_run=False, full_master
         env, lines = preflight()
         for line in lines:
             print(f'[render_cli] {line}', flush=True)
+    # render_scene.sh's helper scripts (chroma gate, zone gate, audio mux) need THIS
+    # interpreter's deps (numpy, PIL) — bare `python3` is the system one and has neither.
+    # Set AFTER preflight(): it rebinds env, and a setdefault before that rebind is lost
+    # (found 2026-11-19: the menu path still died on ModuleNotFoundError numpy).
+    env.setdefault('MP_PYTHON', sys.executable)
     p = prepare_inputs(project_dir)
     variants = p['variants'] if (variant == 'all' or (variant is None and mode == 'full')) \
         else [variant or 'default']

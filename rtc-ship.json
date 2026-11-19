@@ -10,6 +10,9 @@
 
   "assets": "dist/mp-*.tar.gz",
 
+  "_comment_tests": "How this repo's tests run is the repo's business (rtc-ship 1.6.2): the worktree's own venv has the runtime deps (textual, numpy, pillow, pytest-asyncio); the PATH/pipx pytest does NOT even import motion_pipeline. NO -m 'not slow': the slow render tests self-skip with a printed reason when the toolchain is absent and gate for real when it is present (the unfiltered run is what exposed the MP_PYTHON bug).",
+  "test_cmd": ".venv/bin/python -m pytest tests -q -p no:cacheprovider -n 12 -rs",
+
   "test_workers": 12,
   "stall_seconds": 900,
 

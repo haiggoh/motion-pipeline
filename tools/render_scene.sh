@@ -28,6 +28,8 @@ set -euo pipefail
 TOOLS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$TOOLS")"
 INTERMEDIATE="ffv1-bgr0"
+# helper scripts run under the caller's python (has numpy/PIL), not the system one
+PY="${MP_PYTHON:-python3}"
 
 PROJECT=""; VARIANT=""; MODE=""; FRAMES=""; DRY=0; FRESH=0; BANDED=0; OUT=""; STAGE=0
 while [ $# -gt 0 ]; do case "$1" in
@@ -46,7 +48,7 @@ esac; done
 case "$MODE" in test|full) ;; *) echo "bad --mode $MODE (want test|full)" >&2; exit 2;; esac
 [ -f "$PROJECT/project.json" ] || { echo "no project.json in $PROJECT" >&2; exit 3; }
 [ -d "$PROJECT/src" ] || { echo "no src/ in $PROJECT — run the generator first (motion_pipeline generate)" >&2; exit 3; }
-python3 - "$PROJECT/project.json" "$VARIANT" <<'PY' || exit 3
+"$PY" - "$PROJECT/project.json" "$VARIANT" <<'PY' || exit 3
 import json, sys
 p = json.load(open(sys.argv[1]))
 if sys.argv[2] not in p.get('variants', []):
@@ -64,7 +66,7 @@ fi
 # resume refusal: an existing render_info.json without the intermediate marker (or with
 # another value) must refuse — old 8-bit-pipeline intermediates would be spliced in as complete
 if [ -f "$OUT/render_info.json" ] && [ $DRY = 0 ] && [ $STAGE = 0 ]; then
-  python3 "$TOOLS/render_info.py" check --dir "$OUT" --rev "$VARIANT" --arm pinned --hf "${HFV:-0.8.31}" --intermediate "$INTERMEDIATE" || exit 4
+  "$PY" "$TOOLS/render_info.py" check --dir "$OUT" --rev "$VARIANT" --arm pinned --hf "${HFV:-0.8.31}" --intermediate "$INTERMEDIATE" || exit 4
 fi
 if [ $FRESH = 1 ]; then
   if ls "$OUT"/*.mp4 >/dev/null 2>&1; then echo "--fresh: masters exist in $OUT — move them away first (never deleted here)" >&2; exit 4; fi
@@ -73,14 +75,14 @@ fi
 
 # Task 12: scene order comes from src/scenes.json (written by the generator), not the glob
 [ -f "$PROJECT/src/scenes.json" ] || { echo "no src/scenes.json in $PROJECT — run the generator first" >&2; exit 3; }
-SCENES=( $(python3 -c "import json; print(' '.join('$PROJECT/src/' + s['file'] for s in json.load(open('$PROJECT/src/scenes.json'))))") )
+SCENES=( $("$PY" -c "import json; print(' '.join('$PROJECT/src/' + s['file'] for s in json.load(open('$PROJECT/src/scenes.json'))))") )
 [ ${#SCENES[@]} -gt 0 ] || { echo "no scenes in src/scenes.json" >&2; exit 3; }
 [ "$MODE" = test ] && SCENES=( "${SCENES[0]}" )
 [ -n "$FRAMES" ] || { [ "$MODE" = test ] && FRAMES="0-59" || FRAMES="all"; }
 
 # disk guard (finding 17, Task 13): need = SUM over the scenes of ceil(duration*fps) frames,
 # ~1.4 MB/frame at 1080p (measured), x2 for the png + ffv1 transient; durations from scenes.json
-need_mb=$(python3 - "$PROJECT" <<'PY'
+need_mb=$("$PY" - "$PROJECT" <<'PY'
 import json, math, sys
 p = json.load(open(sys.argv[1] + '/project.json'))
 w, h = p['resolution']
@@ -99,7 +101,7 @@ fi
 # zone gate BEFORE any capture (Task 13): recomputes the layout; a failure stops before minutes
 # are spent. exit 6.
 if [ $DRY = 0 ] && [ $STAGE = 0 ]; then
-  if ! python3 "$TOOLS/check_zone.py" --project "$PROJECT" --variant "$VARIANT"; then
+  if ! "$PY" "$TOOLS/check_zone.py" --project "$PROJECT" --variant "$VARIANT"; then
     echo "zone gate: a text block intersects an active keep-out zone — see above (exit 6)" >&2
     exit 6
   fi
@@ -113,7 +115,7 @@ for scene in "${SCENES[@]}"; do
     echo "  would: hyperframes render $scene --format png-sequence -> $work/frames -> FFV1 bgr0 $work/raw.mkv -> master $OUT/$name.mp4 (yuv422p10le bt709)"
     continue
   fi
-  [ $STAGE = 1 ] || python3 "$TOOLS/render_info.py" start --dir "$OUT" --rev "$VARIANT" --colour blue --parts "$name" --arm pinned --hf "$HFV" --intermediate "$INTERMEDIATE" --content "$PROJECT" >/dev/null
+  [ $STAGE = 1 ] || "$PY" "$TOOLS/render_info.py" start --dir "$OUT" --rev "$VARIANT" --colour blue --parts "$name" --arm pinned --hf "$HFV" --intermediate "$INTERMEDIATE" --content "$PROJECT" >/dev/null
   # stage the scene as a site directory (hyperframes renders a directory, not a file)
   site="$work/site"; mkdir -p "$site"
   cp "$scene" "$site/index.html"
@@ -126,7 +128,7 @@ for scene in "${SCENES[@]}"; do
   if [ $STAGE = 1 ]; then echo "  site: $site"; continue; fi
   # P4: never pass --resolution — compositions are authored at the project's real resolution
   # (hyperframes renders 1080x1350 natively when omitted, E5)
-  (cd "$site" && NODE_OPTIONS="--max-old-space-size=4096" hyperframes render . --fps "$(python3 -c "import json;print(json.load(open('$PROJECT/project.json'))['fps'])")" --quality high --format png-sequence --output "$work/frames" > "$work/render.log" 2>&1 < /dev/null) \
+  (cd "$site" && NODE_OPTIONS="--max-old-space-size=4096" hyperframes render . --fps "$("$PY" -c "import json;print(json.load(open('$PROJECT/project.json'))['fps'])")" --quality high --format png-sequence --output "$work/frames" > "$work/render.log" 2>&1 < /dev/null) \
     || { echo "render FAILED $name (see $work/render.log)" >&2; exit 1; }
   [ -f "$work/frames/frame_000001.png" ] || { echo "$name: unexpected png naming (no frame_000001.png)" >&2; exit 1; }
   # Task 11 font gate: a role face that did not load is logged by the page as MP_FONT_MISSING
@@ -136,7 +138,7 @@ for scene in "${SCENES[@]}"; do
     exit 5
   fi
   n=$(find "$work/frames" -name '*.png' | wc -l | tr -d ' ')
-  ffmpeg -v error -y -f image2 -framerate "$(python3 -c "import json;print(json.load(open('$PROJECT/project.json'))['fps'])")" -start_number 1 -i "$work/frames/frame_%06d.png" -c:v ffv1 -level 3 -pix_fmt bgr0 -g 1 "$work/raw.mkv" || exit 1
+  ffmpeg -v error -y -f image2 -framerate "$("$PY" -c "import json;print(json.load(open('$PROJECT/project.json'))['fps'])")" -start_number 1 -i "$work/frames/frame_%06d.png" -c:v ffv1 -level 3 -pix_fmt bgr0 -g 1 "$work/raw.mkv" || exit 1
   got=$(ffprobe -v error -count_frames -select_streams v -show_entries stream=nb_read_frames -of csv=p=0 "$work/raw.mkv")
   [ "$got" = "$n" ] || { echo "$name: packed $got != $n pngs" >&2; exit 1; }
   rm -rf "$work/frames"
@@ -153,7 +155,7 @@ for scene in "${SCENES[@]}"; do
     -b:v 49M -maxrate 60M -bufsize 60M -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv \
     -metadata title="$name" "$work/video.mp4" || exit 1
   # Task 15: mux VO+SFX into the scene master .mov (video stream copied bit-exact, E9)
-  python3 - "$PROJECT" "$work/video.mp4" "$OUT/$name.mov" "$ROOT" <<'PY' || { echo "audio mux failed for $name" >&2; exit 1; }
+  "$PY" - "$PROJECT" "$work/video.mp4" "$OUT/$name.mov" "$ROOT" <<'PY' || { echo "audio mux failed for $name" >&2; exit 1; }
 import json, os, sys
 proj_dir, video, out_mov, root = sys.argv[1:5]
 sys.path.insert(0, root)
@@ -174,9 +176,9 @@ PY
   if [ "${MP_SKIP_CHROMA_GATE:-0}" = "1" ]; then
     echo "chroma gate skipped: MP_SKIP_CHROMA_GATE=1 (loud)"
   else
-    read -r W H < <(python3 -c "import json;p=json.load(open('$PROJECT/project.json'));print(*p['resolution'])")
+    read -r W H < <("$PY" -c "import json;p=json.load(open('$PROJECT/project.json'));print(*p['resolution'])")
     strip="$(( W / 20 )),$(( W * 19 / 20 )),$(( H / 50 )),$(( H * 3 / 50 ))"  # 0.05W..0.95W x 0.02H..0.06H
-    overlap=$(python3 - "$PROJECT" "$W" "$H" <<'PY'
+    overlap=$("$PY" - "$PROJECT" "$W" "$H" <<'PY'
 import json, sys
 root = sys.argv[1]
 sys.path.insert(0, root)
@@ -193,7 +195,7 @@ PY
 )
     if [ -n "$overlap" ]; then
       echo "chroma gate skipped: strip overlaps zone/AI graphic ($overlap)"
-    elif ! python3 "$TOOLS/check_chroma_steps.py" --video "$OUT/$name.mov" --frame 0 --strip "$strip" --max-step 2.0; then
+    elif ! "$PY" "$TOOLS/check_chroma_steps.py" --video "$OUT/$name.mov" --frame 0 --strip "$strip" --max-step 2.0; then
       echo "chroma gate FAILED for $name (strip $strip) — master kept in $OUT, render_info not VERIFIED (exit 6)" >&2
       exit 6
     fi
@@ -209,7 +211,7 @@ fi
 # Task 15 outputs after all scenes: timeline.json, preview, optional joined master, info fields
 [ $DRY = 1 ] && { echo "[render_scene] dry run complete"; exit 0; }
 [ $STAGE = 1 ] && { echo "[render_scene] staged sites only"; exit 0; }
-python3 - "$PROJECT" "$VARIANT" "$OUT" "$ROOT" <<'PY'
+"$PY" - "$PROJECT" "$VARIANT" "$OUT" "$ROOT" <<'PY'
 import json, os, sys
 proj_dir, variant, out, root = sys.argv[1:5]
 sys.path.insert(0, root)
@@ -246,5 +248,5 @@ if os.path.isfile(ip):
         json.dump(info, f, indent=2)
 PY
 [ $DRY = 1 ] && { echo "[render_scene] dry run complete"; exit 0; }
-python3 "$TOOLS/render_info.py" finish --dir "$OUT" --verify VERIFIED >/dev/null
+"$PY" "$TOOLS/render_info.py" finish --dir "$OUT" --verify VERIFIED >/dev/null
 echo "[render_scene] DONE $OUT"
