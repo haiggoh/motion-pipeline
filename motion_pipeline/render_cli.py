@@ -160,6 +160,18 @@ def check_graphics(project_dir):
     gdir = os.path.join(project_dir, ai_layer.DIR)
     referenced = {g['file'] for g in entries}
     problems = []
+    # determinism lint (waypoint optional-check-graphics, user-approved 2026-11-19): the
+    # renderer seeks frames, so AI scripts must not use rAF/timers/Date/unseeded random or
+    # the network. MP.random(seed) is the seeded path and must NOT trip the Math.random rule.
+    import re as _re
+    det_rules = [
+        (_re.compile(r'\brequestAnimationFrame\s*\('), 'requestAnimationFrame'),
+        (_re.compile(r'\bsetTimeout\s*\('), 'setTimeout'),
+        (_re.compile(r'\bsetInterval\s*\('), 'setInterval'),
+        (_re.compile(r'\bnew\s+Date\b|\bDate\.(now|parse)\s*\('), 'Date'),
+        (_re.compile(r'\bMath\.random\s*\('), 'unseeded Math.random (use MP.random(seed))'),
+        (_re.compile(r'\b(fetch|XMLHttpRequest|WebSocket|sendBeacon)\b|\bimport\s*\('), 'network'),
+    ]
     if os.path.isdir(gdir):
         for root, _dirs, files in os.walk(gdir):
             for f in files:
@@ -168,6 +180,13 @@ def check_graphics(project_dir):
                     continue
                 if rel not in referenced:
                     problems.append(f'unreferenced file: {rel}')
+                if rel.endswith(('.js', '.html')):
+                    with open(os.path.join(root, f), encoding='utf-8') as fh:
+                        for ln, line in enumerate(fh, 1):
+                            for pat, label in det_rules:
+                                if pat.search(line):
+                                    problems.append(f'{rel}:{ln}: nondeterministic — {label}')
+                                    break
     # sfx field/licence checks already run inside load_manifest
     if problems:
         for pr in problems:

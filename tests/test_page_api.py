@@ -208,3 +208,44 @@ def test_sfx_cues_resolves_anchors_with_aligner_timing(tmp_path):
     _add_ai(pd, with_sfx=True)
     cues = audio_mux.sfx_cues(pd, timing, tr)
     assert len(cues) == 1 and cues[0]['graphic'] == 'pulse'
+
+
+# --- determinism lint (waypoint optional-check-graphics, user-approved 2026-11-19) --------
+# ai_graphics scripts must stay deterministic: the renderer seeks frames, so rAF/setTimeout/
+# Date/unseeded Math.random and the network are banned. MP.random(seed) is the seeded path.
+DET_LINT = [
+    (r'\brequestAnimationFrame\s*\(', 'requestAnimationFrame'),
+    (r'\bsetTimeout\s*\(', 'setTimeout'),
+    (r'\bsetInterval\s*\(', 'setInterval'),
+    (r'\bnew\s+Date\b|\bDate\.(now|parse)\s*\(', 'Date'),
+    (r'\bMath\.random\s*\(', 'unseeded Math.random (use MP.random(seed))'),
+    (r'\b(fetch|XMLHttpRequest|WebSocket|sendBeacon)\b|\bimport\s*\(', 'network'),
+]
+
+
+def test_check_graphics_flags_nondeterministic_ai_scripts(tmp_path, capsys):
+    pd = make_project(tmp_path / 'p')
+    _add_ai(pd)
+    ag = os.path.join(pd, 'ai_graphics')
+    open(os.path.join(ag, 'pulse.js'), 'w').write(
+        "setTimeout(function () {}, 10);\n"
+        "var r = Math.random();\n"
+        "fetch('/api/thing');\n")
+    rc = render_cli.main(['--check-graphics', pd])
+    err = capsys.readouterr().err
+    assert rc == 1, (rc, err)
+    assert 'pulse.js:1' in err and 'setTimeout' in err, err
+    assert 'pulse.js:2' in err and 'Math.random' in err, err
+    assert 'pulse.js:3' in err and 'network' in err, err
+
+
+def test_check_graphics_determinism_lint_no_false_positives(tmp_path, capsys):
+    pd = make_project(tmp_path / 'p')
+    _add_ai(pd)
+    ag = os.path.join(pd, 'ai_graphics')
+    open(os.path.join(ag, 'pulse.js'), 'w').write(
+        "var r = MP.random(42);\n"
+        "MP.enter(el, 'w0', {d: 0.2});\n"
+        "var d = document.createElement('div');\n")  # 'document' must not trip the Date rule
+    assert render_cli.main(['--check-graphics', pd]) == 0
+    assert 'check-graphics: OK' in capsys.readouterr().out
