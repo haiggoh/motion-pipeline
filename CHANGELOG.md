@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.2] — 2026-11-19 — determinism lint in --check-graphics for AI scripts
+
+- `motion-pipeline --check-graphics <project>` now also scans every `ai_graphics/`
+  .js/.html file for nondeterministic calls — `requestAnimationFrame`, `setTimeout`,
+  `setInterval`, `new Date`/`Date.now`, unseeded `Math.random`, and network calls
+  (`fetch`/`XMLHttpRequest`/`WebSocket`/`sendBeacon`/dynamic `import(`) — listing each as
+  `file:line` with exit 1 (problems listed). The renderer seeks frames, so these would
+  render differently per frame; `MP.random(seed)` stays the allowed seeded path (covered by
+  a no-false-positive test). Found by the Task 22 QC review; tests watched RED, the
+  Math.random-rule-drop mutation went RED and was restored. Gate: 280 passed, 6 printed
+  env-skips, exit 0.
+
 ## [0.6.1] — 2026-11-19 — M6: the shipped sample renders end to end; README/docs truthful
 
 - **Sample as shipped (Task 18):** `samples/globe` now carries its own `project.json`
