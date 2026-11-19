@@ -1,0 +1,16 @@
+{
+  "name": "globe-sample",
+  "aspect": "16:9",
+  "resolution": [1920, 1080],
+  "fps": 25,
+  "variants": ["default"],
+  "zones": [{"section": "Welcome", "rect": [1056, 80, 700, 500], "aspect": "16:9"}],
+  "fonts": {"family": "Montserrat", "roles": {"headline": 700, "label": 600, "body": 400, "emphasis": 700}},
+  "transcript": "transcript.txt",
+  "vo": null,
+  "wpm": 140,
+  "language": "de",
+  "aligner": "auto",
+  "full_master": false,
+  "graphics": ["globe"]
+}

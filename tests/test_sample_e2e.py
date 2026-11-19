@@ -1,4 +1,5 @@
-"""Task 11: sample project end-to-end — generate + real test render + chroma/zone gates."""
+"""Task 11/18: sample project end-to-end — the SHIPPED sample (samples/globe) generates,
+renders for real, and passes the chroma/zone gates."""
 import json
 import os
 import shutil
@@ -6,12 +7,9 @@ import subprocess
 
 import pytest
 
-from motion_pipeline import align, generate, project, transcript
-from motion_pipeline.scheme import save_scheme
+from motion_pipeline import generate, project
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DARK = {'name': 'default', 'background_dark': '#0b1a4c', 'background_light': '#1251a6',
-        'accent': '#ffb400', 'text': '#f5f7ff'}
 
 
 @pytest.fixture(scope='module')
@@ -19,20 +17,25 @@ def sample_project(tmp_path_factory):
     tmp = tmp_path_factory.mktemp('sample')
     d = tmp / 'projects' / 'globe-sample'
     shutil.copytree(os.path.join(ROOT, 'samples', 'globe'), d)
-    p = project.default_project('globe-sample')
-    # full frame size: at small resolutions the 8-bit RGB capture floor itself shows
-    # 4-code Cb steps; at 1920x1080 the gate threshold 2.0 is the measured regime
-    p['graphics'] = ['globe']  # exercised in the generate test; the render test drops it below
-    p['zones'] = [{'section': 'Welcome', 'rect': [int(1920 * 0.55), 80, 700, 500]}]
-    p['fonts'] = {'family': 'Montserrat'}
-    project.save(str(d), p)
-    save_scheme(str(d / 'scheme.json'), DARK)
-    tr = transcript.load(str(d / 'transcript.txt'))
-    (d / 'transcript_model.json').write_text(json.dumps(tr))
-    timing = align.estimate_timings(tr, wpm=140)
-    align.save_timing(str(d / 'timing.json'), timing)
-    generate.generate(str(d))
+    # Task 18: load the sample AS SHIPPED — project.json/scheme.json come from samples/globe,
+    # and timings + pages come from the real shipped path (--prepare-only), not hand-built files
+    from motion_pipeline import render_cli
+    assert render_cli.main(['--project', str(d), '--prepare-only']) == 0
     return str(d)
+
+
+def test_sample_loads_unmodified():
+    """Task 18: the SHIPPED sample (samples/globe as committed) validates unmodified."""
+    d = os.path.join(ROOT, 'samples', 'globe')
+    p = project.load(d)
+    assert p['aspect'] == '16:9' and p['fps'] == 25 and p['graphics'] == ['globe']
+    assert p['fonts']['family'] == 'Montserrat' and p['fonts']['roles'] == \
+        {'headline': 700, 'label': 600, 'body': 400, 'emphasis': 700}
+    assert any(z['section'] == 'Welcome' and z.get('aspect') == '16:9' for z in p['zones'])
+    from motion_pipeline.scheme import load_scheme
+    s = load_scheme(os.path.join(d, 'scheme.json'))
+    assert s['background_dark'] == '#0b1a4c' and s['accent'] == '#ffb400'
+    assert os.path.isfile(os.path.join(d, 'transcript.txt'))
 
 
 def test_sample_generates_scenes_and_globe_assets(sample_project):
@@ -53,8 +56,16 @@ def test_zone_gate_on_sample(sample_project):
     assert 'zones OK' in r.stdout
 
 
-@pytest.mark.skipif(shutil.which('hyperframes') is None and not os.path.isdir(os.path.join(ROOT, 'node_modules')),
-                    reason='hyperframes not installed')
+def _hyperframes_missing():
+    from motion_pipeline import render_cli
+    try:
+        render_cli.find_hyperframes()
+        return False
+    except Exception:
+        return True
+
+
+@pytest.mark.skipif(_hyperframes_missing(), reason='hyperframes not installed (PATH / repo node_modules / toolchain cache)')
 @pytest.mark.slow
 def test_real_test_render_and_chroma_gate(sample_project):
     # frames 120-149 (2.0-2.5 s): the section's unit-heading card (a full-frame flat panel,
@@ -68,10 +79,17 @@ def test_real_test_render_and_chroma_gate(sample_project):
     _json.dump(pj, open(os.path.join(sample_project, 'project.json'), 'w'))
     generate.generate(sample_project)
     env = dict(os.environ)
-    env['PATH'] = f"{ROOT}/.venv/bin:{ROOT}/node_modules/.bin:{env['PATH']}"
+    from motion_pipeline import render_cli
+    env['PATH'] = (f"{ROOT}/.venv/bin:{os.path.dirname(render_cli.find_hyperframes())}:"
+                   f"{ROOT}/node_modules/.bin:{env['PATH']}")
+    # the 2.0-2.5 s window in FRAMES of THIS sample's fps — the old hardcoded 120-149 assumed
+    # the fixture's 60 fps; the shipped sample is 25 fps, where 120-149 trims to ZERO frames
+    # (empty video.mp4, mux map fails) — 2026-11-19
+    fps = json.load(open(os.path.join(sample_project, 'project.json')))['fps']
+    f0, f1 = round(2.0 * fps), round(2.5 * fps)
     r = subprocess.run(['bash', os.path.join(ROOT, 'tools', 'render_scene.sh'),
                         '--project', sample_project, '--variant', 'default', '--mode', 'test',
-                        '--frames', '120-149'],
+                        '--frames', f'{f0}-{f1}'],
                        capture_output=True, text=True, timeout=560, env=env)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-1000:]
     import glob
@@ -88,9 +106,13 @@ def test_real_test_render_and_chroma_gate(sample_project):
     # frame, left half — text block sits bottom-left; the banded/8-bit discriminant is
     # proven at page level in test_background.py::test_banded_mode_fails_chroma_gate)
     import numpy as np
+    # sample a frame that EXISTS in the trimmed master: the --frames window above is ~13
+    # output frames at the sample's fps, so the old hardcoded n=15 read nothing (empty
+    # buffer, reshape of size 0) — 2026-11-19
     raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', master, '-vf',
-                          'select=eq(n\\,15),format=yuv422p10le', '-frames:v', '1',
+                          'select=eq(n\\,5),format=yuv422p10le', '-frames:v', '1',
                           '-f', 'rawvideo', '-'], capture_output=True)
+    assert raw.stdout, 'chroma gate got no bytes — the sampled frame is past the master end'
     w, h = 1920, 1080
     buf = np.frombuffer(raw.stdout, dtype='<u2')
     cb = buf[w * h:w * h + (w // 2) * h].reshape(h, w // 2).astype(float)
@@ -100,8 +122,12 @@ def test_real_test_render_and_chroma_gate(sample_project):
         if tot > best:
             best, best_x = tot, x0
     strip = f'{best_x * 2},{best_x * 2 + 600},0,700'
+    # the gate frame must exist in the TRIMMED master (the --frames window is ~13 frames at
+    # the sample's fps — the old hardcoded 15 was past the end: "decode failed … 0 bytes").
+    # Frame 0 of the trimmed output is already past the intro card (2.0 s > 1.6 s fade).
+    gate_frame = '0'
     g = subprocess.run(['python3', os.path.join(ROOT, 'tools', 'check_chroma_steps.py'),
-                        '--video', master, '--frame', '15', '--strip', strip],
+                        '--video', master, '--frame', gate_frame, '--strip', strip],
                        capture_output=True, text=True,
                        env={**os.environ, 'PYTHONPATH': ROOT})
     assert g.returncode == 0, g.stdout + g.stderr
