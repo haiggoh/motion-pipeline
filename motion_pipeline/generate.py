@@ -316,11 +316,12 @@ background:{palette['background_dark']};opacity:0}}
 </div>
 <script src="gsap.min.js"></script>
 <script src="DrawSVGPlugin.min.js"></script>
-<script src="mp_lib.js"></script>
 {graphics_html}
 <script>
-// Task 22 page API: defined BEFORE any ai_graphics script loads
+// Task 22 page API: defined BEFORE any ai_graphics script loads; mp_lib.js loads AFTER it
+// (its IIFE reads window.MP immediately — loading it before MP logs MP_LIB_NO_MP)
 const tl = gsap.timeline({{paused: true}});
+window.__timelines = window.__timelines || {{}};   // hyperframes does not predefine it
 window.__timelines['{slug}'] = tl;
 const T = {tj};
 const SECTIONS = {sections_js};
@@ -339,6 +340,7 @@ window.MP = {{
   random: null  // set by mp_lib.js
 }};
 </script>
+<script src="mp_lib.js"></script>
 {ai_js}
 <script>
 (async () => {{
@@ -360,7 +362,7 @@ for (const el of document.querySelectorAll('.line span')) {{
 {dim_js_s}
 }})();
 </script>
-{ai_js}</body></html>
+</body></html>
 """
         name = scenes_json[sp['index']]['file']
         with open(os.path.join(out_dir, name), 'w') as f:

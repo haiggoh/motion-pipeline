@@ -151,3 +151,20 @@ async def test_background_test_real_render_shows_image_below_actions(tmp_path):
         assert img.region.height >= 5 and on_screen(app, img), img.region
         assert img.region.y > scr.query_one('#actions').region.y   # below the actions
         assert os.path.isfile(os.path.join(pd, 'renders', 'default', '_test_frame.png'))
+
+
+def test_render_scene_stage_only_survives_spaced_project_path(tmp_path):
+    """Dogfood 2026-11-19 ('sevenone adf test'): render_scene.sh word-split the space-joined
+    scene list, so ANY project path containing a space broke at the cp (exit 1)."""
+    import os
+    import subprocess
+
+    from motion_pipeline import generate
+    pd = make_project(tmp_path / 'pro ject')
+    generate.generate(pd)
+    r = subprocess.run(['bash', os.path.join(ROOT, 'tools', 'render_scene.sh'), '--project', pd,
+                        '--variant', 'default', '--mode', 'test', '--out', str(tmp_path / 'out'),
+                        '--stage-only'], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    sites = [l.split('site: ', 1)[1] for l in r.stdout.splitlines() if 'site: ' in l]
+    assert sites, r.stdout

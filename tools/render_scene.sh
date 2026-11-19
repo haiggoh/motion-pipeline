@@ -75,7 +75,10 @@ fi
 
 # Task 12: scene order comes from src/scenes.json (written by the generator), not the glob
 [ -f "$PROJECT/src/scenes.json" ] || { echo "no src/scenes.json in $PROJECT — run the generator first" >&2; exit 3; }
-SCENES=( $("$PY" -c "import json; print(' '.join('$PROJECT/src/' + s['file'] for s in json.load(open('$PROJECT/src/scenes.json'))))") )
+# newline-joined + line-wise read: project paths may contain SPACES (dogfood 2026-11-19,
+# 'sevenone adf test' — word-splitting the space-joined output broke the cp)
+SCENES=()
+while IFS= read -r f; do SCENES+=("$f"); done < <("$PY" -c "import json; print('\n'.join('$PROJECT/src/' + s['file'] for s in json.load(open('$PROJECT/src/scenes.json'))))")
 [ ${#SCENES[@]} -gt 0 ] || { echo "no scenes in src/scenes.json" >&2; exit 3; }
 [ "$MODE" = test ] && SCENES=( "${SCENES[0]}" )
 [ -n "$FRAMES" ] || { [ "$MODE" = test ] && FRAMES="0-59" || FRAMES="all"; }

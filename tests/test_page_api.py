@@ -64,6 +64,12 @@ def test_page_api_defined_before_ai_scripts(tmp_path):
     # ordering ON THE GENERATED PAGE: registered timeline, then window.MP, then the AI script tag
     assert html.index('window.__timelines[') < html.index('window.MP =') \
         < html.index('src="ai_graphics/pulse.js"')
+    # dogfood 2026-11-19 (sevenone adf test session) found all three of these broken:
+    assert html.count('src="ai_graphics/pulse.js"') == 1, 'ai scripts emitted once per page'
+    assert html.index('window.MP =') < html.index('src="mp_lib.js"'), \
+        'mp_lib.js must load AFTER window.MP — its IIFE reads MP immediately (MP_LIB_NO_MP)'
+    assert 'window.__timelines = window.__timelines || {}' in html, \
+        'guard the runtime global before assigning — hyperframes does not predefine it'
 
 
 def test_mp_at_resolves_word_section_and_number(tmp_path):
