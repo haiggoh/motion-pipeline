@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.1] — 2026-11-19 — M6: the shipped sample renders end to end; README/docs truthful
+
+- **Sample as shipped (Task 18):** `samples/globe` now carries its own `project.json`
+  (16:9, 25 fps, globe graphics, Montserrat role weights, Welcome keep-out zone) and
+  `scheme.json`; the e2e test loads the sample AS COMMITTED and computes timings/pages via
+  the real `--prepare-only` path; new `test_sample_loads_unmodified` validates the shipped
+  files. The slow e2e's frame window and chroma-gate frame are derived from the sample's
+  fps (the hardcoded 120-149/15 assumed the old 60 fps fixture — at 25 fps the trim was
+  empty and the gate read past the master's end); the hyperframes skip now also checks the
+  toolchain cache, so the real render gates on any machine with `--setup-render`.
+- **README/docs truthful (Task 19):** steps 0-7 including step 6 "Add motion graphics"
+  (menu-owned playbook, `--check-graphics`/`--render-test`, free-agents launcher); `.mov`
+  masters with VO/SFX tracks, preview, FCP 7 XML for Premiere/DaVinci, opt-in joined
+  master, bit-exact remux; toolchain via `--setup-render`; no hardcoded suite count; no
+  "4:5 falls back to square". `docs/transcript-and-timing.md` documents the Intro
+  auto-section, duplicate-name refusal, scene-relative `MP.timings` and the SFX manifest
+  fields. New `tests/test_readme_claims.py` guards retired claims (absent) and every
+  README flag (listed by the shipped `--help`) — both mutations watched RED, then reverted.
+- Gate: 277 passed, 6 skipped (all printed env reasons), exit 0.
+
 ## [0.6.0] — 2026-11-18 — M1–M5: menu UX, fonts, render correctness, audio/Premiere/aligners, motion graphics
 
 - **M1 — menu UX (Tasks 1–6):** zones screen crash fix + delete + select-to-edit + per-aspect
