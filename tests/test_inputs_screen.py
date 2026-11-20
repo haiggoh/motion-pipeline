@@ -136,3 +136,27 @@ async def test_save_success_reports_timing_counts(tmp_path):
         status = str(scr.query_one('#status', Static).render())
         assert ok, f'status never updated: {status!r}'
         assert 'timings saved — 2 words, 1 sections, engine estimated' in status, status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('corrupt', ['{', 'foreign-key'])
+async def test_corrupt_project_json_is_named_and_save_refuses(tmp_path, corrupt):
+    """Task 6 (X2): a corrupt or invalid project.json must be NAMED in #error on the inputs
+    screen — never shown as silent defaults — and Save must refuse (file bytes unchanged)."""
+    d = mk_project(tmp_path / 'proj')
+    pj = os.path.join(d, 'project.json')
+    if corrupt == '{':
+        open(pj, 'w').write('{')
+    else:
+        p = project_json(d)
+        p['ai_extra'] = 1                      # a key the menu does not own
+        json.dump(p, open(pj, 'w'))
+    original = open(pj, 'rb').read()
+    app = MenuApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        err = str(scr.query_one('#error', Static).render())
+        assert 'project.json' in err, f'error does not name project.json: {err!r}'
+        await save(pilot, scr)
+        await pilot.pause(0.3)
+        assert open(pj, 'rb').read() == original, 'Save rewrote a corrupt project.json'

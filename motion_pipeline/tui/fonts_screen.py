@@ -100,7 +100,10 @@ class FontsScreen(SubmenuScreen):
         try:
             p = project_mod.load(pd)
             cfg = fonts_mod.normalise_fonts(p.get('fonts', {}), pd)
-        except Exception:
+        except (ValueError, OSError, json.JSONDecodeError) as e:
+            # Task 6 (X2): name the corrupt project.json — never show defaults as real state
+            from textual.widgets import Static
+            self.query_one('#error', Static).update(f'error: project.json: {e}')
             return
         for role, r in cfg['roles'].items():
             self._set_role_family(role, r['family'], r['weight'])

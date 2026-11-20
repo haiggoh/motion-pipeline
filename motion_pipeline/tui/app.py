@@ -319,16 +319,22 @@ class InputsScreen(SubmenuScreen):
         yield RichLog(id='timing-log', wrap=True, markup=False, classes='joblog', max_lines=200)
 
     def on_mount(self):
+        import json
+
         from textual.widgets import Input, Select
 
         from .. import project as project_mod
         self._update_engine_status()
+        self._load_error = None
         pd = getattr(self.app, 'project_dir', None)
         if not pd:
             return
         try:
             p = project_mod.load(pd)
-        except Exception:
+        except (ValueError, OSError, json.JSONDecodeError) as e:
+            # Task 6 (X2): name the corrupt project.json — never show defaults as real state
+            self._load_error = f'project.json: {e}'
+            self.query_one('#error', Static).update(f'error: {self._load_error}')
             return
         # prefill EVERY field from the saved project — an empty vo field here is what cleared
         # the saved voiceover on a transcript-only save (data-loss bug)
@@ -405,6 +411,9 @@ class InputsScreen(SubmenuScreen):
         from .. import project as project_mod
         try:
             pd = self.require_project()
+            if getattr(self, '_load_error', None):
+                # Task 6 (X2): refuse to save over a project.json we could not read
+                raise ValueError(self._load_error)
             pj = os.path.join(pd, 'project.json')
             p = project_mod.load(pd) if os.path.isfile(pj) else project_mod.default_project(os.path.basename(pd))
             p['transcript'] = self.query_one('#transcript', Input).value.strip()

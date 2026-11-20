@@ -38,6 +38,25 @@ async def test_bundled_listed_first_and_filter_narrows(tmp_path, monkeypatch):
     async with app.run_test(size=(100, 30)) as pilot:
         app.push_screen(FontsScreen())
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_fonts_screen_names_corrupt_project_json(tmp_path, monkeypatch):
+    """Task 6 (X2): on the fonts screen a corrupt project.json shows a named error in #error,
+    not silent defaults."""
+    import os
+    monkeypatch.setattr(font_index, 'scan', fake_scan_factory(tmp_path))
+    d = str(tmp_path / 'proj')
+    p = project.default_project('demo')
+    project.save(d, p)
+    open(os.path.join(d, 'project.json'), 'w').write('{')   # invalid JSON
+    app = MenuApp()
+    app.project_dir = d
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(FontsScreen())
+        await pilot.pause()
+        err = str(app.screen.query_one('#error', Static).render())
+        assert 'project.json' in err, f'error does not name project.json: {err!r}'
         scr = app.screen
         await wait_scan(pilot, scr)
         assert len(scr.query_one('#fonts', ListView).children) >= 2
