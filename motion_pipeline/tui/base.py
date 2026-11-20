@@ -15,6 +15,8 @@ from textual.message import Message
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from .terminal_driver import get_driver_class
+
 # csl-style CSS (session_picker.py): no painted background anywhere; the terminal's own
 # theme shows through. Highlight = soft-blue text only, never a filled block.
 CSL_CSS = """
@@ -147,6 +149,9 @@ class MenuAppBase(App):
 
     def __init__(self, **kwargs):
         kwargs.setdefault('ansi_color', True)
+        # App.__init__ overwrites a class attribute (self.driver_class = driver_class or
+        # self.get_driver_class()), so the Apple Terminal driver must come through the ctor.
+        kwargs.setdefault('driver_class', get_driver_class())
         super().__init__(**kwargs)
 
     def action_back(self):
