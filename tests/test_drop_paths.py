@@ -74,3 +74,121 @@ async def test_paste_into_a_non_path_field_is_left_alone(tmp_path):
         name.focus(); await pilot.pause()
         name.post_message(events.Paste('my\\ name')); await pilot.pause()
         assert name.value == 'my\\ name'                 # plain text field: verbatim
+
+
+# ---- Task 3 (spec A2): a drop routes by WHAT was dropped, not by focus ----
+
+@pytest.mark.parametrize('path,accepts,dirs,want', [
+    ('/x/vo.wav', ('.wav', '.mp3'), False, True),
+    ('/x/VO.WAV', ('.wav',), False, True),            # case-insensitive
+    ('/x/t.txt', ('.wav',), False, False),
+    ('/x/t.txt', (), False, True),                     # no accept set = any file
+    ('/x/noext', (), False, True),
+    ('/x/noext', (), True, False),                     # dirs-only field rejects files
+])
+def test_accepts_path(path, accepts, dirs, want):
+    f = PathInput(accepts=accepts, accepts_dirs=dirs)
+    assert f.accepts_path(path) is want
+
+
+def test_accepts_path_dirs(tmp_path):
+    d = tmp_path / 'a folder'; d.mkdir()
+    f = PathInput(accepts_dirs=True)
+    assert f.accepts_path(str(d)) is True
+    f2 = PathInput(accepts=('.txt',))
+    assert f2.accepts_path(str(d)) is False
+
+
+async def test_drop_wav_with_action_list_focus_lands_in_vo_not_transcript(tmp_path):
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(app.SCREENS['inputs']()); await pilot.pause()
+        scr = app.screen
+        scr.query_one('#actions').focus(); await pilot.pause()
+        scr.focused.post_message(events.Paste('/tmp/x\\ y/vo\\ take.wav '))  # Terminal.app escapes every space
+        await pilot.pause()
+        assert scr.query_one('#vo', PathInput).value == '/tmp/x y/vo take.wav'
+        assert scr.query_one('#transcript', PathInput).value == 'transcript.txt'
+        assert scr.focused is scr.query_one('#vo', PathInput)
+
+
+async def test_drop_wav_while_transcript_focused_still_lands_in_vo(tmp_path):
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(app.SCREENS['inputs']()); await pilot.pause()
+        scr = app.screen
+        tr = scr.query_one('#transcript', PathInput)
+        tr.focus(); await pilot.pause()
+        tr.post_message(events.Paste("'/tmp/vo take.wav'"))               # iTerm-quoted
+        await pilot.pause()
+        assert scr.query_one('#vo', PathInput).value == '/tmp/vo take.wav'
+        assert tr.value == 'transcript.txt'
+        assert scr.focused is scr.query_one('#vo', PathInput)
+
+
+async def test_drop_docx_while_vo_focused_lands_in_transcript(tmp_path):
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(app.SCREENS['inputs']()); await pilot.pause()
+        scr = app.screen
+        vo = scr.query_one('#vo', PathInput)
+        vo.focus(); await pilot.pause()
+        vo.post_message(events.Paste('/tmp/report.docx')); await pilot.pause()
+        assert scr.query_one('#transcript', PathInput).value == '/tmp/report.docx'
+        assert vo.value == ''
+
+
+async def test_drop_unknown_extension_while_vo_focused_stays_in_vo(tmp_path):
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(app.SCREENS['inputs']()); await pilot.pause()
+        scr = app.screen
+        vo = scr.query_one('#vo', PathInput)
+        vo.focus(); await pilot.pause()
+        vo.post_message(events.Paste('/tmp/mystery.xyz')); await pilot.pause()
+        assert vo.value == '/tmp/mystery.xyz'          # zero accepting fields -> focus decides
+
+
+async def test_two_item_drop_fills_first_and_says_so(tmp_path):
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(app.SCREENS['inputs']()); await pilot.pause()
+        scr = app.screen
+        scr.query_one('#actions').focus(); await pilot.pause()
+        scr.focused.post_message(events.Paste('/tmp/a.wav /tmp/b.wav')); await pilot.pause()
+        vo = scr.query_one('#vo', PathInput)
+        assert vo.value == '/tmp/a.wav'
+        assert str(vo.border_subtitle) == '2 items dropped — used the first'
+
+
+async def test_folder_drop_regression_project_and_colours_screens(tmp_path):
+    real = tmp_path / 'proj dir'; real.mkdir()
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(app.SCREENS['project']()); await pilot.pause()
+        scr = app.screen
+        scr.query_one('#actions').focus(); await pilot.pause()
+        scr.focused.post_message(events.Paste(str(real).replace(' ', '\\ '))); await pilot.pause()
+        # #dir and #root both accept dirs -> ambiguous -> first visible field (as before)
+        assert scr.query_one('#dir', PathInput).value == str(real)
+        app.pop_screen(); await pilot.pause()
+        app.push_screen(app.SCREENS['colours']()); await pilot.pause()
+        scr = app.screen
+        assert not list(scr.query(PathInput))           # no path fields: drop is a no-op, no crash
+        scr.query_one('#actions').focus(); await pilot.pause()
+        scr.focused.post_message(events.Paste(str(real))); await pilot.pause()
+
+
+def test_transcript_load_rejects_non_txt_md_with_named_error(tmp_path):
+    from motion_pipeline import transcript
+    p = tmp_path / 'x.docx'
+    p.write_bytes(b'not really a docx')
+    with pytest.raises(ValueError) as ei:
+        transcript.load(str(p))
+    assert '.docx' in str(ei.value) and '0.7.0' in str(ei.value)

@@ -12,7 +12,7 @@ from textual.screen import Screen
 from textual.widgets import Label, Log, Static
 
 from .base import ActionMenu, MenuAppBase, SubmenuScreen
-from .paths import PathInput
+from .paths import PathInput, TRANSCRIPT_EXTS, VO_EXTS
 from .jobs import run_command
 
 
@@ -85,9 +85,9 @@ class _RenderScreenBase(SubmenuScreen):
     OUT_PLACEHOLDER = '<project>/renders/default'
 
     def compose_body(self):
-        from textual.widgets import Checkbox, Input
+        from textual.widgets import Checkbox
         yield Label('Output directory (drop a folder from Finder to paste its path)')
-        yield PathInput(id='outdir', placeholder=self.OUT_PLACEHOLDER)
+        yield PathInput(id='outdir', placeholder=self.OUT_PLACEHOLDER, accepts_dirs=True)
         yield Checkbox('Also write one joined full-length master (doubles the disk space of the masters)',
                        id='full-master')  # D2: opt-in, persisted per project
 
@@ -285,9 +285,9 @@ class InputsScreen(SubmenuScreen):
         from textual.containers import Horizontal
         from textual.widgets import Input, Select
         yield Label('transcript.txt path (drag a file/folder from Finder to paste)')
-        yield PathInput(id='transcript', value='transcript.txt')
+        yield PathInput(id='transcript', value='transcript.txt', accepts=TRANSCRIPT_EXTS)
         yield Label('voiceover file (optional)')
-        yield PathInput(id='vo', placeholder='audio/vo.wav')
+        yield PathInput(id='vo', placeholder='audio/vo.wav', accepts=VO_EXTS)
         with Horizontal(classes='path-row'):
             yield Label('wpm')
             yield Input(id='wpm', placeholder='140')
@@ -436,7 +436,8 @@ class FirstRunScreen(Screen):
             yield Static('motion-pipeline — where should your projects live?', classes='title')
             yield Static('Chosen once and remembered; change it later in step 0. '
                          'Drop a folder from Finder to paste its path.', classes='subtitle')
-            yield PathInput(id='root', value=config.projects_root() or config.SUGGESTED_ROOT)
+            yield PathInput(id='root', value=config.projects_root() or config.SUGGESTED_ROOT,
+                            accepts_dirs=True)
             yield ActionMenu([('save', 'Use this folder'), ('quit', 'Quit')], id='actions')
             yield Static('', id='error', classes='feedback-error')
             yield Static('↑↓ move · Enter/click select · q quit', classes='hint')

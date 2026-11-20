@@ -42,11 +42,12 @@ class ProjectScreen(SubmenuScreen):
             yield Input(id='name', placeholder='my-project')
         with Horizontal(classes='path-row'):
             yield Label('Directory (drop a folder from Finder)')
-            yield PathInput(id='dir', placeholder='optional — <projects folder>/<name>')
+            yield PathInput(id='dir', placeholder='optional — <projects folder>/<name>',
+                            accepts_dirs=True)
         with Horizontal(classes='path-row'):
             yield Label('Projects folder')
             yield PathInput(id='root', value=config.projects_root() or config.SUGGESTED_ROOT,
-                            placeholder='where new projects are created')
+                            placeholder='where new projects are created', accepts_dirs=True)
         with Horizontal(classes='format-row'):
             yield Label('Aspect')
             yield Select(ASPECT_OPTIONS, value='16:9', allow_blank=False, id='aspect')

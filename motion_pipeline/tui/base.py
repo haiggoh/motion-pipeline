@@ -270,17 +270,32 @@ class SubmenuScreen(Screen):
     def on_action_menu_chosen(self, event):
         self.run_action(event.action_id)
 
+    def route_drop(self, text: str):
+        """Route a dropped/pasted path by WHAT it is (spec A2): the single visible, enabled
+        PathInput that accepts it wins; only on ambiguity (zero or several accept) does the
+        focused PathInput decide, else the first visible PathInput."""
+        from .paths import PathInput, normalize_dropped_path
+        path = normalize_dropped_path(text)
+        if not path:
+            return None
+        fields = [f for f in self.query(PathInput) if f.visible and f.display and not f.disabled]
+        accepting = [f for f in fields if f.accepts_path(path)]
+        if len(accepting) == 1:
+            return accepting[0]
+        focused = self.focused
+        if isinstance(focused, PathInput) and focused in fields:
+            return focused
+        return fields[0] if fields else None
+
     def on_paste(self, event):
         """A Finder drop arrives as a paste to the FOCUSED widget. When that is not a text
-        field (e.g. the action list), route it to this screen's first path field."""
-        from .paths import PathInput
+        field (e.g. the action list), route it by file type via route_drop()."""
         if isinstance(self.focused, Input):
             return
-        fields = list(self.query(PathInput))
-        if not fields:
+        target = self.route_drop(event.text)
+        if target is None:
             return
         event.stop()
-        target = fields[0]
         target.focus()
         target.post_message(type(event)(event.text))
 

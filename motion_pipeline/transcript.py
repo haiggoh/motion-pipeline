@@ -8,6 +8,7 @@ Word ids are index-based and stable across re-parse as long as the word sequence
 (a section rename never moves them). serialize() reproduces the exact markup (round-trip).
 Malformed markup (`*unclosed`, `*` alone) raises naming the line number — never silently dropped.
 """
+import os
 import re
 
 SECTION_RE = re.compile(r'^#\s+(.+?)\s*$')
@@ -92,6 +93,10 @@ def serialize(model):
 
 
 def load(path):
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in ('.txt', '.md'):
+        raise ValueError(f"unsupported transcript format '{ext or '(none)'}' ({path}) — "
+                         f".txt/.md are supported; rtf/doc/docx/pdf arrive in 0.7.0")
     with open(path) as f:
         return parse(f.read())
 
