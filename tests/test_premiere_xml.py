@@ -81,7 +81,7 @@ def test_sequence_xml_reads_in_otio(tmp_path):
     tl = otio.adapters.read_from_file(out, adapter_name='fcp_xml')
     v = tl.tracks[0]
     assert len(v) == 2
-    assert v[1].range_in_parent().start.value == 50  # frames at the sequence timebase
+    assert v[1].range_in_parent().start_time.value == 50  # frames at the sequence timebase
 
 
 def test_remux_rewrites_sequence(tmp_path):
