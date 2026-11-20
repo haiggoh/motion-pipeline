@@ -1,6 +1,7 @@
 """0.5.0 Task 6: the menu's background test runs the REAL pipeline (v0.4.x shipped a
 placeholder `echo`), prepares its own inputs, names missing dependencies, and the preview
 image lands below the actions."""
+import hashlib
 import json
 import os
 import subprocess
@@ -8,7 +9,7 @@ import sys
 
 import pytest
 
-from motion_pipeline import render_cli
+from motion_pipeline import align, render_cli, transcript
 from motion_pipeline.tui.app import MenuApp
 from projfix import ROOT, make_project
 from tui_probe import on_screen
@@ -45,6 +46,76 @@ def test_invalid_override_and_missing_dependency_are_named(tmp_path):
     assert r.returncode == 3 and 'missing dependency: ffmpeg' in r.stderr and 'brew install' in r.stderr
 
 
+# ---- Task 8 (spec A4): a background test render needs no transcript ----
+
+
+def _snap(d, rels):
+    """existence + content hash per rel path — a test render must leave all of these equal."""
+    out = {}
+    for rel in rels:
+        p = os.path.join(d, rel)
+        out[rel] = hashlib.sha256(open(p, 'rb').read()).hexdigest() if os.path.isfile(p) else None
+    return out
+
+
+def test_test_render_needs_no_transcript(tmp_path, capsys):
+    """A4: mode=test on a project with NO transcript exits 0 (built-in sample used)."""
+    d = make_project(tmp_path / 'p')
+    for f in ('transcript.txt', 'transcript_model.json', 'timing.json'):
+        os.remove(os.path.join(d, f))
+    rc = render_cli.render(d, 'test', dry_run=True)
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert 'missing dependency: transcript' not in out, out
+    scratch = os.path.join(d, 'scratch', 'bg-test', '_proj')
+    model = json.load(open(os.path.join(scratch, 'transcript_model.json')))
+    assert model['sections'] and model['words'], 'sample transcript missing in scratch'
+    assert os.path.isfile(os.path.join(scratch, 'timing.json'))
+    pj = json.load(open(os.path.join(scratch, 'project.json')))
+    assert pj['vo'] is None, 'scratch project must null the voiceover'
+
+
+def test_test_render_first_section_only_and_real_project_untouched(tmp_path, capsys):
+    """A4: with a real transcript the scratch model holds only the FIRST section; the real
+    project's transcript_model.json / timing.json / src/ are byte-identical after."""
+    d = make_project(tmp_path / 'p')
+    with open(os.path.join(d, 'transcript.txt'), 'w') as f:
+        f.write('# Alpha\none two three\n\n# Beta\nfour five six\n')
+    tr = transcript.load(os.path.join(d, 'transcript.txt'))
+    json.dump(tr, open(os.path.join(d, 'transcript_model.json'), 'w'))
+    align.save_timing(os.path.join(d, 'timing.json'), align.estimate_timings(tr, wpm=140))
+    os.makedirs(os.path.join(d, 'src'), exist_ok=True)
+    open(os.path.join(d, 'src', 'sentinel'), 'w').write('x')
+    rels = ('transcript_model.json', 'timing.json', 'src/sentinel', 'src/scenes.json')
+    before = _snap(d, rels)
+    rc = render_cli.render(d, 'test', dry_run=True)
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert _snap(d, rels) == before, 'test render modified the real project'
+    model = json.load(open(os.path.join(d, 'scratch', 'bg-test', '_proj', 'transcript_model.json')))
+    assert [s['name'] for s in model['sections']] == ['Alpha']
+    assert all(w['section'] == 'Alpha' for w in model['words'])
+
+
+@pytest.mark.slow
+def test_test_render_real_produces_a_master(tmp_path):
+    """A4(d): a real test render (toolchain present) writes scene_*.mov into the project's
+    renders dir. Skips when hyperframes is absent (same rule as the other render tests)."""
+    import shutil
+    if not (shutil.which('hyperframes') or os.environ.get('MP_HYPERFRAMES')):
+        pytest.skip('hyperframes render toolchain not installed')
+    d = make_project(tmp_path / 'p')
+    for f in ('transcript.txt', 'transcript_model.json', 'timing.json'):
+        p = os.path.join(d, f)
+        if os.path.isfile(p):
+            os.remove(p)
+    rc = render_cli.render(d, 'test')
+    assert rc == 0
+    masters = [f for f in os.listdir(os.path.join(d, 'renders', 'default'))
+               if f.startswith('scene_') and f.endswith('.mov')]
+    assert masters, os.listdir(os.path.join(d, 'renders', 'default'))
+
+
 def test_setup_dry_run_runs_nothing(tmp_path, monkeypatch, capsys):
     """--setup --dry-run prints the commands and runs NOTHING (fake npm/npx exit 99)."""
     from motion_pipeline import render_cli
@@ -79,10 +150,11 @@ def test_old_node_refused(tmp_path, monkeypatch):
 
 
 def test_prepares_inputs_generates_and_hands_off_to_render_scene(tmp_path):
+    # full mode prepares the REAL project's inputs (Task 8: test mode uses the scratch copy)
     pd = make_project(tmp_path / 'p')
     for f in ('transcript_model.json', 'timing.json'):
         os.remove(os.path.join(pd, f))                  # what a menu-made project looks like
-    r = _cli('--project', pd, '--mode', 'test', '--dry-run')
+    r = _cli('--project', pd, '--mode', 'full', '--dry-run')
     assert r.returncode == 0, r.stdout + r.stderr
     assert os.path.isfile(os.path.join(pd, 'timing.json'))
     scenes = json.load(open(os.path.join(pd, 'src', 'scenes.json')))  # Task 12
@@ -104,10 +176,14 @@ def test_full_mode_iterates_every_variant(tmp_path):
 
 
 def test_missing_transcript_is_named(tmp_path):
+    # Task 8 (A4): a TEST render no longer needs the transcript (sample used — see the
+    # test_test_render_* tests); the named error remains for FULL renders
     pd = make_project(tmp_path / 'p')
     os.remove(os.path.join(pd, 'transcript.txt'))
-    r = _cli('--project', pd, '--mode', 'test', '--dry-run')
+    r = _cli('--project', pd, '--mode', 'full', '--dry-run')
     assert r.returncode == 3 and 'transcript' in r.stderr and 'step 5' in r.stderr
+    r = _cli('--project', pd, '--mode', 'test', '--dry-run')
+    assert r.returncode == 0 and 'missing dependency' not in r.stderr, r.stderr
 
 
 async def test_failed_render_shows_exit_and_hint_not_a_traceback(tmp_path):

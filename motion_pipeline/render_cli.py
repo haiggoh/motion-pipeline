@@ -302,8 +302,58 @@ def remux(project_dir, variant=None, out=None):
     return 0
 
 
+def prepare_test_project(project_dir):
+    """Task 8 (spec A4): build the scratch project for a background TEST render at
+    <project>/scratch/bg-test/_proj, rebuilt on every call. Copies project.json (with
+    vo: null — a voiceover never applies to the sample), scheme.json, variants/, fonts/
+    (whatever exists) and writes transcript_model.json + timing.json: the real transcript's
+    FIRST section when readable, else the built-in sample; timings are estimated at the
+    project's wpm either way (a test render is about the look). The real project's own
+    transcript_model.json / timing.json / src/ are never touched."""
+    import shutil
+
+    from . import align, project, sample_text, transcript
+    p = project.load(project_dir)
+    scratch = os.path.join(project_dir, 'scratch', 'bg-test', '_proj')
+    if os.path.isdir(scratch):
+        shutil.rmtree(scratch)
+    os.makedirs(scratch)
+    p2 = dict(p)
+    p2['vo'] = None
+    with open(os.path.join(scratch, 'project.json'), 'w') as f:
+        json.dump(p2, f, indent=2)
+        f.write('\n')
+    src = os.path.join(project_dir, 'scheme.json')
+    if os.path.isfile(src):
+        shutil.copy(src, os.path.join(scratch, 'scheme.json'))
+    for d in ('variants', 'fonts'):
+        src = os.path.join(project_dir, d)
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(scratch, d))
+    # transcript: the real first section when readable, else the built-in sample
+    tpath = os.path.join(project_dir, p.get('transcript') or 'transcript.txt')
+    model = None
+    if os.path.isfile(tpath):
+        try:
+            model = transcript.load(tpath)
+        except (ValueError, OSError, json.JSONDecodeError):
+            model = None
+    if model and model.get('sections'):
+        first = model['sections'][0]['name']
+        model = {'sections': [s for s in model['sections'] if s['name'] == first][:1],
+                 'words': [w for w in model['words'] if w.get('section') == first]}
+    else:
+        zones = [z for z in (p.get('zones') or []) if z.get('aspect', p['aspect']) == p['aspect']]
+        model = transcript.parse(sample_text.sample_markup(zones[0].get('section') if zones else None))
+    with open(os.path.join(scratch, 'transcript_model.json'), 'w') as f:
+        json.dump(model, f)
+    timing = align.estimate_timings(model, wpm=p.get('wpm', 140))
+    align.save_timing(os.path.join(scratch, 'timing.json'), timing)
+    return scratch
+
+
 def render(project_dir, mode, variant=None, out=None, dry_run=False, full_master=None):
-    from . import audio_mux, generate
+    from . import audio_mux, generate, project
     env = dict(os.environ)
     if full_master is not None:
         env['FULL_MASTER'] = '1' if full_master else '0'
@@ -316,27 +366,32 @@ def render(project_dir, mode, variant=None, out=None, dry_run=False, full_master
     # Set AFTER preflight(): it rebinds env, and a setdefault before that rebind is lost
     # (found 2026-11-19: the menu path still died on ModuleNotFoundError numpy).
     env.setdefault('MP_PYTHON', sys.executable)
-    p = prepare_inputs(project_dir)
+    if mode == 'test':
+        # Task 8 (A4): a test render runs on the SCRATCH project and needs no transcript;
+        # the real project's inputs/model/src stay byte-identical
+        p = project.load(project_dir)
+        work = prepare_test_project(project_dir)
+    else:
+        p = prepare_inputs(project_dir)
+        work = project_dir
     variants = p['variants'] if (variant == 'all' or (variant is None and mode == 'full')) \
         else [variant or 'default']
     rc = 0
     for v in variants:
         print(f'[render_cli] generate variant {v}', flush=True)
         # Task 12 test_frames mode: a test render caps every scene at 60 frames (E7)
-        generate.generate(project_dir, v, max_seconds=(60 / p['fps']) if mode == 'test' else None)
-        cmd = ['bash', os.path.join(PKG_ROOT, 'tools', 'render_scene.sh'), '--project', project_dir,
-               '--variant', v, '--mode', mode]
-        if out:
-            cmd += ['--out', out if len(variants) == 1 else os.path.join(out, v)]
+        generate.generate(work, v, max_seconds=(60 / p['fps']) if mode == 'test' else None)
+        vout = (out if len(variants) == 1 else os.path.join(out, v)) if out \
+            else os.path.join(project_dir, 'renders', v)
+        cmd = ['bash', os.path.join(PKG_ROOT, 'tools', 'render_scene.sh'), '--project', work,
+               '--variant', v, '--mode', mode, '--out', vout]
         if dry_run:
             cmd.append('--dry-run')
         print('[render_cli] ' + ' '.join(cmd), flush=True)
         rc = subprocess.call(cmd, env=env)
         if rc:
             return rc
-        vout = (out if len(variants) == 1 else os.path.join(out, v)) if out \
-            else os.path.join(project_dir, 'renders', v)
-        scenes = json.load(open(os.path.join(project_dir, 'src', 'scenes.json')))
+        scenes = json.load(open(os.path.join(work, 'src', 'scenes.json')))
         audio_mux.write_timeline(os.path.join(vout, 'timeline.json'), scenes, p['fps'])
         _write_sequence(project_dir, p, vout, v)  # Task 15c: Premiere-importable FCP 7 XML
     return rc
