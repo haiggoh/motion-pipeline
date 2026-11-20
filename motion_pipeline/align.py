@@ -23,15 +23,6 @@ FRAME_S = 0.010
 SR = 16000
 
 
-def _decode_pcm(audio_path):
-    r = subprocess.run(['ffmpeg', '-v', 'error', '-i', audio_path, '-ac', '1',
-                        '-ar', str(SR), '-f', 'f32le', '-'],
-                       capture_output=True, timeout=120)
-    if r.returncode != 0:
-        raise ValueError(f'cannot decode audio {audio_path}: {r.stderr.decode()[-200:]}')
-    return np.frombuffer(r.stdout, dtype=np.float32)
-
-
 def _envelope(pcm):
     n = int(SR * FRAME_S)
     frames = len(pcm) // n
@@ -152,10 +143,8 @@ def _assign_words(segs, nuclei, syl):
 def align(audio_path, transcript_model, source=None):
     """Classical aligner (Task 16 spec): voice-band energy envelope, pause runs, syllable
     nuclei, DP word assignment. Returns the pinned timing dict."""
-    pcm = _decode_pcm(audio_path)
-    env = _envelope(pcm)
-    if len(env) == 0:
-        raise ValueError(f'audio {audio_path} decodes to zero frames')
+    # X1: decode ONCE, in the voice band (the earlier plain _decode_pcm + _envelope were
+    # computed and then discarded — doubling part of the "computing timings" wait)
     # 1. decode is already mono 16 kHz; voice band:
     r = subprocess.run(['ffmpeg', '-v', 'error', '-i', audio_path, '-af', 'highpass=f=300,lowpass=f=3400',
                         '-ac', '1', '-ar', str(SR), '-f', 'f32le', '-'], capture_output=True, timeout=120)

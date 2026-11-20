@@ -166,3 +166,30 @@ def test_save_timing_writes_validated_json(tmp_path):
         align.save_timing(str(p), {'source': 'x', 'method': 'm', 'sections': {},
                                   'words': [{'id': 'w0', 'word': 'a', 'start': 1.0, 'end': 0.5,
                                              'confidence': 1}]})
+
+
+# golden captured from align() on the fixture BEFORE the single-decode change (X1),
+# with the path-bearing 'source' key excluded so the hash is path-independent
+GOLDEN_SHA256 = '878a32774eaf2ee62a84c607be7cb5ac868c644039024f226880d2830ba07a9f'
+
+
+def test_align_decodes_voiceover_once_and_output_is_unchanged(tmp_path, monkeypatch):
+    """X1: align() runs ffmpeg exactly ONCE (the voice-band decode); the earlier plain
+    _decode_pcm + _envelope were discarded. Output must be byte-identical to the golden."""
+    import hashlib
+    wav = tmp_path / 'vo.wav'
+    make_wav(wav, [(0.4, 0.2), (0.5, 0.2), (0.6, 0.0)])
+    calls = {'n': 0}
+    real_run = subprocess.run
+
+    def counting_run(*a, **kw):
+        calls['n'] += 1
+        return real_run(*a, **kw)
+
+    monkeypatch.setattr(subprocess, 'run', counting_run)
+    out = align.align(str(wav), TR)
+    assert calls['n'] == 1, f'ffmpeg ran {calls["n"]} times (want 1)'
+    align.validate_timing(out)
+    out.pop('source', None)   # embeds the audio path — excluded from the golden
+    digest = hashlib.sha256(json.dumps(out, sort_keys=True).encode()).hexdigest()
+    assert digest == GOLDEN_SHA256, 'timing output changed after the single-decode fix'
