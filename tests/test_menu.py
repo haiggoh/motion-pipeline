@@ -50,3 +50,32 @@ async def test_worker_streams_progress_and_stays_responsive_and_cancellable(tmp_
         assert any('line' in str(e) for e in app.screen.query_one('#log', RichLog).lines)
         await pilot.pause(1.2)
         assert len(app.screen.query_one('#log', RichLog).lines) <= n + 1
+
+
+@pytest.mark.asyncio
+async def test_graphics_gate_refreshes_on_resume_and_says_why(tmp_path):
+    """Task 5 (A5c): the graphics row is re-evaluated when the menu resumes (not only at
+    compose), and while disabled its label carries the reason."""
+    import os
+    from test_timing_gate import mk
+    d, p = mk(tmp_path / 'p')          # fresh timings -> gate open
+    app = MenuApp()
+    app.project_dir = d
+    async with app.run_test(size=(80, 24)) as pilot:
+        app.push_screen(app.SCREENS['menu']())
+        await pilot.pause()
+        menu = app.screen.query_one('#actions')
+        opt = menu.get_option('graphics')
+        assert not opt.disabled, 'fresh timings must enable the graphics step'
+        assert str(opt.prompt) == '6) Add motion graphics', str(opt.prompt)
+        # make timings stale, then leave and come back
+        with open(os.path.join(d, 'transcript.txt'), 'w') as f:
+            f.write('# S\na completely different transcript\n')
+        app.push_screen(app.SCREENS['colours']())
+        await pilot.pause()
+        app.pop_screen()
+        await pilot.pause()
+        menu = app.screen.query_one('#actions')
+        opt = menu.get_option('graphics')
+        assert opt.disabled, 'stale timings must disable the graphics step'
+        assert 'needs saved timings' in str(opt.prompt), str(opt.prompt)

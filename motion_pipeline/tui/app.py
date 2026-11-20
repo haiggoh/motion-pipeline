@@ -41,8 +41,6 @@ class MenuScreen(Screen):
             yield Static('motion-pipeline — Project Menu', classes='title')
             yield Static(self.subtitle(), classes='subtitle', id='subtitle')
             menu = ActionMenu(STEPS + [('quit', 'Quit')], spaced=True, first_number=0, nav_gap=0, id='actions')  # Quit is not a nav row
-            if not self.app.graphics_step_enabled():
-                menu.set_enabled('graphics', False)  # Task 21/23 gate: needs fresh saved timings
             yield menu
             with Vertical(classes='footer'):
                 yield Static('↑↓ move · Enter/click select · 0-7 step · q quit', classes='hint')
@@ -58,8 +56,24 @@ class MenuScreen(Screen):
         name = os.path.basename(pd) if pd else '(none — pick one in step 0)'
         return f'project: {name} · projects folder: {root}'
 
+    GRAPHICS_LABEL = 'Add motion graphics'
+    GRAPHICS_LABEL_GATED = 'Add motion graphics — needs saved timings (step 5)'
+
+    def on_mount(self):
+        self.refresh_gates()
+
     def on_screen_resume(self):
         self.query_one('#subtitle', Static).update(self.subtitle())
+        self.refresh_gates()   # Task 5 (A5c): re-evaluate when returning from a submenu
+
+    def refresh_gates(self):
+        """Enable/disable the graphics step and swap its label to say WHY when disabled."""
+        menu = self.query_one('#actions', ActionMenu)
+        ok = self.app.graphics_step_enabled()
+        menu.set_enabled('graphics', ok)
+        num = next((k for k, v in menu.numbers.items() if v == 'graphics'), '?')
+        menu.replace_option_prompt(
+            'graphics', f'{num}) {self.GRAPHICS_LABEL if ok else self.GRAPHICS_LABEL_GATED}')
 
     def on_action_menu_chosen(self, event):
         if event.action_id == 'quit':
@@ -280,6 +294,7 @@ class InputsScreen(SubmenuScreen):
     TITLE = 'Transcript + voiceover'
     ACTIONS = [('save', 'Save inputs + compute timings'), ('model', 'Install speech model')]  # Task 17/21
     CSS = '#actions { margin: 0; }'  # fit 80x24 with the engine-status line (Task 17)
+    CSS += '#timing-log { height: 3; min-height: 1; }'  # compact job log; 80x24 layout test decides
 
     def compose_body(self):
         from textual.containers import Horizontal
@@ -300,6 +315,8 @@ class InputsScreen(SubmenuScreen):
         yield Static('', id='status', classes='feedback')
         yield Static('', id='error', classes='feedback-error')
         yield Static('', id='engine-status', classes='muted')  # Task 17: speech-model engine line
+        from textual.widgets import RichLog
+        yield RichLog(id='timing-log', wrap=True, markup=False, classes='joblog', max_lines=200)
 
     def on_mount(self):
         from textual.widgets import Input, Select
@@ -321,20 +338,32 @@ class InputsScreen(SubmenuScreen):
         self.query_one('#language', Select).value = p.get('language', 'de')
         self.query_one('#aligner', Select).value = p.get('aligner', 'auto')
 
-    def _on_timing_saved(self, job):
-        """Task 21: after the prepare-only job, report the saved timing counts."""
+    def _on_timing_done(self, rc: int) -> None:
+        """Task 5 (A5): the prepare-only job is observed via run_command's on_finish (called
+        on the UI thread). rc 0 -> report the saved counts; else surface the named error
+        line from the job log (e.g. 'missing dependency: transcript …')."""
         import json as _json
+        from textual.widgets import RichLog
         pd = getattr(self.app, 'project_dir', None)
-        try:
-            timing = _json.load(open(os.path.join(pd, 'timing.json')))
-            model = _json.load(open(os.path.join(pd, 'transcript_model.json')))
-            self.app.call_from_thread(
-                self.query_one('#status', Static).update,
-                f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
-                f'engine {timing["method"]}')
-        except Exception as e:
-            self.app.call_from_thread(
-                self.query_one('#error', Static).update, f'error: {e}')
+        if rc == 0 and pd:
+            try:
+                timing = _json.load(open(os.path.join(pd, 'timing.json')))
+                model = _json.load(open(os.path.join(pd, 'transcript_model.json')))
+                self.query_one('#status', Static).update(
+                    f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
+                    f'engine {timing["method"]}')
+                self.query_one('#error', Static).update('')
+                return
+            except Exception as e:
+                self.query_one('#error', Static).update(f'error: {e}')
+                self.query_one('#status', Static).update('')
+                return
+        log = self.query_one('#timing-log', RichLog)
+        lines = [x.text if hasattr(x, 'text') else str(x) for x in log.lines]
+        named = [line for line in lines if line.startswith(('missing dependency:', 'error:'))]
+        msg = named[-1] if named else (lines[-1] if lines else f'failed (exit {rc})')
+        self.query_one('#error', Static).update(msg)
+        self.query_one('#status', Static).update('')
 
     def _update_engine_status(self):
         """Task 17: 'speech model: ggml-… (found)' / 'not installed — classical aligner in use'."""
@@ -384,16 +413,16 @@ class InputsScreen(SubmenuScreen):
             p['language'] = self.query_one('#language', Select).value
             p['aligner'] = self.query_one('#aligner', Select).value
             project_mod.save(pd, p)
-            # Task 21: compute timings in a job (prepare-only) so the graphics step can gate on them
-            import subprocess
-            import sys
-            self._timing_job = self.run_worker(
-                lambda: subprocess.run(
-                    [sys.executable, '-P', '-m', 'motion_pipeline.render_cli',
-                     '--project', pd, '--prepare-only'],
-                    capture_output=True, text=True),
-                thread=True, exclusive=True, name='prepare-only')
-            self.query_one('#status', Static).update('saving inputs… computing timings')
+            # Task 5 (A5): compute timings in a job (prepare-only) via jobs.run_command so the
+            # output streams into #timing-log and the exit code is OBSERVED (on_finish) — the
+            # graphics step gates on the result
+            from textual.widgets import RichLog
+            self._timing_job = run_command(
+                self.app,
+                self.app.prepare_cmd(pd),
+                self.query_one('#timing-log', RichLog),
+                on_finish=self._on_timing_done)
+            self.query_one('#status', Static).update('saving inputs… computing timings…')
         except (ValueError, json.JSONDecodeError) as e:
             self.query_one('#error', Static).update(f'error: {e}')
 
@@ -477,11 +506,19 @@ class MenuApp(MenuAppBase):
         except Exception:
             return False
 
-    def __init__(self, test_render_cmd=None, full_render_cmd=None):
+    def __init__(self, test_render_cmd=None, full_render_cmd=None, test_prepare_cmd=None):
         super().__init__()
         self._test_cmd = test_render_cmd
         self._full_cmd = full_render_cmd
+        self._prepare_cmd = test_prepare_cmd
         self.project_dir = None
+
+    def prepare_cmd(self, pd):
+        import sys
+        if self._prepare_cmd:
+            return list(self._prepare_cmd)
+        return [sys.executable, '-P', '-m', 'motion_pipeline.render_cli',
+                '--project', pd, '--prepare-only']
 
     def _cli(self, mode):
         import sys

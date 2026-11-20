@@ -87,3 +87,52 @@ async def test_language_and_aligner_saved(tmp_path):
         await save(pilot, scr)
         pj = project_json(d)
         assert pj['language'] == 'en' and pj['aligner'] == 'whisper' and pj['wpm'] == 140
+
+
+async def _wait_for(predicate, pilot, tries=60):
+    for _ in range(tries):
+        await pilot.pause(0.1)
+        if predicate():
+            return True
+    return False
+
+
+@pytest.mark.asyncio
+async def test_save_reports_prepare_failure_with_named_error(tmp_path):
+    """Task 5 (A5a/b): a failing prepare-only job must surface its named error line and must
+    not leave the status stuck on 'computing timings…'."""
+    d = mk_project(tmp_path / 'proj')
+    cmd = ['bash', '-c', 'echo "missing dependency: transcript /x — set it in step 5 (Transcript + voiceover)" >&2; exit 3']
+    app = MenuApp(test_prepare_cmd=cmd)
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        await save(pilot, scr)
+        ok = await _wait_for(
+            lambda: 'missing dependency' in str(scr.query_one('#error', Static).render()), pilot)
+        err = str(scr.query_one('#error', Static).render())
+        status = str(scr.query_one('#status', Static).render())
+        assert ok, f'error line never appeared: error={err!r} status={status!r}'
+        assert 'missing dependency: transcript /x' in err, err
+        assert 'computing timings' not in status, status
+
+
+@pytest.mark.asyncio
+async def test_save_success_reports_timing_counts(tmp_path):
+    """Task 5 (A5a): a successful prepare-only job reports the saved counts."""
+    d = mk_project(tmp_path / 'proj')
+    helper = tmp_path / 'fake_prepare.sh'
+    helper.write_text(
+        '#!/bin/bash\n'
+        f'printf \'{{"method": "estimated", "inputs": "x"}}\' > "{d}/timing.json"\n'
+        f'printf \'{{"words": [{{"id": "w1"}}, {{"id": "w2"}}], "sections": [{{"name": "A"}}]}}\' '
+        f'> "{d}/transcript_model.json"\n'
+        'exit 0\n')
+    app = MenuApp(test_prepare_cmd=['bash', str(helper)])
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        await save(pilot, scr)
+        ok = await _wait_for(
+            lambda: 'timings saved' in str(scr.query_one('#status', Static).render()), pilot)
+        status = str(scr.query_one('#status', Static).render())
+        assert ok, f'status never updated: {status!r}'
+        assert 'timings saved — 2 words, 1 sections, engine estimated' in status, status
