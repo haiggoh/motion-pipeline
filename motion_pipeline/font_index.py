@@ -181,10 +181,14 @@ def scan(dirs: list[str] | None = None, cache_path: str | None = None,
     return out
 
 
-def families(faces: list[Face]) -> dict[str, list[Face]]:
-    """family -> faces sorted by weight, upright before italic."""
+def families(faces: list[Face], include_hidden: bool = False) -> dict[str, list[Face]]:
+    """family -> faces sorted by weight, upright before italic. Apple-private families
+    (name starts with '.', e.g. '.SF NS') are dropped unless include_hidden — the cache
+    keeps them, the menu hides them like Font Book does (spec A6)."""
     out: dict[str, list[Face]] = {}
     for f in faces:
+        if not include_hidden and f['family'].startswith('.'):
+            continue
         out.setdefault(f['family'], []).append(f)
     for fam in out:
         out[fam].sort(key=lambda f: (f['weight'], f['italic']))

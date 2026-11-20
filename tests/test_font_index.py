@@ -58,6 +58,18 @@ def test_families_sorted_weight_upright_first():
     assert fams['X'][1]['italic'] is False and fams['X'][2]['italic'] is True
 
 
+def test_families_hides_apple_private_dot_families():
+    # Apple marks private UI/fallback families with a leading '.' (e.g. .SF NS, .Al Bayan PUA);
+    # Font Book hides them — the menu must too (spec A6). The cache keeps them.
+    def face(fam):
+        return {'family': fam, 'style': 'Regular', 'weight': 400, 'italic': False,
+                'path': 'p', 'index': 0, 'bundled': False}
+    faces = [face('.SF NS'), face('.Al Bayan PUA'), face('Arial')]
+    fams = font_index.families(faces)
+    assert list(fams) == ['Arial']
+    assert len(font_index.families(faces, include_hidden=True)) == 3
+
+
 def test_cache_hit_opens_no_font(tmp_path):
     d = tmp_path / 'fonts'
     d.mkdir()
