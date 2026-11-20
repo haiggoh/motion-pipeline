@@ -59,6 +59,11 @@ Button { background: ansi_default; color: ansi_default; border: none; }
 Button:focus { background: ansi_default; color: ansi_bright_blue; text-style: bold; }
 Button:hover { background: ansi_default; color: ansi_bright_blue; }
 Log { background: ansi_default; color: ansi_default; border: none; }
+/* RichLog ships its own `background: $surface` + `:focus { background-tint: $foreground 5% }`
+   (textual _rich_log.py) — the grey block behind job logs. csl look: no painted background,
+   no focus tint (Task 2 / spec A3). */
+RichLog { background: ansi_default; color: ansi_default; border: none; background-tint: ansi_default 0%; }
+RichLog:focus { background-tint: ansi_default 0%; }
 Header, Footer { background: ansi_default; color: ansi_bright_black; }
 .panel { padding: 0 1; background: ansi_default; height: 1fr; }
 .title { text-style: bold; padding: 0 0 1 0; }
