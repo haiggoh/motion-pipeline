@@ -110,6 +110,7 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 .variant-name { width: 24; }
 #preview, #error, #status { height: auto; }
 #font-preview { height: 1fr; width: 1fr; }   /* Task 13: the inline preview takes the remaining body space */
+#body > #fonts-top { min-height: 14; }  /* Task 13: the fonts role rows (family + 4x3) must stay on-screen at 80x24 */
 /* feedback lines (Task 4): one empty row above the text, dimmed; errors red */
 .feedback { margin: 1 0 0 0; color: ansi_bright_black; }
 .feedback-error { margin: 0; color: ansi_red; }  /* the one empty row goes before the block (D8) */

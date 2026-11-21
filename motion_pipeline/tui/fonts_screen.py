@@ -62,7 +62,7 @@ class FontsScreen(SubmenuScreen):
     BODY_FILL = True
 
     def compose_body(self):
-        with Horizontal():
+        with Horizontal(id='fonts-top'):
             with Vertical(id='fontlist'):
                 yield Label('Search fonts (bundled OFL first)')
                 yield Input(id='font-search', placeholder='type to filter…')

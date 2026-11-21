@@ -47,6 +47,7 @@ class ColoursScreen(SubmenuScreen):
     TITLE = 'CI colours'
     ACTIONS = [('derive', 'Derive & preview'), ('save', 'Save colours'),
                ('fix', 'Fix contrast'), ('force', 'Save anyway (ignore contrast)')]
+    CSS = '#actions { margin: 0; }'   # the two contrast actions cost rows; keep 80x24 fitting
 
     def compose_body(self):
         with Vertical(id='colour-rows'):

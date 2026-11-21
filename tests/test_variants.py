@@ -65,7 +65,7 @@ async def test_menu_checkbox_off_by_default_variant_saved_as_overlay(tmp_path):
         scr.query_one('#multi', Checkbox).value = True; await pilot.pause()
         scr.query_one('#variant', Select).value = '__new__'; await pilot.pause()
         scr.query_one('#variant-name', Input).value = 'warm'
-        scr.query_one('#accent', Input).value = '#ff6a00'; await pilot.pause()
+        scr.query_one('#accent', Input).value = 'ff6a00'; await pilot.pause()
         await choose(pilot, scr, 'save')
         assert 'warm' in str(scr.query_one('#preview').render()), str(scr.query_one('#error').render())
         assert json.loads(open(scheme.variant_path(pd, 'warm')).read()) == {'accent': '#ff6a00'}
@@ -73,10 +73,10 @@ async def test_menu_checkbox_off_by_default_variant_saved_as_overlay(tmp_path):
         assert json.loads(open(scheme.base_scheme_path(pd)).read())['accent'] == DARK['accent']  # base untouched
         # switching back to default shows the base colours
         scr.query_one('#variant', Select).value = 'default'; await pilot.pause()
-        assert scr.query_one('#accent', Input).value == DARK['accent']
+        assert scr.query_one('#accent', Input).value == DARK['accent'].lstrip('#')
         # an unsaved edit + Back leaves variants/ untouched
         scr.query_one('#variant', Select).value = 'warm'; await pilot.pause()
-        assert scr.query_one('#accent', Input).value == '#ff6a00'
-        scr.query_one('#accent', Input).value = '#00ff00'; await pilot.pause()
+        assert scr.query_one('#accent', Input).value == 'ff6a00'
+        scr.query_one('#accent', Input).value = '00ff00'; await pilot.pause()
         await choose(pilot, scr, 'back')
     assert json.loads(open(scheme.variant_path(pd, 'warm')).read()) == {'accent': '#ff6a00'}
