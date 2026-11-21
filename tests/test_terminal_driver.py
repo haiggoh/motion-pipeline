@@ -66,6 +66,9 @@ def _pty_run(term_program: str, tmp_path, timeout: float = 15.0) -> bytes:
     env = dict(os.environ)
     env['TERM_PROGRAM'] = term_program
     env['TERM'] = 'xterm-256color'
+    # the child runs with cwd=tmp_path AND -P (no cwd on sys.path): without PYTHONPATH it
+    # dies on "No module named motion_pipeline" and BOTH discriminant tests read vacuous
+    env['PYTHONPATH'] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env['HOME'] = str(tmp_path)
     env['MP_CONFIG_DIR'] = str(tmp_path / 'config')
     env['MP_MODELS_DIR'] = str(tmp_path / 'models')
