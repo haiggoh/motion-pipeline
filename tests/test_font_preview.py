@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-from textual.widgets import Input, Select, Static
+from textual.widgets import Checkbox, Input, Select, Static
 
 from motion_pipeline import font_index, project
 from motion_pipeline.font_index import BUNDLED_DIR
@@ -59,7 +59,7 @@ async def test_preview_updates_on_weight_change(tmp_path, monkeypatch):
         await pilot.pause()
         scr = app.screen
         await wait_scan(pilot, scr)
-        scr.query_one('#edit-role', Select).value = 'headline'
+        scr.query_one('#all-roles', Checkbox).value = False   # B2: untick -> headline is the target
         seq = next(s for f, s in scr._shown if f == 'Montserrat')
         scr.on_list_view_selected(SimpleNamespace(item=SimpleNamespace(id=f'font-{seq}')))
         await pilot.pause(0.5)  # debounce 150 ms
@@ -93,7 +93,7 @@ async def test_sharp_preview_opens_quicklook(tmp_path, monkeypatch):
         await pilot.pause()
         scr = app.screen
         await wait_scan(pilot, scr)
-        scr.query_one('#edit-role', Select).value = 'all'
+        scr.query_one('#all-roles', Checkbox).value = True    # B2: all roles (default)
         seq = next(s for f, s in scr._shown if f == 'Montserrat')
         scr.on_list_view_selected(SimpleNamespace(item=SimpleNamespace(id=f'font-{seq}')))
         await pilot.pause(0.5)

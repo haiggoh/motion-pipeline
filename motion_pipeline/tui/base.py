@@ -116,6 +116,8 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 .joblog { height: 1fr; min-height: 3; color: ansi_bright_black; }
 .role-row { height: 3; }
 .role-label { width: 11; padding: 1 1 0 0; }
+/* B2: the role row picked as edit target (or focused) highlights its label soft-blue */
+.role-row.-editing .role-label, .role-row:focus .role-label { color: ansi_bright_blue; }
 .weight { width: 16; }
 .role-row > Static { width: 1fr; }  /* role family label takes what is left (Task 9 row) */
 #fontlist { width: 1fr; }

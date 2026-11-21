@@ -10,8 +10,10 @@ import json
 import os
 import subprocess
 
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Input, Label, ListItem, ListView, LoadingIndicator, Select, Static
+from textual.message import Message
+from textual.widgets import Checkbox, Input, Label, ListItem, ListView, LoadingIndicator, Select, Static
 
 from .. import font_index
 from .. import font_preview
@@ -19,6 +21,29 @@ from .. import fonts as fonts_mod
 from .. import project as project_mod
 from .ansi_image import render_ansi_image
 from .base import SubmenuScreen
+
+
+class RoleRow(Horizontal):
+    """A role row is clickable/focusable (Enter or click): picking it selects the edit
+    target role (spec B2) and posts RoleRow.Picked."""
+
+    BINDINGS = [Binding('enter', 'pick', show=False)]
+    can_focus = True   # class attribute in Textual 8, not a ctor kwarg
+
+    class Picked(Message):
+        def __init__(self, role: str):
+            super().__init__()
+            self.role = role
+
+    def __init__(self, role: str, **kw):
+        super().__init__(classes='role-row', **kw)
+        self.role = role
+
+    def action_pick(self):
+        self.post_message(self.Picked(self.role))
+
+    def on_click(self, event):
+        self.post_message(self.Picked(self.role))
 
 
 def project_json_path(project_dir):
@@ -45,13 +70,11 @@ class FontsScreen(SubmenuScreen):
             with Vertical(id='editor'):
                 yield Static('Family: (none)', id='family')
                 for role in fonts_mod.ROLES:
-                    with Horizontal(classes='role-row'):
+                    with RoleRow(role):
                         yield Label(role, classes='role-label')
                         yield Static('(none)', id=f'role-{role}-family')
                         yield Select([], id=f'role-{role}-weight', allow_blank=True, classes='weight')
-                yield Select([('Headline', 'headline'), ('Label', 'label'), ('Body', 'body'),
-                             ('Emphasis', 'emphasis'), ('All roles', 'all')],
-                            id='edit-role', value='headline', allow_blank=False)
+                yield Checkbox('Apply to all roles', id='all-roles', value=True)   # B2: replaces the dropdown
                 yield Label('Preview')
                 yield Input(id='sample-text', value=font_preview.SAMPLE_TEXT)
                 yield Static('', id='font-preview')
@@ -65,6 +88,7 @@ class FontsScreen(SubmenuScreen):
         self._shown = []     # (family, seq)
         self._seq = 0
         self._role_family = {r: None for r in fonts_mod.ROLES}
+        self._edit_role = None      # None while "Apply to all roles" is on (B2)
         self._preview_token = 0
         self._refresh_list('')
         # the loader sits where the list will appear (never a bottom status row)
@@ -146,13 +170,31 @@ class FontsScreen(SubmenuScreen):
     def on_select_changed(self, event):
         self._schedule_preview()
 
+    def on_role_row_picked(self, event: RoleRow.Picked) -> None:
+        self._edit_role = event.role
+        self._refresh_editing()
+
+    def on_checkbox_changed(self, event) -> None:
+        if getattr(event.checkbox, 'id', None) == 'all-roles':
+            if not event.value and self._edit_role is None:
+                self._edit_role = 'headline'    # unticked with no row picked -> headline
+            self._refresh_editing()
+
+    def _refresh_editing(self):
+        all_on = bool(self.query_one('#all-roles', Checkbox).value)
+        for row in self.query(RoleRow):
+            row.set_class(not all_on and row.role == self._edit_role, '-editing')
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         seq = int(event.item.id.removeprefix('font-'))
         fam = next(s[0] for s in self._shown if s[1] == seq)
         self._selected = fam
         self.query_one('#family', Static).update(f'Family: {fam}')
-        target = self.query_one('#edit-role', Select).value
-        for role in (fonts_mod.ROLES if target == 'all' else (target,)):
+        if self.query_one('#all-roles', Checkbox).value:
+            targets = fonts_mod.ROLES
+        else:
+            targets = (self._edit_role or 'headline',)   # unticked with no row picked -> headline
+        for role in targets:
             self._set_role_family(role, fam)
         # P5: browsing copies NOTHING — a client face is copied into the project only on Save
         bundled = any(f['bundled'] for f in self._all[fam])

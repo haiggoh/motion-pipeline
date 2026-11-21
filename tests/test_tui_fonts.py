@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from textual.widgets import Input, ListView, Select, Static
+from textual.widgets import Checkbox, Input, ListView, Select, Static
 
 from motion_pipeline import font_index, project
 from motion_pipeline.font_index import BUNDLED_DIR
@@ -80,7 +80,8 @@ async def test_save_bundled_font_config_new_shape(tmp_path, monkeypatch):
         await pilot.pause()
         scr = app.screen
         await wait_scan(pilot, scr)
-        scr.query_one('#edit-role', Select).value = 'all'
+        # B2: all-roles checkbox is on by default (was the #edit-role dropdown)
+        assert scr.query_one('#all-roles', Checkbox).value is True
         seq = next(s for f, s in scr._shown if f == 'Montserrat')
         scr.on_list_view_selected(SimpleNamespace(item=SimpleNamespace(id=f'font-{seq}')))
         await pilot.pause()

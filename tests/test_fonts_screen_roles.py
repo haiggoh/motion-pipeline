@@ -5,7 +5,7 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-from textual.widgets import ListView, LoadingIndicator, Select, Static
+from textual.widgets import Checkbox, Label, ListView, LoadingIndicator, Select, Static
 
 from motion_pipeline import font_index, project
 from motion_pipeline.font_index import BUNDLED_DIR
@@ -43,6 +43,60 @@ async def wait_scan(pilot, scr, timeout=10.0):
 def pick(scr, family):
     seq = next(s for f, s in scr._shown if f == family)
     scr.on_list_view_selected(SimpleNamespace(item=SimpleNamespace(id=f'font-{seq}')))
+
+
+# ---- Task 12 (spec B2): "Apply to all roles" checkbox + clickable role rows ----
+
+@pytest.mark.asyncio
+async def test_all_roles_checkbox_default_on_picks_every_role(tmp_path, monkeypatch):
+    fake_scan(tmp_path, monkeypatch)
+    project.save(str(tmp_path), project.default_project('demo'))
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(FontsScreen())
+        await pilot.pause()
+        scr = app.screen
+        await wait_scan(pilot, scr)
+        assert scr.query_one('#all-roles', Checkbox).value is True   # default ON (user)
+        pick(scr, 'Montserrat')
+        await pilot.pause()
+        for role in ('headline', 'label', 'body', 'emphasis'):
+            assert 'Montserrat' in str(scr.query_one(f'#role-{role}-family', Static).render()), role
+        assert not any(r.has_class('-editing') for r in scr.query('.role-row'))
+
+
+@pytest.mark.asyncio
+async def test_untick_click_role_row_applies_to_that_role_only_and_highlights(tmp_path, monkeypatch):
+    fake_scan(tmp_path, monkeypatch)
+    project.save(str(tmp_path), project.default_project('demo'))
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(FontsScreen())
+        await pilot.pause()
+        scr = app.screen
+        await wait_scan(pilot, scr)
+        scr.query_one('#all-roles', Checkbox).value = False     # untick -> headline is the target
+        await pilot.pause()
+        from motion_pipeline.tui.fonts_screen import RoleRow
+        row = next(r for r in scr.query(RoleRow) if r.role == 'label')
+        row.post_message(RoleRow.Picked('label'))               # click the label row
+        await pilot.pause()
+        assert scr._edit_role == 'label'
+        pick(scr, 'Montserrat')
+        await pilot.pause()
+        assert 'Montserrat' in str(scr.query_one('#role-label-family', Static).render())
+        for role in ('headline', 'body', 'emphasis'):
+            assert '(none)' in str(scr.query_one(f'#role-{role}-family', Static).render()), role
+        # the picked row is highlighted soft-blue (computed style, not CSS text)
+        lbl = row.query_one('.role-label', Label)
+        assert lbl.styles.color is not None and lbl.styles.color.ansi == 12, lbl.styles.color  # bright_blue
+        assert row.has_class('-editing')
+        # tick again -> highlight removed
+        scr.query_one('#all-roles', Checkbox).value = True
+        await pilot.pause()
+        assert not row.has_class('-editing')
 
 
 @pytest.mark.asyncio
@@ -84,10 +138,13 @@ async def test_pick_family_for_headline_only(tmp_path, monkeypatch):
         await pilot.pause()
         scr = app.screen
         await wait_scan(pilot, scr)
-        scr.query_one('#edit-role', Select).value = 'headline'
+        # B2: the dropdown is gone; untick all-roles so the pick applies to headline only
+        scr.query_one('#all-roles', Checkbox).value = False
+        await pilot.pause()
         pick(scr, 'Helvetica')
         await pilot.pause()
         assert 'Helvetica' in str(scr.query_one('#role-headline-family', Static).render())
+        assert '(none)' in str(scr.query_one('#role-body-family', Static).render())
         assert str(scr.query_one('#role-body-family', Static).render()) == '(none)'  # untouched
 
 
@@ -121,7 +178,8 @@ async def test_save_invalid_config_writes_nothing(tmp_path, monkeypatch):
         await pilot.pause()
         scr = app.screen
         await wait_scan(pilot, scr)
-        scr.query_one('#edit-role', Select).value = 'all'
+        # B2: all-roles is the default; no dropdown to set
+        assert scr.query_one('#all-roles', Checkbox).value is True
         pick(scr, 'Montserrat')
         scr._all['Montserrat'] = []  # gate must fail: no faces left for the selected family
         await pilot.pause()
