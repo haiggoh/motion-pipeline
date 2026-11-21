@@ -55,6 +55,7 @@ async def test_fonts_screen_names_corrupt_project_json(tmp_path, monkeypatch):
     async with app.run_test(size=(100, 30)) as pilot:
         app.push_screen(FontsScreen())
         await pilot.pause()
+        await wait_scan(pilot, app.screen)   # _prefill_from_project runs at scan end
         err = str(app.screen.query_one('#error', Static).render())
         assert 'project.json' in err, f'error does not name project.json: {err!r}'
         scr = app.screen
