@@ -217,7 +217,7 @@ async def test_background_test_real_render_shows_image_below_actions(tmp_path):
         app.push_screen(app.SCREENS['bgtest']()); await pilot.pause()
         from tui_probe import choose
         await choose(pilot, app.screen, 'run')
-        for _ in range(1800):                     # up to ~3 min
+        for _ in range(3600):                     # up to ~6 min (render window was too tight under gate load)
             await pilot.pause(0.1)
             if 'exit' in str(app.screen.query_one('#status').render()):
                 break
