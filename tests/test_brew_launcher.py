@@ -59,11 +59,19 @@ def test_brew_launcher_uses_P_and_resyncs_deps_on_version_change(tmp_path):
     assert r.returncode == 0, r.stderr
     assert '-P' in r.stdout and 'motion_pipeline' in r.stdout, r.stdout  # -P cwd isolation in the exec line
     venv = os.path.join(str(home), '.cache/homebrew/motion-pipeline/venv')
-    assert os.path.isfile(os.path.join(venv, '.deps-0.6.0-test'))  # dependency stamp written
+    stamp = os.path.join(venv, '.mp-deps')
+    assert os.path.isfile(stamp)                                    # deps stamp written
+    import hashlib
+    assert open(stamp).read() == hashlib.sha256(b'textual').hexdigest()
     assert 'install --quiet textual' in pip_log.read_text()       # deps installed once
 
-    write_launcher('0.6.1-test')  # version bump -> new stamp name -> resync
     r = subprocess.run(['bash', str(launcher), '--version'], capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
-    assert os.path.isfile(os.path.join(venv, '.deps-0.6.1-test'))
-    assert pip_log.read_text().count('install --quiet textual') == 2  # resynced on version change
+    assert pip_log.read_text().count('install --quiet textual') == 1  # same stamp -> no reinstall
+
+    # a brew upgrade adding a dep (0.7.0's pypdf) changes the deps string -> stamp differs -> resync
+    (libexec / 'pyproject.toml').write_text('[project]\nname = "motion-pipeline"\ndependencies = ["textual", "pypdf>=4"]\n')
+    r = subprocess.run(['bash', str(launcher), '--version'], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert open(stamp).read() == hashlib.sha256(b'textual pypdf>=4').hexdigest()
+    assert pip_log.read_text().count('install --quiet textual pypdf>=4') == 1  # resynced on deps change
