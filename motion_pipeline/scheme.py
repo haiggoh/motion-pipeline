@@ -186,51 +186,58 @@ def suggest_contrast_fix(scheme):
     failures = contrast_failures(scheme)
     if not failures:
         return []
-    dark = scheme['background_dark']
     margin = 0.05
+    FLOORS = (('text', CONTRAST_TEXT), ('accent', CONTRAST_ACCENT))
 
-    def best_move(key, hexv, floor, direction):
-        """Smallest |dL| moving hexv (key) so EVERY pair passes; None otherwise."""
+    def all_pass(target):
+        """EVERY pair over ITS OWN floor (+margin) — one fix must not break the other pair."""
+        return all(contrast(target[role], target['background_dark']) >= floor + margin
+                   for role, floor in FLOORS)
+
+    def best_move(target, key, direction):
+        """Smallest |dL| moving target[key] in the given direction so all pairs pass."""
+        hexv = target[key]
+
         def reaches(new_hex):
-            s = dict(scheme)
+            s = dict(target)
             s[key] = new_hex
-            return all(contrast(s[role_key], s['background_dark']) >= floor + margin
-                       for role_key in ('text', 'accent'))
+            return all_pass(s)
+
         return _search_dL(hexv, direction, reaches)
 
-    def pair_candidates(fg_key, fg, floor):
-        """(key, hexv, direction, dL) options for one failing pair: move the fg or the bg,
-        in the direction that increases contrast (bg directions tried both ways)."""
+    def pair_candidates(target, fg_key):
+        """(key, direction, dL) options for one failing pair: move the fg or the bg, in the
+        direction that increases contrast (bg tried both ways)."""
         out = []
+        fg, dark = target[fg_key], target['background_dark']
         lighter_fg = _oklab_L(fg) > _oklab_L(dark)
         for d in ((1, -1) if lighter_fg else (-1, 1)):
-            mv = best_move('background_dark', dark, floor, d)
+            mv = best_move(target, 'background_dark', d)
             if mv is not None:
-                out.append(('background_dark', dark, d, mv))
-            mv = best_move(fg_key, fg, floor, d)
+                out.append(('background_dark', d, mv))
+            mv = best_move(target, fg_key, d)
             if mv is not None:
-                out.append((fg_key, fg, d, mv))
+                out.append((fg_key, d, mv))
         return out
 
     if len(failures) == 1:
         d = failures[0]
-        cands = pair_candidates(d['fg_key'], scheme[d['fg_key']], d['floor'])
+        cands = pair_candidates(scheme, d['fg_key'])
         if not cands:
             return []
-        key, hexv, direction, dL = min(cands, key=lambda c: c[3])
-        return [{'key': key, 'old': hexv, 'new': _shift_L(hexv, direction * dL)}]
+        key, direction, dL = min(cands, key=lambda c: c[2])
+        return [{'key': key, 'old': scheme[key], 'new': _shift_L(scheme[key], direction * dL)}]
 
     # both pairs fail: prefer ONE background_dark move that fixes both
+    dark = scheme['background_dark']
     lighter_text = _oklab_L(scheme['text']) > _oklab_L(dark)
     for d in ((-1, 1) if lighter_text else (1, -1)):
         def both_pass(new_dark):
-            s = dict(scheme, background_dark=new_dark)
-            return all(contrast(s[role], new_dark) >= f + margin
-                       for role, f in (('text', CONTRAST_TEXT), ('accent', CONTRAST_ACCENT)))
+            return all_pass(dict(scheme, background_dark=new_dark))
         dL = _search_dL(dark, d, both_pass)
         if dL is not None:
             return [{'key': 'background_dark', 'old': dark, 'new': _shift_L(dark, d * dL)}]
-    # sequential: fix the worst pair first, then the remaining one
+    # sequential: fix the worst pair first against the WORKING scheme, then the rest
     working = dict(scheme)
     changes = []
     for _ in range(2):
@@ -239,14 +246,12 @@ def suggest_contrast_fix(scheme):
             return changes
         remaining.sort(key=lambda d: d['ratio'])
         d = remaining[0]
-        cands = pair_candidates(d['fg_key'], working[d['fg_key']], d['floor'])
+        cands = pair_candidates(working, d['fg_key'])
         if not cands:
             return []
-        key, hexv, direction, dL = min(cands, key=lambda c: c[3])
-        new = _shift_L(hexv if key != 'background_dark' else working['background_dark'],
-                       direction * dL)
-        changes.append({'key': key, 'old': working[key], 'new': new})
-        working[key] = new
+        key, direction, dL = min(cands, key=lambda c: c[2])
+        changes.append({'key': key, 'old': working[key], 'new': _shift_L(working[key], direction * dL)})
+        working[key] = changes[-1]['new']
     return changes if not contrast_failures(working) else []
 
 

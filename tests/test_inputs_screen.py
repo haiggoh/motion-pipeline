@@ -206,6 +206,29 @@ async def test_no_vo_keeps_editable_wpm_and_staleness(tmp_path):
         assert scr.query_one('#language', Select).value == 'auto'   # new default
 
 
+@pytest.mark.asyncio
+async def test_clearing_vo_restores_editable_wpm_and_save_survives_empty(tmp_path):
+    """Review finding: clearing the VO swaps the indicator back to an editable wpm Input;
+    saving with the field emptied must not crash (int('')) nor wipe the saved wpm."""
+    d = mk_project(tmp_path / 'proj', vo='audio/vo.wav', wpm=180)
+    app = MenuApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        assert not scr.query('#wpm')          # VO set -> indicator instead
+        scr.query_one('#vo', Input).value = ''
+        await pilot.pause(0.3)
+        wpm = scr.query_one('#wpm', Input)
+        assert wpm is not None and wpm.value == '180', wpm.value   # previous wpm preserved
+        wpm.value = ''                        # user clears it
+        await pilot.pause(0.3)
+        await save(pilot, scr)
+        await pilot.pause(0.3)
+        pj = project_json(d)
+        assert pj['vo'] is None and pj['wpm'] == 180, pj   # no crash, wpm kept
+        err = str(scr.query_one('#error', Static).render())
+        assert 'invalid literal' not in err, err
+
+
 # ---- Task 18 (spec B4): the speech model installs itself on first launch ----
 
 @pytest.mark.asyncio

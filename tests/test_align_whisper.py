@@ -137,3 +137,11 @@ def test_ensure_model_bad_mp_model_url_is_loud(tmp_path, monkeypatch):
     monkeypatch.setenv('MP_MODEL_URL', 'ftp://x')
     with pytest.raises(ValueError, match='MP_MODEL_URL'):
         align_whisper.ensure_model(str(tmp_path / 'm'), url=None)
+
+
+def test_ensure_model_explicit_url_beats_env(tmp_path, monkeypatch):
+    """Review finding: an explicit url argument must win over MP_MODEL_URL."""
+    src = _fake_model(tmp_path, monkeypatch)
+    monkeypatch.setenv('MP_MODEL_URL', 'file:///nonexistent/env-url')
+    out = align_whisper.ensure_model(str(tmp_path / 'm'), url='file://' + str(src))
+    assert open(out, 'rb').read() == b'fake-model-bytes'   # the explicit url was used

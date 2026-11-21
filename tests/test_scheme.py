@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from motion_pipeline.scheme import (PALETTE_KEYS, contrast, contrast_failures,
+from motion_pipeline.scheme import (CONTRAST_TEXT, PALETTE_KEYS, contrast, contrast_failures,
                                     derive_palette, load_scheme, mix, resolve_variant,
                                     save_scheme, srgb_to_oklab, suggest_contrast_fix,
                                     validate_scheme, variant_path, _hex_to_srgb)
@@ -137,6 +137,21 @@ def test_suggest_fix_does_not_break_the_other_pair():
     assert fix
     applied = {**s, **{e['key']: e['new'] for e in fix}}
     assert contrast_failures(applied) == [], (fix, applied)
+
+
+def test_suggest_fix_uses_each_roles_own_floor():
+    """Review finding: text fails (needs 4.5) while accent passes at 3.5 (> its 3.0 floor) —
+    a fix must still be suggested; and a candidate breaking the OTHER pair's floor is rejected."""
+    # accent passes at ~3.5, text fails hard on the dark bg
+    s = {'name': 'x', 'background_dark': '#0b1a4c', 'background_light': '#1251a6',
+         'accent': '#ffb400', 'text': '#1a2a6b'}     # text dark-on-dark -> fails 4.5
+    fix = suggest_contrast_fix(s)
+    assert fix, 'no fix suggested although accent passes at >3:1'
+    applied = {**s, **{e['key']: e['new'] for e in fix}}
+    f = contrast_failures(applied)
+    assert f == [] or all(d['ratio'] >= d['floor'] - 1e-9 for d in f)  # floors are per-role
+    # and the text floor must actually hold after applying
+    assert contrast(applied['text'], applied['background_dark']) >= CONTRAST_TEXT
 
 
 def test_suggest_fix_empty_when_unfixable():

@@ -145,11 +145,12 @@ def ensure_model(models_dir, url=None, progress=None):
     dst = os.path.join(models_dir, MODEL_NAME)
     if os.path.isfile(dst) and os.path.getsize(dst) == MODEL_SIZE:
         return dst
-    env_url = os.environ.get('MP_MODEL_URL')
-    if env_url is not None:
-        if not env_url.startswith(('http://', 'https://', 'file://')):
-            raise ValueError(f'MP_MODEL_URL is set but is not an http(s)/file URL: {env_url!r}')
-        url = env_url
+    if url is None:   # explicit argument wins over the env override (review finding)
+        env_url = os.environ.get('MP_MODEL_URL')
+        if env_url is not None:
+            if not env_url.startswith(('http://', 'https://', 'file://')):
+                raise ValueError(f'MP_MODEL_URL is set but is not an http(s)/file URL: {env_url!r}')
+            url = env_url
     url = url or MODEL_URL
     os.makedirs(models_dir, exist_ok=True)
     part = dst + '.part'

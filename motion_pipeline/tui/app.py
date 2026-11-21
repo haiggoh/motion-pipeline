@@ -381,6 +381,16 @@ class InputsScreen(SubmenuScreen):
         self._sync_wpm_field()
         self._update_wpm_indicator()
 
+    def _project_wpm(self):
+        pd = getattr(self.app, 'project_dir', None)
+        if not pd or not os.path.isfile(os.path.join(pd, 'project.json')):
+            return None
+        try:
+            from .. import project as project_mod
+            return project_mod.load(pd).get('wpm')
+        except (ValueError, OSError):
+            return None
+
     def _sync_wpm_field(self):
         """B4: with a voiceover set, the wpm Input is replaced in place by a muted indicator
         (the VO's measured rate); without a VO it stays the editable Input."""
@@ -395,7 +405,9 @@ class InputsScreen(SubmenuScreen):
             inp.remove()
         elif not vo and has_ind and not has_input:
             ind = self.query_one('#wpm-indicator', Static)
-            inp = Input(id='wpm', placeholder='140')
+            # review finding: keep the saved wpm in the restored field (never wipe it)
+            last = str(getattr(self, '_last_wpm', None) or self._project_wpm() or 140)
+            inp = Input(id='wpm', value=last, placeholder='140')
             ind.parent.mount(inp, before=ind)
             ind.remove()
 
@@ -501,8 +513,10 @@ class InputsScreen(SubmenuScreen):
             p['transcript'] = self.query_one('#transcript', Input).value.strip()
             p['vo'] = self.query_one('#vo', Input).value.strip() or None
             if not p['vo']:
-                p['wpm'] = int(self.query_one('#wpm', Input).value.strip())   # B4: with a VO the
-            p['language'] = self.query_one('#language', Select).value          # wpm is measured, not read
+                raw_wpm = self.query_one('#wpm', Input).value.strip()
+                # B4: with a VO the wpm is measured, not read; an emptied field keeps the saved value
+                p['wpm'] = int(raw_wpm) if raw_wpm else p.get('wpm', 140)
+            p['language'] = self.query_one('#language', Select).value
             p['aligner'] = self.query_one('#aligner', Select).value
             project_mod.save(pd, p)
             # Task 5 (A5): compute timings in a job (prepare-only) via jobs.run_command so the
