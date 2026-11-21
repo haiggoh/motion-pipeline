@@ -93,8 +93,10 @@ Header, Footer { background: ansi_default; color: ansi_bright_black; }
 /* filled swatch = a solid colour block; only an EMPTY swatch is framed (+ ░ marker) */
 .swatch { width: 6; height: 3; content-align: center middle; color: ansi_bright_black; }
 .swatch.-empty { border: round ansi_bright_black; }
-/* a field's frame (2) + padding (2) eat 4 columns: hex needs 7 chars + cursor */
-.hexfield { width: 12; padding: 0 1; }
+/* a field's frame (2) + padding (2) eat 4 columns: hex needs 6 chars + cursor; the '#'
+   label sits OUTSIDE the field (B1) and takes its own column */
+.hexfield { width: 11; padding: 0 1; }
+.hash-label { width: 1; padding: 1 0 0 0; color: ansi_bright_black; }
 .hsl-label { width: 2; padding: 1 0 0 1; color: ansi_bright_black; }
 .hsl { width: 8; padding: 0 1; }
 #variant-bar { height: 3; }

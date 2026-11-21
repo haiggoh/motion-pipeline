@@ -44,7 +44,7 @@ async def test_swatches_and_hsl_sync_live(tmp_path, monkeypatch):
         scr.query_one('#s-accent', Input).value = '100'
         scr.query_one('#l-accent', Input).value = '50'
         await pilot.pause()
-        assert scr.query_one('#accent', Input).value == '#00ff00'
+        assert scr.query_one('#accent', Input).value == '00ff00'   # B1: bare hex in the field
         assert '0, 255, 0' in str(scr.query_one('#swatch-accent', Static).styles.background)
 
 
@@ -70,16 +70,16 @@ async def test_derive_preview_save_and_reedit(tmp_path):
         saved = json.loads(p.read_text())
         assert {k: saved[k] for k in COLOUR_KEYS} == {k: DARK[k] for k in COLOUR_KEYS}
         # re-edit: change accent, save again -> persisted
-        scr.query_one('#accent', Input).value = '#00c2ff'
+        scr.query_one('#accent', Input).value = '00c2ff'   # B1: bare hex in the field
         await pilot.pause()
         await choose(pilot, scr, 'save')
         await pilot.pause()
         await pilot.pause()
         assert json.loads(p.read_text())['accent'] == '#00c2ff'
-        # re-edit: re-opening the screen prefills the saved values
+        # re-edit: re-opening the screen prefills the saved values (bare hex, '#' in the label)
         app.pop_screen(); await pilot.pause()
         app.push_screen(app.SCREENS['colours']()); await pilot.pause()
-        assert app.screen.query_one('#accent', Input).value == '#00c2ff'
+        assert app.screen.query_one('#accent', Input).value == '00c2ff'
         assert '0, 194, 255' in str(app.screen.query_one('#swatch-accent', Static).styles.background)
 
 
@@ -115,8 +115,9 @@ async def test_colour_rows_labelled_swatches_visible_hex_fully_shown(tmp_path):
         assert labels == ['background dark', 'background light', 'accent', 'text']
         for k in COLOUR_KEYS:
             inp = scr.query_one(f'#{k}', Input)
-            assert inp.value == DARK[k]                       # prefilled from the project
-            assert inp.content_region.width >= len(DARK[k]) + 1, f'{k}: hex cut off ({inp.content_region})'
+            # B1: the '#' moved OUTSIDE the field (a .hash-label) — the field holds bare hex
+            assert inp.value == DARK[k].lstrip('#'), (k, inp.value)
+            assert inp.content_region.width >= len(DARK[k]), f'{k}: hex cut off ({inp.content_region})'
             sw = scr.query_one(f'#swatch-{k}', Static)
             assert on_screen(app, sw) and sw.region.width >= 4
             assert tuple(sw.styles.background.rgb) == sm._hex_to_srgb(DARK[k]) or \

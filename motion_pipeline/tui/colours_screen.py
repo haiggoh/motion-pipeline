@@ -20,6 +20,25 @@ COLOUR_KEYS = scheme_mod.COLOUR_KEYS
 NEW_VARIANT = '__new__'
 
 
+class PasteHexInput(Input):
+    """Hex field that applies its restrict/max_length to PASTES too (B1): whitespace and one
+    leading '#' are stripped, the rest lowercased; a valid 3/6-digit paste is accepted whole,
+    anything else is refused with no change — never truncated into a wrong colour."""
+
+    def _on_paste(self, event) -> None:
+        text = (event.text or '').strip()
+        if text.startswith('#'):
+            text = text[1:]
+        text = text.lower()
+        if len(text) in (3, 6) and all(c in '0123456789abcdef' for c in text):
+            event.prevent_default()
+            event.stop()
+            self.value = text
+        else:
+            event.prevent_default()
+            event.stop()   # invalid paste: leave the field exactly as it was
+
+
 def scheme_path(project_dir):
     return scheme_mod.base_scheme_path(project_dir)
 
@@ -34,13 +53,18 @@ class ColoursScreen(SubmenuScreen):
                 with Horizontal(classes='colour-row'):
                     yield Label(key.replace('_', ' '), classes='colour-label')
                     yield Static('░░', id=f'swatch-{key}', classes='swatch -empty')
-                    yield Input(id=key, placeholder='#rrggbb', classes='hexfield')
+                    yield Label('#', classes='hash-label')   # fixed, outside the field (B1)
+                    yield PasteHexInput(id=key, placeholder='rrggbb', classes='hexfield',
+                                        restrict='[0-9a-fA-F]*', max_length=6)
                     yield Label('H', classes='hsl-label')
-                    yield Input(id=f'h-{key}', placeholder='H', classes='hsl')
+                    yield Input(id=f'h-{key}', placeholder='H', classes='hsl',
+                                restrict='[0-9]*', max_length=3)
                     yield Label('S', classes='hsl-label')
-                    yield Input(id=f's-{key}', placeholder='S', classes='hsl')
+                    yield Input(id=f's-{key}', placeholder='S', classes='hsl',
+                                restrict='[0-9]*', max_length=3)
                     yield Label('L', classes='hsl-label')
-                    yield Input(id=f'l-{key}', placeholder='L', classes='hsl')
+                    yield Input(id=f'l-{key}', placeholder='L', classes='hsl',
+                                restrict='[0-9]*', max_length=3)
         with Horizontal(id='variant-bar'):
             yield Checkbox('Multiple colour variants', id='multi')
             yield Select([('default', 'default')], id='variant', value='default',
@@ -57,6 +81,7 @@ class ColoursScreen(SubmenuScreen):
 
     def on_mount(self):
         self._echo = set()
+        self._hsl_prev = {}   # last in-range raw value per H/S/L field (range refusal, B1)
         pd = self.project_dir()
         variants = scheme_mod.list_variants(pd) if pd else ['default']
         multi = len(variants) > 1
@@ -95,7 +120,7 @@ class ColoursScreen(SubmenuScreen):
 
     def set_colour(self, key, hexv):
         hh, ss, ll = scheme_mod.hex_to_hsl(hexv)
-        self._set_field(key, hexv)
+        self._set_field(key, hexv.lstrip('#'))   # the '#' lives in the label now (B1)
         self._set_field(f'h-{key}', str(hh))
         self._set_field(f's-{key}', str(ss))
         self._set_field(f'l-{key}', str(ll))
@@ -154,6 +179,18 @@ class ColoursScreen(SubmenuScreen):
             key = wid[2:]
             if key not in COLOUR_KEYS:
                 return
+            raw = event.value.strip()
+            if raw.isdigit():
+                cap = 360 if wid[0] == 'h' else 100
+                if int(raw) > cap:
+                    # refuse at input: restore the last in-range value, never clamp silently
+                    prev = self._hsl_prev.get(wid, '')
+                    self._echo.add(wid)
+                    event.input.value = prev
+                    return
+                self._hsl_prev[wid] = raw
+            else:
+                self._hsl_prev[wid] = raw   # empty/invalid mid-edit: allow, gate at derive/save
             try:
                 hh = float(self.query_one(f'#h-{key}', Input).value or 0)
                 ss = float(self.query_one(f'#s-{key}', Input).value or 0)
@@ -161,7 +198,7 @@ class ColoursScreen(SubmenuScreen):
             except ValueError:
                 return
             hexv = scheme_mod.hsl_to_hex(hh, ss, ll)
-            self._set_field(key, hexv)
+            self._set_field(key, hexv.lstrip('#'))   # the '#' lives in the label now (B1)
             self._set_swatch(key, hexv)
 
     def _set_swatch(self, key, hexv):

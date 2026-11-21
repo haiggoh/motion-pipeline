@@ -35,13 +35,17 @@ def _hex_to_srgb(h):
 
 
 def normalise_hex(h):
-    """Canonical '#rrggbb'. Accepts the user-friendly bare 6-hex ('ffffff') as well as
-    '#rrggbb'; anything else raises ValueError naming the input. ONE place where the two
-    parsers' disagreement (ours lstrip's '#', Textual's Color.parse requires it) is
-    resolved — callers hand the result to anything that parses colours."""
+    """Canonical '#rrggbb'. Accepts the user-friendly bare 6-hex ('ffffff'), '#rrggbb', and
+    the 3-digit short form ('fff'/'#FfF' -> each digit doubled, '#ffffff'); anything else
+    raises ValueError naming the input. ONE place where the two parsers' disagreement (ours
+    lstrip's '#', Textual's Color.parse requires it) is resolved — callers hand the result
+    to anything that parses colours."""
     h = str(h).strip().lstrip('#')
-    if len(h) == 6 and all(c in '0123456789abcdefABCDEF' for c in h):
+    ok = '0123456789abcdefABCDEF'
+    if len(h) == 6 and all(c in ok for c in h):
         return '#' + h.lower()
+    if len(h) == 3 and all(c in ok for c in h):     # short form: fff -> #ffffff (B1)
+        return '#' + ''.join(c * 2 for c in h.lower())
     raise ValueError(f"invalid hex colour {str(h)!r} (want #rrggbb, e.g. #ff6a00)")
 
 
