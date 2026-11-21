@@ -260,9 +260,24 @@ def align_auto(audio_path, transcript_model, project=None):
     return align(audio_path, transcript_model)
 
 
+def measured_wpm(timing):
+    """Measured words-per-minute of an aligned timing: words / (last word end − first word
+    start) × 60, rounded. None when the timing was estimated (no voiceover). (spec B4)"""
+    if timing.get('source') == 'estimated':
+        return None
+    words = timing.get('words') or []
+    if len(words) < 2:
+        return None
+    span = words[-1]['end'] - words[0]['start']
+    if span <= 0:
+        return None
+    return round(len(words) / span * 60)
+
+
 def inputs_fingerprint(project_dir, p):
     """sha256 over the transcript bytes + the VO file bytes (or "no-vo") + wpm + language +
-    aligner — stored in timing.json as "inputs" (Task 21 freshness gate)."""
+    aligner — stored in timing.json as "inputs" (Task 21 freshness gate). With a VO set the
+    wpm is EXCLUDED: it no longer affects the timing (B4)."""
     import hashlib
     h = hashlib.sha256()
     tpath = os.path.join(project_dir, p.get('transcript') or 'transcript.txt')
@@ -273,7 +288,8 @@ def inputs_fingerprint(project_dir, p):
         h.update(open(vpath, 'rb').read() if os.path.isfile(vpath) else b'<missing-vo>')
     else:
         h.update(b'no-vo')
-    h.update(f"{p.get('wpm', 140)}|{p.get('language', 'de')}|{p.get('aligner', 'auto')}".encode())
+    wpm_part = '' if vo else f"{p.get('wpm', 140)}|"   # B4: wpm is a measured indicator with a VO
+    h.update(f"{wpm_part}{p.get('language', 'auto')}|{p.get('aligner', 'auto')}".encode())
     return h.hexdigest()
 
 

@@ -6,7 +6,7 @@ import os
 import pytest
 from textual.widgets import Input, Select, Static
 
-from motion_pipeline import project
+from motion_pipeline import align, project, transcript
 from motion_pipeline.tui.app import MenuApp
 from tui_probe import choose
 
@@ -46,7 +46,8 @@ async def test_inputs_prefilled_from_project(tmp_path):
         scr = await open_inputs(pilot, app, d)
         assert scr.query_one('#transcript', Input).value == 'transcript.txt'
         assert scr.query_one('#vo', Input).value == 'audio/vo.wav'
-        assert scr.query_one('#wpm', Input).value == '180'
+        # B4: with a VO set the wpm Input is replaced by the measured indicator
+        assert not scr.query('#wpm') and scr.query('#wpm-indicator') is not None
         assert scr.query_one('#language', Select).value == 'en'
         assert scr.query_one('#aligner', Select).value == 'classical'
 
@@ -156,10 +157,53 @@ async def test_save_with_docx_transcript_reports_sections_and_words(tmp_path):
         scr.query_one('#transcript', Input).value = 'transcript.docx'
         await save(pilot, scr)
         ok = await _wait_for(
-            lambda: 'timings saved' in str(scr.query_one('#status', Static).render()), pilot)
+            lambda: 'timings saved' in str(scr.query_one('#status', Static).render()), pilot,
+            tries=150)   # real prepare-only can take >10 s under load
         status = str(scr.query_one('#status', Static).render())
         assert ok, f'status: {status!r}'
         assert '1 sections' in status and '7 words' in status, status   # docx: Intro + 7 words
+
+
+# ---- Task 16 (B4): auto language default + measured wpm when a VO is set ----
+
+@pytest.mark.asyncio
+async def test_vo_set_replaces_wpm_field_with_measured_indicator(tmp_path):
+    d = mk_project(tmp_path / 'proj', vo='audio/vo.wav')
+    # a saved whisper timing so the indicator can show a number
+    timing = {'source': 'whisper', 'method': 'whisper', 'sections': {},
+              'words': [{'id': 'w0', 'word': 'hello', 'start': 0.0, 'end': 0.4, 'confidence': 0.9},
+                        {'id': 'w1', 'word': 'world', 'start': 0.4, 'end': 0.8, 'confidence': 0.9},
+                        {'id': 'w2', 'word': 'again', 'start': 0.8, 'end': 1.2, 'confidence': 0.9},
+                        {'id': 'w3', 'word': 'now', 'start': 1.2, 'end': 1.6, 'confidence': 0.9}]}
+    align.save_timing(os.path.join(d, 'timing.json'), timing)
+    app = MenuApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        assert not scr.query('#wpm'), 'the wpm Input is replaced when a VO is set'
+        ind = str(scr.query_one('#wpm-indicator', Static).render())
+        assert '150 wpm' in ind, ind     # 4 words over 1.6 s
+        await save(pilot, scr)           # Save must not read the wpm field
+        await pilot.pause(0.3)
+        pj = project_json(d)
+        assert pj['wpm'] == 140 and pj['vo'] == 'audio/vo.wav', pj
+
+
+@pytest.mark.asyncio
+async def test_no_vo_keeps_editable_wpm_and_staleness(tmp_path):
+    from test_timing_gate import mk
+    d, _p = mk(tmp_path / 'p')            # no VO
+    app = MenuApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        assert scr.query('#wpm') is not None and not scr.query('#wpm-indicator')
+        assert scr.query_one('#wpm', Input).value == '140'
+        scr.query_one('#wpm', Input).value = '180'
+        await pilot.pause(0.3)
+        p = project.load(d)
+        p['wpm'] = 180
+        project.save(d, p)               # the change the Save action would persist
+        assert not align.timing_is_fresh(d, project.load(d)), 'wpm change must stale the timings without a VO'
+        assert scr.query_one('#language', Select).value == 'auto'   # new default
 
 
 @pytest.mark.asyncio

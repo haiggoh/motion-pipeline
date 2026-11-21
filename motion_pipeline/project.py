@@ -36,7 +36,7 @@ def resolution_for(aspect, uhd=False):
 def default_project(name, aspect='16:9', fps=60, uhd=False):
     return {'name': name, 'aspect': aspect, 'resolution': resolution_for(aspect, uhd),
             'fps': fps, 'variants': ['default'], 'zones': [], 'fonts': {},
-            'transcript': 'transcript.txt', 'vo': None, 'wpm': 140, 'language': 'de',
+            'transcript': 'transcript.txt', 'vo': None, 'wpm': 140, 'language': 'auto',
             'aligner': 'auto', 'full_master': False}
 
 

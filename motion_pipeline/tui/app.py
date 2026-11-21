@@ -345,8 +345,51 @@ class InputsScreen(SubmenuScreen):
         self.query_one('#transcript', Input).value = p.get('transcript') or 'transcript.txt'
         self.query_one('#vo', Input).value = p.get('vo') or ''
         self.query_one('#wpm', Input).value = str(p.get('wpm', 140))
-        self.query_one('#language', Select).value = p.get('language', 'de')
+        self.query_one('#language', Select).value = p.get('language', 'auto')   # B4: auto default
         self.query_one('#aligner', Select).value = p.get('aligner', 'auto')
+        self._sync_wpm_field()
+        self._update_wpm_indicator()
+
+    def _sync_wpm_field(self):
+        """B4: with a voiceover set, the wpm Input is replaced in place by a muted indicator
+        (the VO's measured rate); without a VO it stays the editable Input."""
+        from textual.widgets import Input, Static
+        vo = self.query_one('#vo', Input).value.strip()
+        has_input = bool(self.query('#wpm'))
+        has_ind = bool(self.query('#wpm-indicator'))
+        if vo and has_input and not has_ind:
+            inp = self.query_one('#wpm', Input)
+            ind = Static('— wpm (computed with timings)', id='wpm-indicator', classes='muted')
+            inp.parent.mount(ind, before=inp)
+            inp.remove()
+        elif not vo and has_ind and not has_input:
+            ind = self.query_one('#wpm-indicator', Static)
+            inp = Input(id='wpm', placeholder='140')
+            ind.parent.mount(inp, before=ind)
+            ind.remove()
+
+    def _update_wpm_indicator(self):
+        """Once a measured timing exists, the indicator shows 'measured N wpm'."""
+        import json
+        from textual.widgets import Static
+        if not self.query('#wpm-indicator'):
+            return
+        pd = getattr(self.app, 'project_dir', None)
+        if not pd:
+            return
+        try:
+            timing = json.load(open(os.path.join(pd, 'timing.json')))
+        except (OSError, ValueError):
+            return
+        from .. import align
+        wpm = align.measured_wpm(timing)
+        if wpm is not None:
+            self.query_one('#wpm-indicator', Static).update(f'measured {wpm} wpm')
+
+    def on_input_changed(self, event) -> None:
+        if event.input.id == 'vo':
+            self._sync_wpm_field()
+            self._update_wpm_indicator()
 
     def _on_timing_done(self, rc: int) -> None:
         """Task 5 (A5): the prepare-only job is observed via run_command's on_finish (called
@@ -363,6 +406,7 @@ class InputsScreen(SubmenuScreen):
                     f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
                     f'engine {timing["method"]}')
                 self.query_one('#error', Static).update('')
+                self._update_wpm_indicator()
                 return
             except Exception as e:
                 self.query_one('#error', Static).update(f'error: {e}')
@@ -422,8 +466,9 @@ class InputsScreen(SubmenuScreen):
             p = project_mod.load(pd) if os.path.isfile(pj) else project_mod.default_project(os.path.basename(pd))
             p['transcript'] = self.query_one('#transcript', Input).value.strip()
             p['vo'] = self.query_one('#vo', Input).value.strip() or None
-            p['wpm'] = int(self.query_one('#wpm', Input).value.strip())
-            p['language'] = self.query_one('#language', Select).value
+            if not p['vo']:
+                p['wpm'] = int(self.query_one('#wpm', Input).value.strip())   # B4: with a VO the
+            p['language'] = self.query_one('#language', Select).value          # wpm is measured, not read
             p['aligner'] = self.query_one('#aligner', Select).value
             project_mod.save(pd, p)
             # Task 5 (A5): compute timings in a job (prepare-only) via jobs.run_command so the

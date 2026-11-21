@@ -80,3 +80,18 @@ def test_active_zones_aspect_filter():
         {'section': 'c', 'rect': [0, 0, 10, 10], 'aspect': '9:16'},   # inactive
     ]
     assert [z['section'] for z in project.active_zones(p)] == ['a', 'b']
+
+
+# ---- Task 16 (B4): language defaults to auto ----
+
+def test_default_project_language_is_auto():
+    assert project.default_project('x')['language'] == 'auto'
+
+
+def test_existing_project_keeps_saved_language(tmp_path):
+    d = str(tmp_path / 'p')
+    p = project.default_project('old')
+    p['language'] = 'de'
+    project.save(d, p)
+    assert project.load(d)['language'] == 'de'   # untouched by the new default
+    project.validate(project.default_project('new'))  # 'auto' validates

@@ -1,5 +1,6 @@
 """Task 7 tests: deterministic aligner, G5 schema, DE/EN fixtures, re-align flow."""
 import json
+import os
 import subprocess
 
 import numpy as np
@@ -193,3 +194,34 @@ def test_align_decodes_voiceover_once_and_output_is_unchanged(tmp_path, monkeypa
     out.pop('source', None)   # embeds the audio path — excluded from the golden
     digest = hashlib.sha256(json.dumps(out, sort_keys=True).encode()).hexdigest()
     assert digest == GOLDEN_SHA256, 'timing output changed after the single-decode fix'
+
+
+# ---- Task 16 (B4): measured wpm + fingerprint excludes wpm when a VO is set ----
+
+def test_measured_wpm_from_aligned_timing():
+    timing = {'source': 'whisper', 'method': 'whisper', 'sections': {},
+              'words': [{'id': 'w0', 'word': 'a', 'start': 0.0, 'end': 0.5},
+                        {'id': 'w1', 'word': 'b', 'start': 0.5, 'end': 1.0},
+                        {'id': 'w2', 'word': 'c', 'start': 1.0, 'end': 1.5},
+                        {'id': 'w3', 'word': 'd', 'start': 1.5, 'end': 2.0}]}
+    assert align.measured_wpm(timing) == 120          # 4 words over 2.0 s
+
+
+def test_measured_wpm_none_when_estimated():
+    est = align.estimate_timings(transcript.parse('# S\na b c d\n'), wpm=140)
+    assert align.measured_wpm(est) is None
+
+
+def test_fingerprint_excludes_wpm_with_vo(tmp_path):
+    d = str(tmp_path / 'p')
+    os.makedirs(d)
+    (open(os.path.join(d, 'transcript.txt'), 'w')).write('# S\nhello world\n')
+    (open(os.path.join(d, 'vo.wav'), 'w')).write('x')
+    p = {'transcript': 'transcript.txt', 'vo': 'vo.wav', 'wpm': 140,
+         'language': 'auto', 'aligner': 'auto'}
+    fp1 = align.inputs_fingerprint(d, p)
+    fp2 = align.inputs_fingerprint(d, {**p, 'wpm': 200})
+    assert fp1 == fp2, 'wpm must not affect the fingerprint when a VO is set'
+    fp3 = align.inputs_fingerprint(d, {**p, 'vo': None})
+    fp4 = align.inputs_fingerprint(d, {**p, 'vo': None, 'wpm': 200})
+    assert fp3 != fp4, 'without a VO the wpm still drives the fingerprint'
