@@ -103,7 +103,7 @@ async def test_invalid_hex_shows_error_not_crash(tmp_path):
 
 @pytest.mark.asyncio
 async def test_colour_rows_labelled_swatches_visible_hex_fully_shown(tmp_path):
-    from motion_pipeline import scheme as sm
+    sm = scheme_mod
     sm.save_scheme(str(tmp_path / 'scheme.json'), DARK)
     app = MenuApp()
     app.project_dir = str(tmp_path)
@@ -135,3 +135,65 @@ async def test_colour_rows_labelled_swatches_visible_hex_fully_shown(tmp_path):
         scr.query_one('#accent', Input).value = 'zz'; await pilot.pause()
         sw = scr.query_one('#swatch-accent', Static)
         assert sw.styles.border_top[0] == 'round' and '░' in str(sw.render())
+
+
+# ---- Task 11 (spec B1 second half): contrast markers, actionable message, Fix/Save anyway ----
+
+FAIL_SCHEME = {'name': 'demo', 'background_dark': '#ffffff', 'background_light': '#1251a6',
+               'accent': '#ffb400', 'text': '#ffff54'}   # text 1.07:1, accent ~2.2:1 on white
+
+
+async def _open_colours_scheme(pilot, app, root, scheme):
+    from motion_pipeline import project as project_mod
+    pd = root / 'acme'
+    project_mod.save(str(pd), project_mod.default_project('acme'))
+    with open(pd / 'scheme.json', 'w') as f:
+        json.dump(scheme, f)
+    app.project_dir = str(pd)
+    app.push_screen(app.SCREENS['colours']())
+    await pilot.pause(0.5)
+    return app.screen
+
+
+async def test_contrast_markers_actionable_message_and_fix_action(tmp_path):
+    sm = scheme_mod
+    app = MenuApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        scr = await _open_colours_scheme(pilot, app, tmp_path, dict(FAIL_SCHEME))
+        # red ! on exactly the rows involved in a failing pair (background_dark + text + accent)
+        flags = {k: str(scr.query_one(f'#flag-{k}', Static).render()) for k in sm.COLOUR_KEYS}
+        assert flags['text'] == '!' and flags['background_dark'] == '!', flags
+        assert flags['accent'] == '!', flags      # accent 2.2:1 < 3.0 also fails on white
+        assert flags['background_light'] == '', flags
+        err = str(scr.query_one('#error', Static).render())
+        assert 'text on background dark: 1.07:1 — needs at least 4.5:1' in err, err
+        assert 'Fix: ' in err and '→ #' in err, err   # the suggested concrete change
+        menu = scr.query_one('#actions')
+        assert not menu.get_option('fix').disabled
+        assert not menu.get_option('force').disabled
+        # Fix applies the suggestion without saving
+        before = (tmp_path / 'acme' / 'scheme.json').read_text()
+        await choose(pilot, scr, 'fix')
+        await pilot.pause()
+        assert (tmp_path / 'acme' / 'scheme.json').read_text() == before   # no save
+        assert str(scr.query_one('#flag-text', Static).render()) == ''
+        assert 'contrast' not in str(scr.query_one('#error', Static).render()).lower()
+
+
+async def test_save_anyway_writes_override_and_later_save_clears_it(tmp_path):
+    sm = scheme_mod
+    app = MenuApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        scr = await _open_colours_scheme(pilot, app, tmp_path, dict(FAIL_SCHEME))
+        await choose(pilot, scr, 'force')
+        await pilot.pause(); await pilot.pause()
+        on_disk = json.loads((tmp_path / 'acme' / 'scheme.json').read_text())
+        assert on_disk.get('contrast_override') is True, on_disk
+        # fix the colours (light text on dark bg passes), then plain Save -> flag gone
+        scr.query_one('#text', Input).value = 'f5f7ff'
+        scr.query_one('#background_dark', Input).value = '0b1a4c'
+        await pilot.pause()
+        await choose(pilot, scr, 'save')
+        await pilot.pause(); await pilot.pause()
+        on_disk = json.loads((tmp_path / 'acme' / 'scheme.json').read_text())
+        assert 'contrast_override' not in on_disk, on_disk

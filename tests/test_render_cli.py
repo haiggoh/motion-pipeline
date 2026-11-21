@@ -275,3 +275,16 @@ def test_missing_scheme_json_is_named_not_a_traceback(tmp_path):
     os.remove(os.path.join(d, 'scheme.json'))
     with pytest.raises(ValueError, match='scheme.json'):
         render_cli.render(d, 'test', dry_run=True)
+
+
+def test_render_with_contrast_override_warns_and_exits_0(tmp_path, capsys):
+    """Task 11 (B1): a project whose scheme.json carries contrast_override renders with a
+    printed warning instead of dying with 'error: contrast …' (today: exit non-zero)."""
+    d = make_project(tmp_path / 'p')
+    with open(os.path.join(d, 'scheme.json'), 'w') as f:
+        json.dump({'name': 'demo', 'background_dark': '#ffffff', 'background_light': '#1251a6',
+                   'accent': '#ffb400', 'text': '#ffff54', 'contrast_override': True}, f)
+    rc = render_cli.render(d, 'test', dry_run=True)
+    err = capsys.readouterr().err
+    assert rc == 0, err
+    assert 'warning: contrast' in err and 'override' in err, err

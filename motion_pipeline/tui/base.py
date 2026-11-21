@@ -90,6 +90,7 @@ Header, Footer { background: ansi_default; color: ansi_bright_black; }
 /* colour editor: one labelled row per colour, framed swatch (visible even when empty) */
 .colour-row { height: 3; }
 .colour-label { width: 17; padding: 1 1 0 0; }
+.contrast-flag { width: 1; padding: 1 0 0 0; color: ansi_red; }   /* '!' on rows in a failing pair */
 /* filled swatch = a solid colour block; only an EMPTY swatch is framed (+ ░ marker) */
 .swatch { width: 6; height: 3; content-align: center middle; color: ansi_bright_black; }
 .swatch.-empty { border: round ansi_bright_black; }

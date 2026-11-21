@@ -14,7 +14,7 @@ from textual.widgets import Checkbox, Input, Label, Select, Static
 
 from .. import project as project_mod
 from .. import scheme as scheme_mod
-from .base import SubmenuScreen
+from .base import ActionMenu, SubmenuScreen
 
 COLOUR_KEYS = scheme_mod.COLOUR_KEYS
 NEW_VARIANT = '__new__'
@@ -45,12 +45,14 @@ def scheme_path(project_dir):
 
 class ColoursScreen(SubmenuScreen):
     TITLE = 'CI colours'
-    ACTIONS = [('derive', 'Derive & preview'), ('save', 'Save colours')]
+    ACTIONS = [('derive', 'Derive & preview'), ('save', 'Save colours'),
+               ('fix', 'Fix contrast'), ('force', 'Save anyway (ignore contrast)')]
 
     def compose_body(self):
         with Vertical(id='colour-rows'):
             for key in COLOUR_KEYS:
                 with Horizontal(classes='colour-row'):
+                    yield Static('', id=f'flag-{key}', classes='contrast-flag')
                     yield Label(key.replace('_', ' '), classes='colour-label')
                     yield Static('░░', id=f'swatch-{key}', classes='swatch -empty')
                     yield Label('#', classes='hash-label')   # fixed, outside the field (B1)
@@ -88,7 +90,11 @@ class ColoursScreen(SubmenuScreen):
         self.query_one('#multi', Checkbox).value = multi
         self._refresh_variant_options(variants, 'default')
         self._show_variant_bar(multi)
+        self.query_one('#actions', ActionMenu).set_enabled('fix', False)
+        self.query_one('#actions', ActionMenu).set_enabled('force', False)
+        self._contrast_shown = False
         self.load_variant('default')
+        self._refresh_contrast()
 
     def _refresh_variant_options(self, variants, selected):
         sel = self.query_one('#variant', Select)
@@ -117,6 +123,48 @@ class ColoursScreen(SubmenuScreen):
             return
         for k in COLOUR_KEYS:
             self.set_colour(k, s[k])
+        self._refresh_contrast()
+
+    def _current_scheme(self):
+        colours = {k: scheme_mod.normalise_hex(v) for k, v in self.current_colours().items()}
+        pd = self.project_dir()
+        return scheme_mod.validate_scheme({'name': os.path.basename(pd) if pd else 'x', **colours})
+
+    def _refresh_contrast(self):
+        """Red '!' on exactly the rows in a failing pair; #error names each pair and shows
+        the concrete Fix; fix/force actions only exist while a failure is showing (B1)."""
+        try:
+            scheme = self._current_scheme()
+        except ValueError:
+            return   # invalid hex mid-edit: flags stay; the error surfaces at derive/save
+        failures = scheme_mod.contrast_failures(scheme)
+        involved = {d['fg_key'] for d in failures} | {d['bg_key'] for d in failures}
+        for k in COLOUR_KEYS:
+            self.query_one(f'#flag-{k}', Static).update('!' if k in involved else '')
+        err = self.query_one('#error', Static)
+        menu = self.query_one('#actions', ActionMenu)
+        if not failures:
+            if self._contrast_shown:
+                err.update('')
+                self._contrast_shown = False
+            menu.set_enabled('fix', False)
+            menu.set_enabled('force', False)
+            return
+        lines = [f"{d['role']} on background dark: {d['ratio']:.2f}:1 — needs at least {d['floor']}:1"
+                 for d in failures]
+        fix = scheme_mod.suggest_contrast_fix(scheme)
+        applied = dict(scheme, **{e['key']: e['new'] for e in fix}) if fix else scheme
+        for e in fix:
+            keyname = e['key'].replace('_', ' ')
+            verb = 'darken' if scheme_mod._oklab_L(e['new']) < scheme_mod._oklab_L(e['old']) \
+                else 'lighten'
+            r = min(scheme_mod.contrast(applied[k], applied['background_dark'])
+                    for k in ('text', 'accent'))
+            lines.append(f'Fix: {verb} {keyname} → {e["new"]} (reaches {r:.1f}:1)')
+        err.update('\n'.join(lines))
+        self._contrast_shown = True
+        menu.set_enabled('fix', bool(fix))
+        menu.set_enabled('force', True)
 
     def set_colour(self, key, hexv):
         hh, ss, ll = scheme_mod.hex_to_hsl(hexv)
@@ -200,6 +248,7 @@ class ColoursScreen(SubmenuScreen):
             hexv = scheme_mod.hsl_to_hex(hh, ss, ll)
             self._set_field(key, hexv.lstrip('#'))   # the '#' lives in the label now (B1)
             self._set_swatch(key, hexv)
+        self._refresh_contrast()   # live contrast markers/messages (B1)
 
     def _set_swatch(self, key, hexv):
         """A field value must never be able to crash the app: only a canonical '#rrggbb'
@@ -225,10 +274,28 @@ class ColoursScreen(SubmenuScreen):
             # canonicalise on the way in: scheme.json always stores '#rrggbb', never bare hex
             colours = {k: scheme_mod.normalise_hex(v) for k, v in self.current_colours().items()}
             scheme = scheme_mod.validate_scheme({'name': os.path.basename(pd), **colours})
+            if action_id == 'fix':
+                fix = scheme_mod.suggest_contrast_fix(scheme)
+                if not fix:
+                    raise ValueError('no automatic fix reaches the contrast floors')
+                for e in fix:
+                    self.set_colour(e['key'], e['new'])
+                self._refresh_contrast()
+                self.query_one('#preview', Static).update(
+                    'applied: ' + ', '.join(f'{e["key"]} → {e["new"]}' for e in fix))
+                return
+            if action_id == 'force':
+                scheme = {**scheme, 'contrast_override': True}   # Save anyway: persisted
             if action_id == 'derive':
-                p = scheme_mod.derive_palette(scheme)
+                warns = []
+                p = scheme_mod.derive_palette(
+                    dict(scheme, contrast_override=bool(scheme.get('contrast_override')))
+                    if scheme.get('contrast_override') else scheme,
+                    warn=warns.append)
                 self.query_one('#preview', Static).update(self._palette_line(p))
-            elif action_id == 'save':
+                if warns:
+                    err.update('\n'.join(warns))
+            elif action_id in ('save', 'force'):
                 variant = self.current_variant() if self.query_one('#multi', Checkbox).value else 'default'
                 if variant == NEW_VARIANT:
                     variant = scheme_mod.check_variant_name(self.query_one('#variant-name', Input).value.strip())

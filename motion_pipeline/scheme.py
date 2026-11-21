@@ -128,19 +128,151 @@ def validate_scheme(scheme):
             raise ValueError(f'scheme missing key {k!r}')
     for k in INPUT_KEYS[1:]:
         _hex_to_srgb(scheme[k])  # raises on invalid hex
+    if 'contrast_override' in scheme and not isinstance(scheme['contrast_override'], bool):
+        raise ValueError(f'contrast_override must be true or false, '
+                         f'got {scheme["contrast_override"]!r}')
     return scheme
 
 
-def derive_palette(scheme):
-    """scheme (validated) -> Palette dict with exactly PALETTE_KEYS."""
+def contrast_failures(scheme):
+    """The two contrast pairs (spec B1): [] when both pass, else one dict per failing pair
+    {'role', 'fg_key', 'bg_key', 'ratio', 'floor'}."""
+    out = []
+    dark = scheme.get('background_dark')
+    for role, fg_key, floor in (('text', 'text', CONTRAST_TEXT),
+                                ('accent', 'accent', CONTRAST_ACCENT)):
+        fg = scheme.get(fg_key)
+        if not fg or not dark:
+            continue
+        c = contrast(fg, dark)
+        if c < floor:
+            out.append({'role': role, 'fg_key': fg_key, 'bg_key': 'background_dark',
+                        'ratio': c, 'floor': floor})
+    return out
+
+
+def _oklab_L(hexv):
+    return srgb_to_oklab(_hex_to_srgb(hexv))[0]
+
+
+def _shift_L(hexv, dL):
+    """Move a colour's OKLab lightness by dL, hue/chroma kept, clipped to the sRGB gamut."""
+    L, a, b = srgb_to_oklab(_hex_to_srgb(hexv))
+    return _srgb_to_hex(oklab_to_srgb(L + dL, a, b))
+
+
+def _search_dL(hexv, direction, reaches):
+    """Smallest |dL| >= 0 in the given direction (+1/-1) with _shift_L(hexv, d*|dL|) reaching
+    the predicate; None when even |dL|=1 does not. Binary search on |dL| (monotonic)."""
+    if reaches(_shift_L(hexv, direction * 1.0)):
+        lo, hi = 0.0, 1.0
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            if reaches(_shift_L(hexv, direction * mid)):
+                hi = mid
+            else:
+                lo = mid
+        return hi
+    return None
+
+
+def suggest_contrast_fix(scheme):
+    """Smallest-change contrast fix (spec B1, user: 'smallest change wins'). For each failing
+    pair the candidates move the FOREGROUND's or background_dark's OKLab L in whichever
+    direction increases contrast, keeping hue/chroma; the smallest |dL| whose application
+    leaves EVERY pair passing wins. Returns a list of {'key', 'old', 'new'} (empty when
+    nothing fails or no candidate works); when both pairs fail, one background_dark move
+    that fixes both is preferred over two sequential moves."""
+    failures = contrast_failures(scheme)
+    if not failures:
+        return []
+    dark = scheme['background_dark']
+    margin = 0.05
+
+    def best_move(key, hexv, floor, direction):
+        """Smallest |dL| moving hexv (key) so EVERY pair passes; None otherwise."""
+        def reaches(new_hex):
+            s = dict(scheme)
+            s[key] = new_hex
+            return all(contrast(s[role_key], s['background_dark']) >= floor + margin
+                       for role_key in ('text', 'accent'))
+        return _search_dL(hexv, direction, reaches)
+
+    def pair_candidates(fg_key, fg, floor):
+        """(key, hexv, direction, dL) options for one failing pair: move the fg or the bg,
+        in the direction that increases contrast (bg directions tried both ways)."""
+        out = []
+        lighter_fg = _oklab_L(fg) > _oklab_L(dark)
+        for d in ((1, -1) if lighter_fg else (-1, 1)):
+            mv = best_move('background_dark', dark, floor, d)
+            if mv is not None:
+                out.append(('background_dark', dark, d, mv))
+            mv = best_move(fg_key, fg, floor, d)
+            if mv is not None:
+                out.append((fg_key, fg, d, mv))
+        return out
+
+    if len(failures) == 1:
+        d = failures[0]
+        cands = pair_candidates(d['fg_key'], scheme[d['fg_key']], d['floor'])
+        if not cands:
+            return []
+        key, hexv, direction, dL = min(cands, key=lambda c: c[3])
+        return [{'key': key, 'old': hexv, 'new': _shift_L(hexv, direction * dL)}]
+
+    # both pairs fail: prefer ONE background_dark move that fixes both
+    lighter_text = _oklab_L(scheme['text']) > _oklab_L(dark)
+    for d in ((-1, 1) if lighter_text else (1, -1)):
+        def both_pass(new_dark):
+            s = dict(scheme, background_dark=new_dark)
+            return all(contrast(s[role], new_dark) >= f + margin
+                       for role, f in (('text', CONTRAST_TEXT), ('accent', CONTRAST_ACCENT)))
+        dL = _search_dL(dark, d, both_pass)
+        if dL is not None:
+            return [{'key': 'background_dark', 'old': dark, 'new': _shift_L(dark, d * dL)}]
+    # sequential: fix the worst pair first, then the remaining one
+    working = dict(scheme)
+    changes = []
+    for _ in range(2):
+        remaining = contrast_failures(working)
+        if not remaining:
+            return changes
+        remaining.sort(key=lambda d: d['ratio'])
+        d = remaining[0]
+        cands = pair_candidates(d['fg_key'], working[d['fg_key']], d['floor'])
+        if not cands:
+            return []
+        key, hexv, direction, dL = min(cands, key=lambda c: c[3])
+        new = _shift_L(hexv if key != 'background_dark' else working['background_dark'],
+                       direction * dL)
+        changes.append({'key': key, 'old': working[key], 'new': new})
+        working[key] = new
+    return changes if not contrast_failures(working) else []
+
+
+def derive_palette(scheme, warn=None):
+    """scheme (validated) -> Palette dict with exactly PALETTE_KEYS. A failing pair raises
+    unless contrast_override is true, in which case each failure is passed to warn
+    (default: printed to stderr) and the palette is built anyway."""
     validate_scheme(scheme)
     dark, light, accent, text = (scheme[k] for k in INPUT_KEYS[1:])
-    pairs = [('text', text, dark, CONTRAST_TEXT), ('accent', accent, dark, CONTRAST_ACCENT)]
-    for role, fg, bg, floor in pairs:
-        c = contrast(fg, bg)
-        if c < floor:
-            raise ValueError(f'contrast {role} on background_dark is {c:.2f}:1 < {floor}:1 '
-                             f'({fg} on {bg}) — raise contrast or darken the background')
+    failures = contrast_failures(scheme)
+    if failures:
+        if scheme.get('contrast_override') is True:
+            for d in failures:
+                msg = (f"warning: contrast {d['role']} on background dark is {d['ratio']:.2f}:1"
+                       f" < {d['floor']}:1 ({scheme[d['fg_key']]} on {dark})"
+                       ' (override set in scheme.json)')
+                if warn is not None:
+                    warn(msg)
+                else:
+                    import sys
+                    print(msg, file=sys.stderr)
+        else:
+            d = failures[0]
+            raise ValueError(f'contrast {d["role"]} on background_dark is {d["ratio"]:.2f}:1 '
+                             f'< {d["floor"]}:1 ({scheme[d["fg_key"]]} on {dark}) — raise '
+                             f'contrast or darken the background')
     return {
         'background_dark': dark, 'background_light': light, 'accent': accent, 'text': text,
         'secondary_text': mix(text, dark, 0.30),
@@ -163,7 +295,10 @@ def load_scheme(path):
 
 def save_scheme(path, scheme):
     validate_scheme(scheme)
-    derive_palette(scheme)  # enforces the contrast floors: a set-but-invalid scheme fails loudly
+    derive_palette(scheme)  # enforces the contrast floors (or warns under contrast_override)
+    scheme = dict(scheme)
+    if not contrast_failures(scheme):
+        scheme.pop('contrast_override', None)   # a passing scheme is written WITHOUT the flag
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + '.tmp'
     with open(tmp, 'w') as f:
@@ -205,11 +340,15 @@ def load_overlay(project_dir, name):
         ov = json.load(f)
     if not isinstance(ov, dict):
         raise ValueError(f'{p}: want a JSON object of colour overrides')
-    bad = sorted(set(ov) - set(COLOUR_KEYS))
+    bad = sorted(set(ov) - set(COLOUR_KEYS) - {'contrast_override'})
     if bad:
         raise ValueError(f'{p}: keys {bad} are not colour keys {list(COLOUR_KEYS)}')
     for k, v in ov.items():
-        _hex_to_srgb(v)
+        if k == 'contrast_override':
+            if not isinstance(v, bool):
+                raise ValueError(f'{p}: contrast_override must be true or false, got {v!r}')
+        else:
+            _hex_to_srgb(v)
     return ov
 
 
@@ -231,7 +370,13 @@ def save_variant(project_dir, name, full_colours):
                if k in full_colours and full_colours[k].lower() != base[k].lower()}
     for v in overlay.values():
         _hex_to_srgb(v)
-    derive_palette(dict(base, **overlay, name=name))
+    resolved = validate_scheme(dict(base, **overlay, name=name))
+    if contrast_failures(resolved):
+        if full_colours.get('contrast_override') is not True:
+            derive_palette(resolved)          # raises, naming the failing pair
+        overlay['contrast_override'] = True   # Save anyway: the flag lives in the overlay
+    else:
+        derive_palette(resolved)
     p = variant_path(project_dir, name)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     tmp = p + '.tmp'

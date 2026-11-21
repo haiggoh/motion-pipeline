@@ -1,10 +1,13 @@
 """Task 2 tests: scheme validation, OKLab derivation, contrast floors, round-trip."""
 import json
+import os
 
 import pytest
 
-from motion_pipeline.scheme import (PALETTE_KEYS, contrast, derive_palette, load_scheme,
-                                    mix, save_scheme, validate_scheme)
+from motion_pipeline.scheme import (PALETTE_KEYS, contrast, contrast_failures,
+                                    derive_palette, load_scheme, mix, resolve_variant,
+                                    save_scheme, srgb_to_oklab, suggest_contrast_fix,
+                                    validate_scheme, variant_path, _hex_to_srgb)
 
 DARK = {'name': 'demo-dark', 'background_dark': '#0b1a4c', 'background_light': '#1251a6',
         'accent': '#ffb400', 'text': '#f5f7ff'}
@@ -79,3 +82,130 @@ def test_scheme_file_round_trip(tmp_path):
     assert load_scheme(str(p)) == DARK
     with open(p) as f:
         assert json.load(f) == DARK
+
+
+# ---- Task 11 (spec B1 second half): contrast failures, smallest-change fix, override ----
+
+def test_contrast_failures_user_case():
+    """text #ffff54 on #ffffff is the user's reported 1.07:1 case."""
+    s = {'name': 'x', 'background_dark': '#ffffff', 'background_light': '#1251a6',
+         'accent': '#ffb400', 'text': '#ffff54'}
+    f = contrast_failures(s)
+    roles = {d['role'] for d in f}
+    assert 'text' in roles
+    entry = next(d for d in f if d['role'] == 'text')
+    assert abs(entry['ratio'] - 1.07) < 0.03, entry
+    assert entry['floor'] == 4.5
+    assert entry['fg_key'] == 'text' and entry['bg_key'] == 'background_dark'
+
+
+def test_contrast_failures_empty_when_both_pass():
+    assert contrast_failures(dict(DARK)) == []
+
+
+def test_suggest_fix_user_case_passes_both_floors():
+    s = {'name': 'x', 'background_dark': '#ffffff', 'background_light': '#1251a6',
+         'accent': '#ffb400', 'text': '#ffff54'}
+    fix = suggest_contrast_fix(s)
+    assert fix, 'no fix suggested'
+    applied = dict(s)
+    for e in fix:
+        assert e['old'] == s[e['key']]
+        applied[e['key']] = e['new']
+    assert contrast_failures(applied) == [], applied
+
+
+def test_suggest_fix_prefers_smallest_change():
+    # only text fails; a text move and a background move both exist — take the smaller |dL|
+    s = {'name': 'x', 'background_dark': '#202020', 'background_light': '#1251a6',
+         'accent': '#ffb400', 'text': '#303030'}      # dark text on dark bg
+    fix = suggest_contrast_fix(s)
+    assert fix and contrast_failures({**s, **{e['key']: e['new'] for e in fix}}) == []
+    # the suggested move is small (not a jump to pure black/white)
+    if fix[0]['key'] == 'text':
+        L_old = srgb_to_oklab(_hex_to_srgb(fix[0]['old']))[0]
+        L_new = srgb_to_oklab(_hex_to_srgb(fix[0]['new']))[0]
+        assert abs(L_new - L_old) < 0.35, (L_old, L_new)
+
+
+def test_suggest_fix_does_not_break_the_other_pair():
+    """The cheapest move for one pair must be discarded when it breaks the other."""
+    # accent barely passes; a big background move would push accent under 3:1
+    s = {'name': 'x', 'background_dark': '#5a5a5a', 'background_light': '#1251a6',
+         'accent': '#7a7a7a', 'text': '#606060'}
+    fix = suggest_contrast_fix(s)
+    assert fix
+    applied = {**s, **{e['key']: e['new'] for e in fix}}
+    assert contrast_failures(applied) == [], (fix, applied)
+
+
+def test_suggest_fix_empty_when_unfixable():
+    # text == accent == background: moving one colour alone cannot satisfy both floors?
+    s = {'name': 'x', 'background_dark': '#808080', 'background_light': '#1251a6',
+         'accent': '#808080', 'text': '#808080'}
+    fix = suggest_contrast_fix(s)
+    # whatever it suggests must actually work
+    if fix:
+        assert contrast_failures({**s, **{e['key']: e['new'] for e in fix}}) == []
+    else:
+        assert fix == []
+
+
+def test_derive_palette_override_warns_instead_of_raising():
+    s = {'name': 'x', 'background_dark': '#ffffff', 'background_light': '#1251a6',
+         'accent': '#ffb400', 'text': '#ffff54', 'contrast_override': True}
+    warns = []
+    p = derive_palette(s, warn=warns.append)
+    assert set(p) == set(PALETTE_KEYS)                      # keys are PINNED
+    assert len(warns) == len(contrast_failures(s))
+    assert any('override' in w for w in warns), warns
+
+
+def test_derive_palette_without_override_still_raises():
+    s = {'name': 'x', 'background_dark': '#ffffff', 'background_light': '#1251a6',
+         'accent': '#ffb400', 'text': '#ffff54'}
+    with pytest.raises(ValueError, match='contrast'):
+        derive_palette(s)
+
+
+def test_validate_scheme_rejects_non_bool_override():
+    with pytest.raises(ValueError, match='contrast_override'):
+        validate_scheme(dict(DARK, contrast_override='yes'))
+
+
+def test_save_scheme_strips_override_when_colours_pass(tmp_path):
+    p = tmp_path / 'scheme.json'
+    save_scheme(str(p), dict(DARK, contrast_override=True))   # colours pass -> flag dropped
+    assert json.load(open(p)) == DARK
+
+
+def test_save_scheme_keeps_override_when_colours_fail(tmp_path):
+    p = tmp_path / 'scheme.json'
+    s = {'name': 'x', 'background_dark': '#ffffff', 'background_light': '#1251a6',
+         'accent': '#ffb400', 'text': '#ffff54', 'contrast_override': True}
+    save_scheme(str(p), s)
+    assert json.load(open(p))['contrast_override'] is True
+
+
+def test_variant_overlay_carries_its_own_flag(tmp_path):
+    d = str(tmp_path / 'proj')
+    os.makedirs(d, exist_ok=True)
+    save_scheme(os.path.join(d, 'scheme.json'), DARK)          # passing base
+    overlay = {'background_dark': '#ffffff', 'text': '#ffff54', 'contrast_override': True}
+    os.makedirs(os.path.dirname(variant_path(d, 'loud')), exist_ok=True)
+    with open(variant_path(d, 'loud'), 'w') as f:
+        json.dump(overlay, f)
+    resolved = resolve_variant(d, 'loud')
+    assert resolved['contrast_override'] is True               # overlay's flag wins
+    warns = []
+    derive_palette(resolved, warn=warns.append)                # fails -> warns, no raise
+    assert warns
+    # a PASSING variant over a flagged base never warns
+    save_scheme(os.path.join(d, 'scheme.json'),
+                dict(DARK, background_dark='#ffffff', text='#ffff54', contrast_override=True))
+    os.makedirs(os.path.dirname(variant_path(d, 'calm')), exist_ok=True)
+    with open(variant_path(d, 'calm'), 'w') as f:
+        json.dump({'background_dark': '#0b1a4c', 'text': '#f5f7ff'}, f)
+    warns2 = []
+    derive_palette(resolve_variant(d, 'calm'), warn=warns2.append)
+    assert warns2 == []
