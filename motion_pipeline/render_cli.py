@@ -247,8 +247,14 @@ def render_test(project_dir, section=None, from_s=None, to_s=None, draft=False, 
            '--variant', 'default', '--mode', 'test', '--out', os.path.join(out_dir, f'{scene["slug"]}_{S:.1f}-{E:.1f}.mov')]
     if draft:
         cmd.append('--banded')  # placeholder for draft quality; real draft flag handled by toolchain
-    # helper scripts need this interpreter's deps (numpy/PIL) — same MP_PYTHON contract as render()
-    rc = subprocess.call(cmd, env={**os.environ, 'MP_PYTHON': sys.executable})
+    # helper scripts need this interpreter's deps (numpy/PIL) — same MP_PYTHON contract as
+    # render(); AND the toolchain PATH from preflight, or render_scene.sh exits 3 with
+    # "hyperframes not on PATH" when run standalone via --render-test (dogfood 2026-11-21)
+    try:
+        pf_env, _ = preflight()
+    except Missing:
+        pf_env = dict(os.environ)
+    rc = subprocess.call(cmd, env={**pf_env, 'MP_PYTHON': sys.executable})
     return rc
 
 

@@ -249,3 +249,25 @@ def test_check_graphics_determinism_lint_no_false_positives(tmp_path, capsys):
         "var d = document.createElement('div');\n")  # 'document' must not trip the Date rule
     assert render_cli.main(['--check-graphics', pd]) == 0
     assert 'check-graphics: OK' in capsys.readouterr().out
+
+
+def test_render_test_passes_preflight_env(tmp_path, monkeypatch):
+    """--render-test calls render_scene.sh directly — without preflight's PATH the cached
+    toolchain (hyperframes/chrome) is invisible and the render exits 3 (dogfood 2026-11-21)."""
+    pd = make_project(tmp_path / 'p')
+    generate.generate(pd)
+    captured = {}
+
+    def fake_call(cmd, env=None, **kw):
+        captured['env'] = env
+        return 0
+
+    monkeypatch.setattr(render_cli.subprocess, 'call', fake_call)
+    assert render_cli.main(['--render-test', pd]) == 0
+    env = captured.get('env')
+    assert env and 'MP_PYTHON' in env, env
+    try:
+        hf = render_cli.find_hyperframes()
+    except render_cli.Missing:
+        return  # no toolchain on this machine — nothing to assert about PATH
+    assert os.path.dirname(hf) in env['PATH'].split(os.pathsep), env['PATH']
