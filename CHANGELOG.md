@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.7.0] — 2026-11-22 — friendlier inputs, contrast fixer, font roles, zone map, transcript formats, automatic speech model
+
+- CI colours: hex fields take only `0-9a-fA-F` (max 6, the `#` is a fixed dimmed label outside
+  the field); `#fff` short form works; pasting `#FF6A00` is accepted whole, never truncated;
+  H/S/L take digits only and refuse out-of-range values at input (H>360, S/L>100)
+- Contrast failures show a red `!` on exactly the rows involved, name the pair
+  (`text on background dark: 1.07:1 — needs at least 4.5:1`) and offer **Fix contrast**
+  (smallest OKLab-lightness change that keeps BOTH pairs passing) plus
+  **Save anyway (ignore contrast)**; the override is honoured by the renderer too
+- Font menu: an "Apply to all roles" checkbox (default on) replaces the role dropdown; role
+  rows are clickable and the picked row is highlighted; the inline preview is much larger
+  (full width × remaining height, recomputed on resize) and the sharp preview window
+  (Quick Look) updates live on every change
+- Keep-out zones: a short explanation on top, a live box-drawn frame map that updates as you
+  type the rect, and an overlay on the latest background-test frame
+- Transcript + voiceover: loads `.txt/.md/.rtf/.doc/.docx/.pdf` (docx maps real headings and
+  bold runs; rtf/doc via textutil; pdf via pypdf — new brew-installed dep); after Save the
+  status shows `N sections, M words`; language defaults to Auto-detect for new projects;
+  with a voiceover attached, wpm becomes a read-only `measured N wpm` indicator
+- Computing timings shows a spinner and a progress bar fed by stage lines from the
+  prepare-only job (whisper's own progress included)
+- The speech model installs itself on first launch (sha256-pinned, atomic, resumable with a
+  Retry row on failure); `whisper-cpp` is a Homebrew dependency of the formula
+- The brew launcher resyncs the per-user venv when the shipped dependency list changes
+  (so upgrading to 0.7.0 installs pypdf into an existing venv)
+
 ## [0.6.4] — 2026-11-21 — standalone --render-test and PTY-test fixes (found by resuming the dogfood session)
 
 - `--render-test` spawns `render_scene.sh` directly, so it never got `preflight()`'s
