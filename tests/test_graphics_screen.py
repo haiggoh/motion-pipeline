@@ -78,6 +78,7 @@ async def test_copy_prompt_pipes_link_form_to_pbcopy(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.flaky  # Select overlay pilot timing under load
 async def test_free_agents_row_and_selects_only_when_detected(tmp_path, monkeypatch):
     pd = make_project(tmp_path / 'p')
     monkeypatch.setattr(free_agents, 'detect', lambda *a, **k: object())

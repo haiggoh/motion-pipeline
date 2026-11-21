@@ -26,4 +26,7 @@ motion-pipeline = "motion_pipeline.__main__:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-markers = ["slow: real render / venv install (minutes); the full gate runs them, the inner loop uses -m 'not slow'"]
+markers = [
+    "slow: real render / venv install (minutes); the full gate runs them, the inner loop uses -m 'not slow'",
+    "flaky: load-sensitive TUI/PTY/venv tests — run in their own low-parallelism shard (.rtc/pre-flight.sh), never in the parallel gate",
+]

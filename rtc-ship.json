@@ -11,7 +11,8 @@
   "assets": "dist/mp-*.tar.gz",
 
   "_comment_tests": "How this repo's tests run is the repo's business (rtc-ship 1.6.2): the worktree's own venv has the runtime deps (textual, numpy, pillow, pytest-asyncio); the PATH/pipx pytest does NOT even import motion_pipeline. NO -m 'not slow': the slow render tests self-skip with a printed reason when the toolchain is absent and gate for real when it is present (the unfiltered run is what exposed the MP_PYTHON bug).",
-  "test_cmd": ".venv/bin/python -m pytest tests -q -p no:cacheprovider -n 12 -rs",
+  "test_cmd": ".venv/bin/python -m pytest tests -q -p no:cacheprovider -n 12 -m 'not flaky' -rs",
+  "_comment_flaky": "Load-sensitive TUI/PTY/venv tests carry @pytest.mark.flaky and run in their own low-parallelism shard from .rtc/pre-flight.sh (2026-11-21: four gates died on rotating load flakes). Main gate: not flaky. Never call a provider API from tests outside the rate limiter — test_no_external_api_calls.py enforces it.",
 
   "test_workers": 12,
   "stall_seconds": 900,

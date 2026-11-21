@@ -204,6 +204,7 @@ async def test_failed_render_shows_exit_and_hint_not_a_traceback(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.flaky  # render job window too tight under shared-box load
 async def test_background_test_real_render_shows_image_below_actions(tmp_path):
     try:
         render_cli.preflight()

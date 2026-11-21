@@ -20,6 +20,7 @@ async def test_all_menu_screens_mount():
 
 
 @pytest.mark.asyncio
+@pytest.mark.flaky
 async def test_worker_streams_progress_and_stays_responsive_and_cancellable(tmp_path):
     """Cancel must STOP the render process (v0.1-0.4: worker.cancel() on a thread worker left
     the subprocess running), not just stop the log."""
