@@ -108,3 +108,71 @@ async def test_sharp_preview_opens_quicklook(tmp_path, monkeypatch):
         assert os.path.isfile(inline)
         inline_w = Image.open(inline).width
         assert sharp_w >= 2 * inline_w, (sharp_w, inline_w)
+
+
+# ---- Task 13 (spec B2): bigger inline preview + live sharp window ----
+
+# 0.6.x preview area at 120x40, measured on main: max_w=44/max_h=12 -> region 45x12
+OLD_PREVIEW_AREA_120x40 = 45 * 12
+
+
+async def _open_fonts_picked(pilot, app, tmp_path):
+    """Open the fonts screen, wait for the scan, pick Montserrat for all roles."""
+    app.push_screen(FontsScreen())
+    await pilot.pause()
+    scr = app.screen
+    await wait_scan(pilot, scr)
+    seq = next(s for f, s in scr._shown if f == 'Montserrat')
+    scr.on_list_view_selected(SimpleNamespace(item=SimpleNamespace(id=f'font-{seq}')))
+    for _ in range(30):
+        await pilot.pause(0.1)
+    return scr
+
+
+@pytest.mark.asyncio
+async def test_inline_preview_at_least_2x_the_063_area(tmp_path, monkeypatch):
+    fake_scan(tmp_path, monkeypatch)
+    project.save(str(tmp_path), project.default_project('demo'))
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        scr = await _open_fonts_picked(pilot, app, tmp_path)
+        pv = scr.query_one('#font-preview', Static)
+        area = pv.region.width * pv.region.height
+        assert area >= 2 * OLD_PREVIEW_AREA_120x40, (area, OLD_PREVIEW_AREA_120x40)
+
+
+@pytest.mark.asyncio
+async def test_sharp_window_rewrites_png_live_on_sample_change(tmp_path, monkeypatch):
+    """Once the sharp window is open, every preview update rewrites the SAME png (mtime
+    advances, pixels differ) without spawning another viewer process."""
+    fake_scan(tmp_path, monkeypatch)
+    project.save(str(tmp_path), project.default_project('demo'))
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    opened = []
+    real_popen = subprocess.Popen
+
+    def fake_popen(*a, **k):
+        if a and a[0] and a[0][0] == 'qlmanage':
+            opened.append(a[0])
+            return real_popen(['true'])
+        return real_popen(*a, **k)
+
+    monkeypatch.setattr('subprocess.Popen', fake_popen)
+    async with app.run_test(size=(120, 40)) as pilot:
+        scr = await _open_fonts_picked(pilot, app, tmp_path)
+        await choose(pilot, scr, 'sharp')
+        await pilot.pause(0.5)
+        assert len(opened) == 1, opened
+        png = opened[0][2]
+        before_mtime = os.path.getmtime(png)
+        before_px = Image.open(png).convert('RGB').tobytes()
+        scr.query_one('#sample-text', Input).value = 'Completely different sample text 9876'
+        for _ in range(30):
+            await pilot.pause(0.1)
+        after_mtime = os.path.getmtime(png)
+        after_px = Image.open(png).convert('RGB').tobytes()
+        assert after_mtime > before_mtime, (before_mtime, after_mtime)
+        assert after_px != before_px, 'sharp png pixels did not change with the sample text'
+        assert len(opened) == 1, 'a second viewer process was spawned'

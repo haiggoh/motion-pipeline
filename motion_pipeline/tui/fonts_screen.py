@@ -77,10 +77,11 @@ class FontsScreen(SubmenuScreen):
                 yield Checkbox('Apply to all roles', id='all-roles', value=True)   # B2: replaces the dropdown
                 yield Label('Preview')
                 yield Input(id='sample-text', value=font_preview.SAMPLE_TEXT)
-                yield Static('', id='font-preview')
                 yield Static('', id='licence-warning', classes='feedback')
                 yield Static('', id='status', classes='feedback')
                 yield Static('', id='error', classes='feedback-error')
+        # Task 13 (B2): the inline preview takes the FULL body width and the remaining height
+        yield Static('', id='font-preview')
 
     def on_mount(self):
         self._all = {}       # family -> list[Face]
@@ -90,6 +91,7 @@ class FontsScreen(SubmenuScreen):
         self._role_family = {r: None for r in fonts_mod.ROLES}
         self._edit_role = None      # None while "Apply to all roles" is on (B2)
         self._preview_token = 0
+        self._sharp_open = False    # Task 13: becomes True once the sharp window is opened
         self._refresh_list('')
         # the loader sits where the list will appear (never a bottom status row)
         fl = self.query_one('#fontlist')
@@ -243,6 +245,13 @@ class FontsScreen(SubmenuScreen):
                     pass
         return fg, bg
 
+    def _sharp_png_path(self):
+        return os.path.join(os.environ.get('TMPDIR', '/tmp'),
+                            f'motion-pipeline-preview-{os.getpid()}.png')
+
+    def on_resize(self, event):
+        self._schedule_preview()   # Task 13: recompute the preview size on resize
+
     def _update_preview(self, token):
         if token != self._preview_token or not self._all:
             return
@@ -250,11 +259,23 @@ class FontsScreen(SubmenuScreen):
         if not lines:
             return
         fg, bg = self._preview_colors()
-        img = font_preview.render_sample(lines, 88, fg, bg, scale=1.0)
+        pv = self.query_one('#font-preview', Static)
+        # Task 13 (B2): the preview fills the space it is given (full body width x remaining
+        # height); px per role scales so each line fills that width (one line per role)
+        max_w = pv.content_region.width or 44
+        max_h = pv.content_region.height or 12
+        width_px = max_w * 2          # half-block: 2 image px per cell horizontally
+        factor = width_px / 88.0
+        scaled = [(text, path, idx, int(px * factor)) for text, path, idx, px in lines]
+        img = font_preview.render_sample(scaled, width_px, fg, bg, scale=1.0)
         png = os.path.join(os.environ.get('TMPDIR', '/tmp'),
                            f'motion-pipeline-preview-inline-{os.getpid()}.png')
         img.save(png)
-        self.query_one('#font-preview', Static).update(render_ansi_image(png, max_w=44, max_h=12))
+        pv.update(render_ansi_image(png, max_w=max_w, max_h=max_h))
+        if self._sharp_open:
+            # once the sharp window is open, the SAME png is rewritten on every update
+            sharp = font_preview.render_sample(scaled, width_px, fg, bg, scale=2.0)
+            sharp.save(self._sharp_png_path())
 
     def _sharp_preview(self):
         err = self.query_one('#error', Static)
@@ -264,11 +285,19 @@ class FontsScreen(SubmenuScreen):
             if not lines:
                 raise ValueError('pick a font family in the list first')
             fg, bg = self._preview_colors()
-            img = font_preview.render_sample(lines, 88, fg, bg, scale=2.0)
-            png = os.path.join(os.environ.get('TMPDIR', '/tmp'),
-                               f'motion-pipeline-preview-{os.getpid()}.png')
+            pv = self.query_one('#font-preview', Static)
+            width_px = (pv.content_region.width or 44) * 2
+            factor = width_px / 88.0
+            scaled = [(text, path, idx, int(px * factor)) for text, path, idx, px in lines]
+            img = font_preview.render_sample(scaled, width_px, fg, bg, scale=2.0)
+            png = self._sharp_png_path()
             img.save(png)
-            subprocess.Popen(['qlmanage', '-p', png], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if not self._sharp_open:
+                # viewer choice probed 2026-11-21: qlmanage kept (the user's existing Quick
+                # Look workflow); the stable path + rewrite below is what makes it live
+                subprocess.Popen(['qlmanage', '-p', png],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self._sharp_open = True
             self.query_one('#status', Static).update(f'sharp preview: {png}')
         except (ValueError, OSError) as e:
             err.update(f'error: {e}')
