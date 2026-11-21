@@ -288,3 +288,37 @@ def test_render_with_contrast_override_warns_and_exits_0(tmp_path, capsys):
     err = capsys.readouterr().err
     assert rc == 0, err
     assert 'warning: contrast' in err and 'override' in err, err
+
+
+# ---- Task 17 (spec B4): progress lines from --prepare-only ----
+
+def test_parse_progress():
+    assert render_cli.parse_progress('progress: 3/5 align') == (3, 5, 'align')
+    assert render_cli.parse_progress('progress: 42/100 align') == (42, 100, 'align')
+    assert render_cli.parse_progress('timings saved — 5 words') is None
+    assert render_cli.parse_progress('') is None
+
+
+def test_whisper_pp_format_pinned():
+    """The -pp stderr format observed 2026-11-21 (whisper-cpp 1.9.5) is pinned in a fixture."""
+    from motion_pipeline import align_whisper
+    fixture = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           'fixtures', 'whisper_pp_sample.txt')
+    line = open(fixture).read().strip()
+    m = align_whisper._PP_RE.search(line)
+    assert m and m.group(1) == '100', line
+
+
+def test_prepare_only_prints_stage_lines_in_order(tmp_path, capsys):
+    """--prepare-only on a no-VO fixture prints progress lines in stage order, exit 0."""
+    d = make_project(tmp_path / 'p')      # transcript + scheme + fonts, estimated timing
+    r = _cli('--project', d, '--prepare-only')
+    out = r.stdout + r.stderr
+    assert r.returncode == 0, r.stderr
+    stages = [render_cli.parse_progress(line) for line in out.splitlines()]
+    stages = [s for s in stages if s]
+    names = [s[2] for s in stages]
+    assert names == ['transcript', 'decode', 'align', 'generate'], names   # no VO -> no snap
+    assert names == sorted(names, key=['transcript', 'decode', 'align', 'generate'].index)
+    done, total = stages[-1][0], stages[-1][1]
+    assert (done, total) == (len(stages), len(stages)) and names[-1] == 'generate'

@@ -290,11 +290,36 @@ class BgTestScreen(_RenderScreenBase):
                 img.update(render_ansi_image(png, max_w=max(20, w - 4), max_h=rows))
 
 
+class _ProgressLog:
+    """Wraps the timings RichLog for jobs.run_command: every line is logged AND parsed for
+    'progress: <done>/<total> <stage>' (Task 17), advancing the ProgressBar and stage label.
+    run_command calls write() via call_from_thread, so this runs on the UI thread — safe."""
+
+    def __init__(self, log, bar, stage_label):
+        self._log = log
+        self._bar = bar
+        self._stage = stage_label
+        self.last_named = None      # last 'missing dependency:'/'error:' line seen
+
+    def write(self, line):
+        self._log.write(line)
+        from .. import render_cli
+        if line.startswith(('missing dependency:', 'error:')):
+            self.last_named = line
+        parsed = render_cli.parse_progress(line)
+        if parsed:
+            done, total, stage = parsed
+            if total:
+                self._bar.update(total=100, progress=round(done / total * 100))
+            self._stage.update(stage)
+
+
 class InputsScreen(SubmenuScreen):
     TITLE = 'Transcript + voiceover'
     ACTIONS = [('save', 'Save inputs + compute timings'), ('model', 'Install speech model')]  # Task 17/21
     CSS = '#actions { margin: 0; }'  # fit 80x24 with the engine-status line (Task 17)
     CSS += '#timing-log { display: none; height: 3; min-height: 1; }'  # shown when a timings job starts; 80x24 layout test decides
+    CSS += '#timing-spinner, #timing-progress, #timing-stage { display: none; }'  # shown only while the job runs
 
     def compose_body(self):
         from textual.containers import Horizontal
@@ -316,7 +341,12 @@ class InputsScreen(SubmenuScreen):
         yield Static('', id='status', classes='feedback')
         yield Static('', id='error', classes='feedback-error')
         yield Static('', id='engine-status', classes='muted')  # Task 17: speech-model engine line
-        from textual.widgets import RichLog
+        from textual.widgets import LoadingIndicator, ProgressBar, RichLog
+        # Task 17 (B4): while the timings job runs, spinner + progress bar sit WHERE the log
+        # will appear (never a bottom row); the log itself shows the result on finish
+        yield LoadingIndicator(id='timing-spinner')
+        yield ProgressBar(id='timing-progress', total=100)
+        yield Static('', id='timing-stage', classes='muted')
         yield RichLog(id='timing-log', wrap=True, markup=False, classes='joblog', max_lines=200)
 
     def on_mount(self):
@@ -392,6 +422,12 @@ class InputsScreen(SubmenuScreen):
             self._update_wpm_indicator()
 
     def _on_timing_done(self, rc: int) -> None:
+        # Task 17: job finished — hide spinner/bar, show the log with the result
+        from textual.widgets import LoadingIndicator, ProgressBar, RichLog
+        self.query_one('#timing-spinner', LoadingIndicator).display = False
+        self.query_one('#timing-progress', ProgressBar).display = False
+        self.query_one('#timing-stage', Static).display = False
+        self.query_one('#timing-log', RichLog).display = True
         """Task 5 (A5): the prepare-only job is observed via run_command's on_finish (called
         on the UI thread). rc 0 -> report the saved counts; else surface the named error
         line from the job log (e.g. 'missing dependency: transcript …')."""
@@ -412,10 +448,9 @@ class InputsScreen(SubmenuScreen):
                 self.query_one('#error', Static).update(f'error: {e}')
                 self.query_one('#status', Static).update('')
                 return
-        log = self.query_one('#timing-log', RichLog)
-        lines = [x.text if hasattr(x, 'text') else str(x) for x in log.lines]
-        named = [line for line in lines if line.startswith(('missing dependency:', 'error:'))]
-        msg = named[-1] if named else (lines[-1] if lines else f'failed (exit {rc})')
+        # the wrapper captured the named line (log lines can land after on_finish)
+        named = getattr(self, '_timing_log_wrap', None)
+        msg = named.last_named if named and named.last_named else f'failed (exit {rc})'
         self.query_one('#error', Static).update(msg)
         self.query_one('#status', Static).update('')
 
@@ -474,13 +509,21 @@ class InputsScreen(SubmenuScreen):
             # Task 5 (A5): compute timings in a job (prepare-only) via jobs.run_command so the
             # output streams into #timing-log and the exit code is OBSERVED (on_finish) — the
             # graphics step gates on the result
-            from textual.widgets import RichLog
+            from textual.widgets import LoadingIndicator, ProgressBar, RichLog
             log = self.query_one('#timing-log', RichLog)
-            log.display = True          # the log sits where its content appears (not a bottom row)
+            spinner = self.query_one('#timing-spinner', LoadingIndicator)
+            bar = self.query_one('#timing-progress', ProgressBar)
+            stage = self.query_one('#timing-stage', Static)
+            spinner.display = True       # spinner + bar replace the log area while the job runs
+            bar.display = True
+            stage.display = True
+            bar.update(total=100, progress=0)
+            stage.update('starting…')
+            self._timing_log_wrap = _ProgressLog(log, bar, stage)
             self._timing_job = run_command(
                 self.app,
                 self.app.prepare_cmd(pd),
-                log,
+                self._timing_log_wrap,
                 on_finish=self._on_timing_done)
             self.query_one('#status', Static).update('saving inputs… computing timings…')
         except (ValueError, json.JSONDecodeError) as e:

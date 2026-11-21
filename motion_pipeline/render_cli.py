@@ -117,14 +117,42 @@ def preflight():
     return env, lines
 
 
-def prepare_inputs(project_dir):
+PROGRESS_STAGES = ('transcript', 'decode', 'align', 'snap', 'generate')
+_PROGRESS_RE = re.compile(r'^progress: (\d+)/(\d+) (\w+)$')
+
+
+def parse_progress(line):
+    """'progress: <done>/<total> <stage>' -> (done, total, stage); None for any other line."""
+    m = _PROGRESS_RE.match(line.strip())
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2)), m.group(3)
+
+
+class Progress:
+    """Emits 'progress: <i>/<total> <stage>' lines (flush=True) for the stages that will run
+    this run (total fixed per run: snap only for the whisper engine)."""
+
+    def __init__(self, stages):
+        self.stages = list(stages)
+        self.i = 0
+
+    def __call__(self, stage):
+        self.i += 1
+        print(f'progress: {self.i}/{len(self.stages)} {stage}', flush=True)
+
+
+def prepare_inputs(project_dir, progress=None):
     """Build transcript_model.json + timing.json from the project's transcript (+ voiceover).
-    Task 21: when timing.json is fresh (inputs fingerprint matches), re-aligning is skipped."""
+    Task 21: when timing.json is fresh (inputs fingerprint matches), re-aligning is skipped.
+    Task 17 (B4): emits progress stage lines via the optional progress callback."""
     from . import align, project, transcript
     p = project.load(project_dir)
     tpath = os.path.join(project_dir, p.get('transcript') or 'transcript.txt')
     if not os.path.isfile(tpath):
         raise Missing(f'transcript {tpath} — set it in step 5 (Transcript + voiceover)')
+    if progress:
+        progress('transcript')
     model = transcript.load(tpath)
     with open(os.path.join(project_dir, 'transcript_model.json'), 'w') as f:
         json.dump(model, f)
@@ -133,12 +161,16 @@ def prepare_inputs(project_dir):
         print('timing.json is current', flush=True)
     else:
         vo = p.get('vo')
+        if progress:
+            progress('decode')
         if vo:
             vpath = vo if os.path.isabs(vo) else os.path.join(project_dir, vo)
             if not os.path.isfile(vpath):
                 raise Missing(f'voiceover {vpath} — fix it in step 5 or clear the field')
-            timing = align.align_auto(vpath, model, p)  # Task 17: whisper engine when installed
+            timing = align.align_auto(vpath, model, p, progress=progress)  # whisper when installed
         else:
+            if progress:
+                progress('align')     # estimated timing: no real decode, but the stage exists
             timing = align.estimate_timings(model, wpm=p.get('wpm', 140))
         timing['inputs'] = align.inputs_fingerprint(project_dir, p)  # Task 21
         align.save_timing(os.path.join(project_dir, 'timing.json'), timing)
@@ -479,9 +511,17 @@ def main(argv=None):
             return render_test(os.path.abspath(a.render_test), a.section, a.from_s, a.to_s, a.draft,
                                a.dry_run)
         if a.prepare_only:
-            from . import generate
-            prepare_inputs(os.path.abspath(a.project))  # transcript model + timing (writes them)
-            generate.generate(os.path.abspath(a.project), 'default')
+            from . import align_whisper, generate
+            from . import project as _pm
+            pd = os.path.abspath(a.project)
+            _p = _pm.load(pd)
+            whisper = bool(_p.get('vo')) and bool(align_whisper.find_engine()) \
+                and _p.get('aligner', 'auto') in ('whisper', 'auto')
+            stages = PROGRESS_STAGES if whisper else [s for s in PROGRESS_STAGES if s != 'snap']
+            prog = Progress(stages)
+            prepare_inputs(pd, progress=prog)  # transcript model + timing (writes them)
+            prog('generate')
+            generate.generate(pd, 'default')
             import json as _json
             timing = _json.load(open(os.path.join(os.path.abspath(a.project), 'timing.json')))
             model = _json.load(open(os.path.join(os.path.abspath(a.project), 'transcript_model.json')))

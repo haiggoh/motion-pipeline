@@ -46,17 +46,30 @@ def find_engine():
     return None
 
 
-def transcribe(cli, model, wav16k, language, prompt):
+_PP_RE = re.compile(r'progress = (\d+)%')   # observed 2026-11-21: whisper_print_progress_callback: progress = 100%
+
+
+def transcribe(cli, model, wav16k, language, prompt, progress_pct=None):
     """Run whisper-cli and return [{text, start, end}] — the -ojf JSON layout is pinned by the
-    recorded fixture tests/fixtures/whisper_ojf_sample.json (U2 probe when the user allows)."""
+    recorded fixture tests/fixtures/whisper_ojf_sample.json (U2 probe when the user allows).
+    With -pp, whisper's stderr progress lines are parsed and reported via progress_pct(pct)."""
     with tempfile.TemporaryDirectory() as td:
         base = os.path.join(td, 'out')
         cmd = [cli, '-m', model, '-l', language or 'auto', '-ml', '1', '-sow', '-ojf',
-               '-tp', '0', '-tpi', '0', '-bs', '5', '-bo', '5', '-np',
+               '-tp', '0', '-tpi', '0', '-bs', '5', '-bo', '5', '-np', '-pp',
                '--prompt', prompt, '-f', wav16k, '-of', base]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-        if r.returncode != 0:
-            raise ValueError(f'whisper-cli failed ({r.returncode}): {r.stderr[-300:]}')
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        stderr_tail = []
+        for line in proc.stderr:
+            stderr_tail.append(line)
+            if len(stderr_tail) > 50:
+                stderr_tail.pop(0)
+            m = _PP_RE.search(line)
+            if m and progress_pct:
+                progress_pct(int(m.group(1)))
+        rc = proc.wait(timeout=3600)
+        if rc != 0:
+            raise ValueError(f'whisper-cli failed ({rc}): {"".join(stderr_tail)[-300:]}')
         data = json.load(open(base + '.ojf.json'))
     words = data.get('words')
     if words is None and isinstance(data.get('segments'), list):  # segment-word layouts

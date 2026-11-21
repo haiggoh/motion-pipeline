@@ -206,6 +206,58 @@ async def test_no_vo_keeps_editable_wpm_and_staleness(tmp_path):
         assert scr.query_one('#language', Select).value == 'auto'   # new default
 
 
+# ---- Task 17 (spec B4): spinner + progress bar while computing timings ----
+
+@pytest.mark.asyncio
+async def test_timings_job_shows_spinner_and_bar_then_hides_them(tmp_path):
+    """While the prepare-only job runs, a LoadingIndicator + ProgressBar sit in the log area
+    and advance on 'progress:' lines; on finish they hide and the log/status show the result."""
+    from textual.widgets import LoadingIndicator, ProgressBar, RichLog
+    d = mk_project(tmp_path / 'proj', fonts={'family': 'Montserrat'})
+    from motion_pipeline.scheme import save_scheme
+    from projfix import DARK
+    save_scheme(os.path.join(d, 'scheme.json'), DARK)
+    helper = tmp_path / 'fake_prepare.sh'
+    helper.write_text(
+        '#!/bin/bash\n'
+        'echo "progress: 1/4 transcript"\n'
+        'sleep 0.4\n'
+        'echo "progress: 2/4 decode"\n'
+        'sleep 0.4\n'
+        'echo "progress: 3/4 align"\n'
+        'sleep 0.4\n'
+        f'printf \'{{"method": "estimated", "inputs": "x"}}\' > "{d}/timing.json"\n'
+        f'printf \'{{"words": [{{"id": "w1"}}], "sections": [{{"name": "A"}}]}}\' > "{d}/transcript_model.json"\n'
+        'echo "progress: 4/4 generate"\n'
+        'exit 0\n')
+    app = MenuApp(test_prepare_cmd=['bash', str(helper)])
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        await save(pilot, scr)
+        bar = scr.query_one('#timing-progress', ProgressBar)
+        spinner = scr.query_one('#timing-spinner', LoadingIndicator)
+        saw_bar_move = False
+        saw_spinner = False
+        for _ in range(80):
+            await pilot.pause(0.1)
+            if spinner.display:
+                saw_spinner = True
+            if bar.display and bar.progress > 0:
+                saw_bar_move = True
+            if not spinner.display and saw_spinner:
+                break
+        assert saw_bar_move, 'progress bar never advanced while the job ran'
+        assert saw_spinner, 'spinner must be visible while the job runs'
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if not spinner.display:
+                break
+        assert not spinner.display and not bar.display, 'spinner/bar must hide when the job ends'
+        assert scr.query_one('#timing-log', RichLog).display, 'log shows the result on finish'
+        status = str(scr.query_one('#status', Static).render())
+        assert 'timings saved' in status, status
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('corrupt', ['{', 'foreign-key'])
 async def test_corrupt_project_json_is_named_and_save_refuses(tmp_path, corrupt):
