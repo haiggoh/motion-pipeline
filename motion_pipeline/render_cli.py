@@ -81,6 +81,7 @@ def node_bin_dir():
         return fnm
     node = shutil.which('node')
     if node:
+        v = None
         try:
             v = subprocess.run([node, '--version'], capture_output=True, text=True,
                                timeout=10).stdout.strip()
@@ -89,6 +90,10 @@ def node_bin_dir():
             major = 0
         if major >= 22:
             return os.path.dirname(node)
+        if v is None:
+            # the probe itself failed (timeout/crash) — never an UnboundLocalError here
+            # (0.6.3 dogfood: intermittent >10s node startups crashed the render)
+            raise Missing(f'node at {node} did not report a version — run: brew install node')
         raise Missing(f'node ≥22 — run: brew install node (found {v} at {node})')
     raise Missing('node ≥22 — run: brew install node (the fnm pin is used when present)')
 

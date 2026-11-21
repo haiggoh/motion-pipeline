@@ -148,8 +148,13 @@ def derive_palette(scheme):
 
 
 def load_scheme(path):
-    with open(path) as f:
-        return validate_scheme(json.load(f))
+    try:
+        with open(path) as f:
+            return validate_scheme(json.load(f))
+    except OSError as e:
+        # a missing/unreadable scheme.json must name the file (0.6.3 dogfood: generate()
+        # crashed with a bare FileNotFoundError instead)
+        raise ValueError(f'scheme.json missing or unreadable at {path}: {e}') from e
 
 
 def save_scheme(path, scheme):

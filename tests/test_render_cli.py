@@ -245,3 +245,33 @@ def test_render_scene_stage_only_survives_spaced_project_path(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     sites = [l.split('site: ', 1)[1] for l in r.stdout.splitlines() if 'site: ' in l]
     assert sites, r.stdout
+
+
+# ---- fix-forward findings from the 0.6.3 installed-copy dogfood ----
+
+def test_node_version_probe_failure_is_named_not_crash(tmp_path, monkeypatch):
+    """When `node --version` fails (e.g. times out), node_bin_dir raised
+    UnboundLocalError on `v` (0.6.3 dogfood, reproduced twice) instead of the named Missing."""
+    b = tmp_path / 'bin'
+    b.mkdir()
+    node = b / 'node'
+    node.write_text('#!/bin/bash\nsleep 30\n')
+    node.chmod(0o755)
+    monkeypatch.setenv('PATH', f'{b}:{os.environ["PATH"]}')
+    monkeypatch.setenv('HOME', str(tmp_path))          # no fnm pin
+
+    def slow(*a, **kw):
+        raise subprocess.TimeoutExpired(cmd='node', timeout=10)
+
+    monkeypatch.setattr(render_cli.subprocess, 'run', slow)
+    with pytest.raises(render_cli.Missing, match='node'):
+        render_cli.node_bin_dir()
+
+
+def test_missing_scheme_json_is_named_not_a_traceback(tmp_path):
+    """generate() on a project without scheme.json crashed with a bare FileNotFoundError
+    (0.6.3 dogfood); it must name the missing file."""
+    d = make_project(tmp_path / 'p')
+    os.remove(os.path.join(d, 'scheme.json'))
+    with pytest.raises(ValueError, match='scheme.json'):
+        render_cli.render(d, 'test', dry_run=True)
