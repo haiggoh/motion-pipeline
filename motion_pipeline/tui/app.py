@@ -299,7 +299,8 @@ class InputsScreen(SubmenuScreen):
     def compose_body(self):
         from textual.containers import Horizontal
         from textual.widgets import Input, Select
-        yield Label('transcript.txt path (drag a file/folder from Finder to paste)')
+        yield Label('Transcript path — .txt/.md/.rtf/.doc/.docx/.pdf (drag a file from Finder; '
+                    'docx maps real headings, rtf/doc load as plain text via textutil)')
         yield PathInput(id='transcript', value='transcript.txt', accepts=TRANSCRIPT_EXTS)
         yield Label('voiceover file (optional)')
         yield PathInput(id='vo', placeholder='audio/vo.wav', accepts=VO_EXTS)

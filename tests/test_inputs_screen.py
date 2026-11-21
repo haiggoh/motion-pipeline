@@ -139,6 +139,30 @@ async def test_save_success_reports_timing_counts(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_save_with_docx_transcript_reports_sections_and_words(tmp_path):
+    """Task 15 (B4) delivery level: a .docx transcript set in the field saves through the REAL
+    prepare-only job and the status reports 'N sections, M words'."""
+    import shutil
+    from motion_pipeline.scheme import save_scheme
+    from projfix import DARK
+    d = mk_project(tmp_path / 'proj', fonts={'family': 'Montserrat'})
+    save_scheme(os.path.join(d, 'scheme.json'), DARK)
+    docx = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        'fixtures', 'transcripts', 'sample.docx')
+    shutil.copy(docx, os.path.join(d, 'transcript.docx'))
+    app = MenuApp()          # real prepare-only command
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        scr.query_one('#transcript', Input).value = 'transcript.docx'
+        await save(pilot, scr)
+        ok = await _wait_for(
+            lambda: 'timings saved' in str(scr.query_one('#status', Static).render()), pilot)
+        status = str(scr.query_one('#status', Static).render())
+        assert ok, f'status: {status!r}'
+        assert '1 sections' in status and '7 words' in status, status   # docx: Intro + 7 words
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('corrupt', ['{', 'foreign-key'])
 async def test_corrupt_project_json_is_named_and_save_refuses(tmp_path, corrupt):
     """Task 6 (X2): a corrupt or invalid project.json must be NAMED in #error on the inputs

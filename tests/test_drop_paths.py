@@ -209,10 +209,12 @@ async def test_folder_drop_regression_project_and_colours_screens(tmp_path):
         scr.focused.post_message(events.Paste(str(real))); await pilot.pause()
 
 
-def test_transcript_load_rejects_non_txt_md_with_named_error(tmp_path):
+def test_transcript_load_supports_all_formats_in_070(tmp_path):
+    """Task 15 replaced the 0.6.3 placeholder: .docx now loads (see test_transcript_formats)."""
     from motion_pipeline import transcript
     p = tmp_path / 'x.docx'
-    p.write_bytes(b'not really a docx')
-    with pytest.raises(ValueError) as ei:
-        transcript.load(str(p))
-    assert '.docx' in str(ei.value) and '0.7.0' in str(ei.value)
+    import shutil
+    shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'fixtures', 'transcripts', 'sample.docx'), p)
+    model = transcript.load(str(p))
+    assert [s['name'] for s in model['sections']] == ['Intro']
