@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.4] — 2026-11-21 — standalone --render-test and PTY-test fixes (found by resuming the dogfood session)
+
+- `--render-test` spawns `render_scene.sh` directly, so it never got `preflight()`'s
+  toolchain PATH — standalone CLI render-tests exited 3 with "hyperframes not on PATH"
+  while the menu path worked. It now reuses the preflight env (+ `MP_PYTHON`), guarded
+  when the toolchain is absent. Guard test captures the subprocess env and asserts the
+  hyperframes dir is on PATH (RED before, GREEN after).
+- The PTY terminal-driver tests spawned their child with `cwd=tmp_path` and `-P` (no cwd
+  on sys.path) and no `PYTHONPATH` — the child died on "No module named motion_pipeline",
+  so BOTH discriminants (query suppressed on Apple Terminal / present elsewhere) read
+  vacuously. The child env now carries the repo root; 7/7 PTY tests pass for real.
+- Both surfaced while resuming the killed `sevenone-adf-test` dogfood session
+  (93a52b75): its work (design gate, 2 graphics + CC0 SFX, final verification green) was
+  re-verified against this build on the real spaced project path — `--check-graphics` OK,
+  both render-tests exit 0, chroma gates pass, stills show the designed shapes.
+- Gate: 316 passed, 7 printed env-skips, exit 0.
+
 ## [0.6.3] — 2026-11-21 — bug fixes from the 0.6.2 hands-on test
 
 - No stray `p` on startup in Apple Terminal (the 2048 in-band-resize query is skipped there; PTY-tested, other terminals unchanged)
