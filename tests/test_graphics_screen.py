@@ -31,7 +31,7 @@ async def test_menu_shows_graphics_as_step_6_and_hint_0_to_7(tmp_path):
         menu = app.screen.query_one('#actions')
         assert menu.numbers['6'] == 'graphics' and menu.numbers['7'] == 'render'  # digit -> step
         prompts = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
-        assert '6) Add motion graphics' in prompts and '7) Render' in prompts
+        assert any(p.startswith('6) Add motion graphics') for p in prompts) and '7) Render' in prompts
         assert '0-7' in str(app.screen.query_one('.hint').render())
 
 

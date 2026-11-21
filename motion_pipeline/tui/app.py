@@ -294,7 +294,7 @@ class InputsScreen(SubmenuScreen):
     TITLE = 'Transcript + voiceover'
     ACTIONS = [('save', 'Save inputs + compute timings'), ('model', 'Install speech model')]  # Task 17/21
     CSS = '#actions { margin: 0; }'  # fit 80x24 with the engine-status line (Task 17)
-    CSS += '#timing-log { height: 3; min-height: 1; }'  # compact job log; 80x24 layout test decides
+    CSS += '#timing-log { display: none; height: 3; min-height: 1; }'  # shown when a timings job starts; 80x24 layout test decides
 
     def compose_body(self):
         from textual.containers import Horizontal
@@ -329,6 +329,9 @@ class InputsScreen(SubmenuScreen):
         pd = getattr(self.app, 'project_dir', None)
         if not pd:
             return
+        pj = os.path.join(pd, 'project.json')
+        if not os.path.isfile(pj):
+            return   # no project yet — not an error (keeps the 80x24 layout intact)
         try:
             p = project_mod.load(pd)
         except (ValueError, OSError, json.JSONDecodeError) as e:
@@ -426,10 +429,12 @@ class InputsScreen(SubmenuScreen):
             # output streams into #timing-log and the exit code is OBSERVED (on_finish) — the
             # graphics step gates on the result
             from textual.widgets import RichLog
+            log = self.query_one('#timing-log', RichLog)
+            log.display = True          # the log sits where its content appears (not a bottom row)
             self._timing_job = run_command(
                 self.app,
                 self.app.prepare_cmd(pd),
-                self.query_one('#timing-log', RichLog),
+                log,
                 on_finish=self._on_timing_done)
             self.query_one('#status', Static).update('saving inputs… computing timings…')
         except (ValueError, json.JSONDecodeError) as e:

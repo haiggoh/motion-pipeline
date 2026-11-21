@@ -97,6 +97,8 @@ class FontsScreen(SubmenuScreen):
         pd = getattr(self.app, 'project_dir', None)
         if not pd:
             return
+        if not os.path.isfile(os.path.join(pd, 'project.json')):
+            return   # no project yet — not an error
         try:
             p = project_mod.load(pd)
             cfg = fonts_mod.normalise_fonts(p.get('fonts', {}), pd)
