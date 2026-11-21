@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.3] — 2026-11-21 — bug fixes from the 0.6.2 hands-on test
+
+- No stray `p` on startup in Apple Terminal (the 2048 in-band-resize query is skipped there; PTY-tested, other terminals unchanged)
+- Finder drops land in the field that accepts the file type — a `.wav` goes to the voiceover field even when the transcript field has focus; a multi-item drop uses the first item and says so in the field's frame
+- No grey block behind the job logs anymore (terminal-native csl look on the background-test and render screens)
+- Background test render no longer needs a transcript: it uses a built-in sample (or the transcript's first section) in a scratch copy, so your project's files stay untouched; step 4 no longer depends on step 5
+- "Add motion graphics" says why it is greyed out ("needs saved timings (step 5)") and re-checks when you come back to the menu; computing timings reports success (`timings saved — N words, M sections, engine …`) or the named error
+- Hidden Apple-private `.`-prefixed font families (e.g. `.SF NS`) in the font list
+- A corrupt `project.json` is named in the UI (`error: project.json: …`) and Save refuses to overwrite it — never silently replaced by defaults
+- The voiceover is decoded once when computing timings (was twice)
+- Fixed a never-green test (`TimeRange.start` → `start_time`) that only skipped in CI
+
 ## [0.6.2] — 2026-11-19 — determinism lint in --check-graphics for AI scripts
 
 - `motion-pipeline --check-graphics <project>` now also scans every `ai_graphics/`
