@@ -206,6 +206,37 @@ async def test_no_vo_keeps_editable_wpm_and_staleness(tmp_path):
         assert scr.query_one('#language', Select).value == 'auto'   # new default
 
 
+# ---- Task 18 (spec B4): the speech model installs itself on first launch ----
+
+@pytest.mark.asyncio
+async def test_engine_line_shows_model_states_and_retry_only_on_failure(tmp_path, monkeypatch):
+    """The engine line shows the live model_state; the retry row appears only on failure;
+    the old 'Install speech model' action is gone."""
+    from motion_pipeline import align_whisper
+    # pretend the CLI exists but no model -> downloading
+    monkeypatch.setattr(align_whisper, 'find_cli', lambda: '/opt/homebrew/bin/whisper-cli')
+    monkeypatch.setattr(align_whisper, 'find_engine', lambda: None)
+    monkeypatch.setattr(align_whisper, 'ensure_model', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('boom')))
+    d = mk_project(tmp_path / 'proj')
+    app = MenuApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_inputs(pilot, app, d)
+        menu = scr.query_one('#actions')
+        assert not any(o.id == 'model' for o in menu.options), 'old Install-model action must be gone'
+        app._set_model_state('downloading 42%')
+        await pilot.pause()
+        assert 'downloading 42%' in str(scr.query_one('#engine-status', Static).render())
+        assert menu.get_option('retry-model').disabled
+        app._set_model_state('failed: boom')
+        await pilot.pause()
+        err_line = str(scr.query_one('#engine-status', Static).render())
+        assert 'failed: boom' in err_line, err_line
+        assert not menu.get_option('retry-model').disabled, 'retry row appears only on failure'
+        app._set_model_state('no whisper-cli')
+        await pilot.pause()
+        assert 'brew install whisper-cpp' in str(scr.query_one('#engine-status', Static).render())
+
+
 # ---- Task 17 (spec B4): spinner + progress bar while computing timings ----
 
 @pytest.mark.asyncio

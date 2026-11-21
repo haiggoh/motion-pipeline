@@ -15,17 +15,21 @@ class Missing(Exception):
     pass
 
 
-def find_engine():
-    """(cli, model) or None. MP_WHISPER_CLI or whisper-cli on PATH; MP_WHISPER_MODEL or the
-    newest ggml-*.bin in MP_MODELS_DIR / ~/.cache/motion-pipeline/models. Set-but-missing
-    env vars fail loudly naming them."""
+def find_cli():
+    """The whisper-cli binary or None. MP_WHISPER_CLI (set-but-missing fails loudly) or PATH."""
     cli_env = os.environ.get('MP_WHISPER_CLI')
     if cli_env:
         if not (os.path.isfile(cli_env) and os.access(cli_env, os.X_OK)):
             raise ValueError(f'MP_WHISPER_CLI is set but is not an executable: {cli_env}')
-        cli = cli_env
-    else:
-        cli = shutil.which('whisper-cli')
+        return cli_env
+    return shutil.which('whisper-cli')
+
+
+def find_engine():
+    """(cli, model) or None. MP_WHISPER_CLI or whisper-cli on PATH; MP_WHISPER_MODEL or the
+    newest ggml-*.bin in MP_MODELS_DIR / ~/.cache/motion-pipeline/models. Set-but-missing
+    env vars fail loudly naming them."""
+    cli = find_cli()
     if not cli:
         return None
     mdir_env = os.environ.get('MP_MODELS_DIR')
@@ -122,15 +126,60 @@ def snap(recognised, transcript_words, classical_timing, model_path):
             'words': words_out}
 
 
-def download_model(models_dir, log=print):
-    """User-triggered only: download ggml-base.bin (multilingual) into the models dir."""
+MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin'
+MODEL_SHA256 = '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe'
+MODEL_SIZE = 147951465
+MODEL_NAME = 'ggml-base.bin'
+
+
+def ensure_model(models_dir, url=None, progress=None):
+    """Return the ggml-base.bin path, downloading+verifying it when missing (spec B4: the
+    speech model installs itself on first launch). An existing file is accepted on a SIZE
+    check only — never re-hashed on every launch. Streams to <dir>/ggml-base.bin.part,
+    verifies size + sha256, then os.replace()s into place; a mismatch deletes the .part and
+    raises ValueError naming expected/actual. url overrides, else MP_MODEL_URL (set but not
+    http(s)/file -> loud error), else MODEL_URL. Tests never hit the network (file:// only).
+    progress(done, total) is called per chunk."""
+    import hashlib
     import urllib.request
-    url = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin'
+    dst = os.path.join(models_dir, MODEL_NAME)
+    if os.path.isfile(dst) and os.path.getsize(dst) == MODEL_SIZE:
+        return dst
+    env_url = os.environ.get('MP_MODEL_URL')
+    if env_url is not None:
+        if not env_url.startswith(('http://', 'https://', 'file://')):
+            raise ValueError(f'MP_MODEL_URL is set but is not an http(s)/file URL: {env_url!r}')
+        url = env_url
+    url = url or MODEL_URL
     os.makedirs(models_dir, exist_ok=True)
-    dst = os.path.join(models_dir, 'ggml-base.bin')
-    tmp = dst + '.tmp'
-    log(f'downloading {url} -> {dst} (~150 MB)')
-    urllib.request.urlretrieve(url, tmp)
-    os.replace(tmp, dst)
-    log('done')
+    part = dst + '.part'
+    h = hashlib.sha256()
+    done = 0
+    try:
+        with urllib.request.urlopen(url) as r, open(part, 'wb') as f:
+            total = int(r.headers.get('Content-Length') or MODEL_SIZE)
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+                h.update(chunk)
+                done += len(chunk)
+                if progress:
+                    progress(done, total)
+    except Exception:
+        if os.path.exists(part):
+            os.remove(part)
+        raise
+    got_sha = h.hexdigest()
+    if done != MODEL_SIZE or got_sha != MODEL_SHA256:
+        os.remove(part)
+        raise ValueError(f'model download from {url} failed verification: size {done} '
+                         f'(want {MODEL_SIZE}), sha256 {got_sha} (want {MODEL_SHA256})')
+    os.replace(part, dst)
     return dst
+
+
+def download_model(models_dir, log=print):
+    """Legacy alias for ensure_model (kept for callers/tests)."""
+    return ensure_model(models_dir)

@@ -316,7 +316,8 @@ class _ProgressLog:
 
 class InputsScreen(SubmenuScreen):
     TITLE = 'Transcript + voiceover'
-    ACTIONS = [('save', 'Save inputs + compute timings'), ('model', 'Install speech model')]  # Task 17/21
+    ACTIONS = [('save', 'Save inputs + compute timings'),
+               ('retry-model', 'Retry speech model download')]   # Task 18 (B4): model installs itself
     CSS = '#actions { margin: 0; }'  # fit 80x24 with the engine-status line (Task 17)
     CSS += '#timing-log { display: none; height: 3; min-height: 1; }'  # shown when a timings job starts; 80x24 layout test decides
     CSS += '#timing-spinner, #timing-progress, #timing-stage { display: none; }'  # shown only while the job runs
@@ -455,35 +456,33 @@ class InputsScreen(SubmenuScreen):
         self.query_one('#status', Static).update('')
 
     def _update_engine_status(self):
-        """Task 17: 'speech model: ggml-… (found)' / 'not installed — classical aligner in use'."""
-        from .. import align_whisper
-        try:
-            eng = align_whisper.find_engine()
-        except ValueError as e:
-            self.query_one('#engine-status', Static).update(f'error: {e}')
-            return
+        """Task 18 (B4): the engine line shows the app's live model_state (self-install)."""
         if not self.query('#engine-status'):
             return
-        if eng:
-            self.query_one('#engine-status', Static).update(
-                f'speech model: {os.path.basename(eng[1])} (found)')
-        else:
-            self.query_one('#engine-status', Static).update(
-                'not installed — classical aligner in use')
+        self.query_one('#engine-status', Static).update(self.app._engine_line())
+        menu = self.query_one('#actions')
+        menu.set_enabled('retry-model', self.app.model_state.startswith('failed:'))
 
     def on_action(self, action_id):
-        if action_id == 'model':
-            # user-triggered download of ggml-base into the models dir (Task 17)
+        if action_id == 'retry-model':
+            # Task 18 (B4): retry the failed self-install
             from .. import align_whisper
+            self.app.model_state = 'downloading 0%'
+            self._update_engine_status()
             mdir = os.environ.get('MP_MODELS_DIR') or os.path.join(
                 os.path.expanduser('~'), '.cache', 'motion-pipeline', 'models')
 
             def _dl():
-                align_whisper.download_model(
-                    mdir, log=lambda m: self.app.call_from_thread(
-                        self.query_one('#status', Static).update, m))
+                try:
+                    align_whisper.ensure_model(
+                        mdir,
+                        progress=lambda d, t: self.app.call_from_thread(
+                            self.app._set_model_state, f'downloading {round(d / max(t, 1) * 100)}%'))
+                    self.app.call_from_thread(self.app._set_model_state, 'ready')
+                except Exception as e:
+                    self.app.call_from_thread(self.app._set_model_state, f'failed: {e}')
+
             self.run_worker(_dl, thread=True, exclusive=True, name='model-download')
-            self.query_one('#status', Static).update('downloading speech model… (~150 MB)')
             return
         if action_id != 'save':
             return
@@ -630,6 +629,34 @@ class MenuApp(MenuAppBase):
         self._full_cmd = full_render_cmd
         self._prepare_cmd = test_prepare_cmd
         self.project_dir = None
+        self.model_state = 'ready'   # 'ready' | 'downloading <pct>%' | 'failed: <msg>' | 'no whisper-cli'
+
+    def _set_model_state(self, state):
+        self.model_state = state
+        for scr in self.screen_stack:
+            if scr.query('#engine-status'):
+                scr.query_one('#engine-status', Static).update(self._engine_line())
+            menus = scr.query('#actions')
+            if menus:
+                menu = menus.first()
+                if any(o.id == 'retry-model' for o in menu.options):
+                    menu.set_enabled('retry-model', state.startswith('failed:'))
+
+    def _engine_line(self):
+        """Task 18 (B4): the engine line shows the live model state."""
+        st = self.model_state
+        if st == 'no whisper-cli':
+            return 'speech engine not installed — brew install whisper-cpp'
+        if st == 'ready':
+            from .. import align_whisper
+            try:
+                eng = align_whisper.find_engine()
+            except ValueError:
+                eng = None
+            if eng:
+                return f'speech model: {os.path.basename(eng[1])} (found)'
+            return 'speech model: ggml-base.bin (found)'
+        return f'speech model: {st}'   # downloading N% / failed: …
 
     def prepare_cmd(self, pd):
         import sys
@@ -674,3 +701,30 @@ class MenuApp(MenuAppBase):
             scr = self.SCREENS['project']()
             scr.root_entry = True
             self.push_screen(scr)
+        # Task 18 (B4): the speech model installs itself on first launch (sha256-pinned)
+        from .. import align_whisper
+        try:
+            cli = align_whisper.find_cli()
+            eng = align_whisper.find_engine()
+        except ValueError:
+            cli = eng = None
+        if eng:
+            self.model_state = 'ready'
+        elif cli:
+            self.model_state = 'downloading 0%'
+            mdir = os.environ.get('MP_MODELS_DIR') or os.path.join(
+                os.path.expanduser('~'), '.cache', 'motion-pipeline', 'models')
+
+            def _dl():
+                try:
+                    align_whisper.ensure_model(
+                        mdir,
+                        progress=lambda d, t: self.call_from_thread(
+                            self._set_model_state, f'downloading {round(d / max(t, 1) * 100)}%'))
+                    self.call_from_thread(self._set_model_state, 'ready')
+                except Exception as e:
+                    self.call_from_thread(self._set_model_state, f'failed: {e}')
+
+            self.run_worker(_dl, thread=True, exclusive=True, name='model-download')
+        else:
+            self.model_state = 'no whisper-cli'

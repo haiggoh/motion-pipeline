@@ -86,3 +86,54 @@ def test_transcribe_parses_recorded_fixture(tmp_path):
     model.write_bytes(b'x')
     rec = align_whisper.transcribe(str(fake), str(model), '/tmp/vo.wav', 'de', 'Das ist ein Test.')
     assert len(rec) == 7 and rec[0]['text'] == 'Das' and abs(rec[0]['start'] - 1.0) < 1e-6
+
+
+# ---- Task 18 (spec B4): the speech model installs itself (sha256-pinned, no network in tests) ----
+
+def _fake_model(tmp_path, monkeypatch, content=b'fake-model-bytes'):
+    import hashlib
+    src = tmp_path / 'fake.bin'
+    src.write_bytes(content)
+    monkeypatch.setattr(align_whisper, 'MODEL_SHA256', hashlib.sha256(content).hexdigest())
+    monkeypatch.setattr(align_whisper, 'MODEL_SIZE', len(content))
+    return src
+
+
+def test_ensure_model_places_file_atomically(tmp_path, monkeypatch):
+    src = _fake_model(tmp_path, monkeypatch)
+    mdir = str(tmp_path / 'models')
+    seen = []
+    out = align_whisper.ensure_model(mdir, url='file://' + str(src),
+                                     progress=lambda d, t: seen.append((d, t)))
+    assert out == os.path.join(mdir, 'ggml-base.bin')
+    assert os.path.isfile(out) and open(out, 'rb').read() == b'fake-model-bytes'
+    assert not os.path.exists(out + '.part')
+    assert seen and seen[-1][0] == seen[-1][1]   # progress reached 100%
+
+
+def test_ensure_model_bad_sha_deletes_part_and_names_hashes(tmp_path, monkeypatch):
+    src = _fake_model(tmp_path, monkeypatch, content=b'wrong')
+    monkeypatch.setattr(align_whisper, 'MODEL_SHA256', '0' * 64)
+    mdir = str(tmp_path / 'models')
+    with pytest.raises(ValueError) as ei:
+        align_whisper.ensure_model(mdir, url='file://' + str(src))
+    assert 'sha256' in str(ei.value) and '0' * 64 in str(ei.value)
+    assert not os.path.exists(os.path.join(mdir, 'ggml-base.bin.part'))
+    assert not os.path.exists(os.path.join(mdir, 'ggml-base.bin'))
+
+
+def test_ensure_model_existing_file_not_rehashed(tmp_path, monkeypatch):
+    _fake_model(tmp_path, monkeypatch)
+    mdir = str(tmp_path / 'models')
+    os.makedirs(mdir)
+    dst = os.path.join(mdir, 'ggml-base.bin')
+    dst_bytes = b'x' * align_whisper.MODEL_SIZE   # right size, WRONG sha — must still be accepted
+    open(dst, 'wb').write(dst_bytes)
+    out = align_whisper.ensure_model(mdir, url='file:///nonexistent/unreachable')
+    assert out == dst and open(dst, 'rb').read() == dst_bytes   # unreachable url never opened
+
+
+def test_ensure_model_bad_mp_model_url_is_loud(tmp_path, monkeypatch):
+    monkeypatch.setenv('MP_MODEL_URL', 'ftp://x')
+    with pytest.raises(ValueError, match='MP_MODEL_URL'):
+        align_whisper.ensure_model(str(tmp_path / 'm'), url=None)
