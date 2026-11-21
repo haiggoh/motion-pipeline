@@ -24,8 +24,11 @@ def normalize_dropped_paths(text: str) -> list[str]:
     if not t:
         return []
     if t.startswith('file://'):
-        p = unquote(urlparse(t.split()[0]).path)
-        return [p.rstrip('/') if len(p) > 1 else p]
+        out = []
+        for part in t.split():   # a multi-item URL drop is whitespace-separated, %20-encoded
+            p = unquote(urlparse(part).path)
+            out.append(p.rstrip('/') if len(p) > 1 else p)
+        return out
     try:
         parts = shlex.split(t)   # handles \-escapes, '…' and "…" quoting, multiple items
     except ValueError:

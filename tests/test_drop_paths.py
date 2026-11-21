@@ -9,7 +9,7 @@ from textual import events
 from textual.widgets import Input
 
 from motion_pipeline.tui.app import MenuApp
-from motion_pipeline.tui.paths import PathInput, normalize_dropped_path
+from motion_pipeline.tui.paths import PathInput, normalize_dropped_path, normalize_dropped_paths
 
 D = '/Volumes/Work/x'   # fixture prefix (not a real home dir)
 
@@ -22,11 +22,35 @@ D = '/Volumes/Work/x'   # fixture prefix (not a real home dir)
     (D + '/\\Ünïcode\\ dir', D + '/Ünïcode dir'),
     (D + "/it\\'s\\ here", D + "/it's here"),
     (D + '/a\\ b ' + D + '/c', D + '/a b'),                     # two items -> first
+    ('file://' + D + '/a%20b file://' + D + '/c', D + '/a b'),   # two file:// URLs -> first
     ('~/Movies', os.path.expanduser('~/Movies')),
     ('  /plain/path\n', '/plain/path'),
 ])
 def test_normalize_dropped_path(raw, want):
     assert normalize_dropped_path(raw) == want
+
+
+def test_normalize_dropped_paths_multi_url():
+    assert normalize_dropped_paths('file:///a%20b file:///c') == ['/a b', '/c']
+
+
+async def test_first_run_screen_routes_folder_drop_to_root(tmp_path):
+    """Review finding: FirstRunScreen (plain Screen) lost drops when the action list had
+    focus — it now routes like every other screen with a path field."""
+    from motion_pipeline.tui.app import FirstRunScreen
+    real = tmp_path / 'my projects'
+    real.mkdir()
+    app = MenuApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(FirstRunScreen())
+        await pilot.pause()
+        scr = app.screen
+        scr.query_one('#actions').focus(); await pilot.pause()
+        scr.focused.post_message(events.Paste(str(real).replace(' ', '\\ ')))
+        await pilot.pause()
+        f = scr.query_one('#root', PathInput)
+        assert f.value == str(real), f.value
+        assert scr.focused is f
 
 
 async def test_drop_into_focused_path_field_replaces_and_reports_existence(tmp_path):

@@ -30,7 +30,8 @@ class AppleTerminalSafeDriver(LinuxDriver):
 
 def get_driver_class() -> type[LinuxDriver] | None:
     """The safe driver on macOS/Linux (where LinuxDriver would be selected), None elsewhere
-    (Windows / custom TEXTUAL_DRIVER keep Textual's auto-detection)."""
-    if os.name != 'posix':
+    (Windows / an explicit TEXTUAL_DRIVER keep Textual's own auto-detection — e.g.
+    TEXTUAL_DRIVER=headless must not be overridden by us)."""
+    if os.name != 'posix' or os.environ.get('TEXTUAL_DRIVER'):
         return None
     return AppleTerminalSafeDriver

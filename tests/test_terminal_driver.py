@@ -46,6 +46,13 @@ def test_get_driver_class_posix_returns_subclass():
         assert get_driver_class() is None
 
 
+def test_get_driver_class_yields_to_textual_driver_env(monkeypatch):
+    # an explicit TEXTUAL_DRIVER (e.g. headless in CI) must keep Textual's auto-detection
+    from motion_pipeline.tui.terminal_driver import get_driver_class
+    monkeypatch.setenv('TEXTUAL_DRIVER', 'headless')
+    assert get_driver_class() is None
+
+
 def test_menu_app_uses_safe_driver_on_posix():
     from motion_pipeline.tui.app import MenuApp
     from motion_pipeline.tui.terminal_driver import AppleTerminalSafeDriver

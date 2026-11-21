@@ -485,6 +485,21 @@ class FirstRunScreen(Screen):
             yield Static('', id='error', classes='feedback-error')
             yield Static('↑↓ move · Enter/click select · q quit', classes='hint')
 
+    def on_paste(self, event):
+        # same drop routing as every submenu (spec A2): a Finder drop on a non-input widget
+        # (e.g. the action list) lands in #root
+        from textual.widgets import Input
+
+        from .base import route_drop
+        if isinstance(self.focused, Input):
+            return
+        target = route_drop(self, event.text)
+        if target is None:
+            return
+        event.stop()
+        target.focus()
+        target.post_message(type(event)(event.text))
+
     def on_action_menu_chosen(self, event):
         from textual.widgets import Input
 

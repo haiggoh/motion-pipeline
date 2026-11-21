@@ -212,6 +212,25 @@ class ActionMenu(OptionList):
         (self.enable_option if enabled else self.disable_option)(action_id)
 
 
+def route_drop(screen, text: str):
+    """Route a dropped/pasted path by WHAT it is (spec A2): the single visible, enabled
+    PathInput that accepts it wins; only on ambiguity (zero or several accept) does the
+    focused PathInput decide, else the first visible PathInput. Module-level so non-submenu
+    screens with path fields (FirstRunScreen) route drops the same way."""
+    from .paths import PathInput, normalize_dropped_path
+    path = normalize_dropped_path(text)
+    if not path:
+        return None
+    fields = [f for f in screen.query(PathInput) if f.visible and f.display and not f.disabled]
+    accepting = [f for f in fields if f.accepts_path(path)]
+    if len(accepting) == 1:
+        return accepting[0]
+    focused = screen.focused
+    if isinstance(focused, PathInput) and focused in fields:
+        return focused
+    return fields[0] if fields else None
+
+
 class SubmenuScreen(Screen):
     """Every submenu: bold title, body, then the action rows with `Back` (no save) LAST.
     Menu grammar: digits = actions (when no text field has focus), b/esc = back, q = quit.
@@ -271,21 +290,7 @@ class SubmenuScreen(Screen):
         self.run_action(event.action_id)
 
     def route_drop(self, text: str):
-        """Route a dropped/pasted path by WHAT it is (spec A2): the single visible, enabled
-        PathInput that accepts it wins; only on ambiguity (zero or several accept) does the
-        focused PathInput decide, else the first visible PathInput."""
-        from .paths import PathInput, normalize_dropped_path
-        path = normalize_dropped_path(text)
-        if not path:
-            return None
-        fields = [f for f in self.query(PathInput) if f.visible and f.display and not f.disabled]
-        accepting = [f for f in fields if f.accepts_path(path)]
-        if len(accepting) == 1:
-            return accepting[0]
-        focused = self.focused
-        if isinstance(focused, PathInput) and focused in fields:
-            return focused
-        return fields[0] if fields else None
+        return route_drop(self, text)
 
     def on_paste(self, event):
         """A Finder drop arrives as a paste to the FOCUSED widget. When that is not a text

@@ -320,6 +320,7 @@ def prepare_test_project(project_dir):
     os.makedirs(scratch)
     p2 = dict(p)
     p2['vo'] = None
+    p2['transcript'] = None   # review finding: nothing in the test path may re-read the real transcript
     with open(os.path.join(scratch, 'project.json'), 'w') as f:
         json.dump(p2, f, indent=2)
         f.write('\n')
