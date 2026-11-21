@@ -133,7 +133,11 @@ async def test_brew_launcher_runs_menu_and_fonts_without_crash(tmp_path):
     import sys
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     venv = tmp_path / 'venv'
-    subprocess.run([sys.executable, '-m', 'venv', str(venv)], check=True)
+    # --system-site-packages: the venv sees the suite's installed deps, so the pip call
+    # below is an instant no-op — no network, no 300s timeout flake under gate load
+    # (2026-11-21: three ship gates died on this download). The REAL regression guard is
+    # the static pyproject-deps check below, which needs no venv at all.
+    subprocess.run([sys.executable, '-m', 'venv', '--system-site-packages', str(venv)], check=True)
     # Pin to the versions THIS suite runs against (importlib.metadata of the current
     # interpreter): an unpinned venv installs whatever textual is latest the day the gate
     # runs, and a newer major silently empties the fonts list (2026-11-19: FONTS_OK False
@@ -142,7 +146,15 @@ async def test_brew_launcher_runs_menu_and_fonts_without_crash(tmp_path):
 
     pins = [f'{m}=={_pkg_version(m)}' for m in ('textual', 'numpy', 'pillow')]
     subprocess.run([str(venv / 'bin' / 'pip'), 'install', '--quiet', *pins],
-                   check=True, timeout=300)
+                   check=True, timeout=60)
+    # the v0.4.0 bug was pyproject listing pillow but the launcher installing a subset —
+    # guard it statically: every package the menu imports must be in pyproject dependencies
+    import tomllib
+
+    deps = tomllib.load(open(os.path.join(root, 'pyproject.toml'), 'rb'))['project']['dependencies']
+    imported = {'textual', 'numpy', 'PIL'}
+    names = {d.split('=')[0].split('>')[0].split('<')[0].strip().lower().replace('-', '_') for d in deps}
+    assert imported <= names, f'menu imports {imported - names} not in pyproject dependencies {sorted(names)}'
     code = (
         "import asyncio\n"
         "from motion_pipeline.tui.app import MenuApp\n"
