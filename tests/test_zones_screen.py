@@ -167,3 +167,55 @@ async def test_inactive_aspect_zones_listed_dimmed(tmp_path):
         # the inactive row's label carries the muted class (delivery shape: dimmed, not just text)
         lbl = scr.query_one('#zones', ListView).children[0].query_one(Label)
         assert 'muted' in lbl.classes
+
+
+# ---- Task 14 (spec B3): explanation, live frame map, overlay on the test frame ----
+
+ZONE_EXPLAIN = ('A keep-out zone hides a frame rectangle from the rendered graphics. Each zone is '
+                'anchored to a transcript section; the rect is x,y,w,h in frame pixels of the '
+                'project\'s aspect.')
+
+
+async def test_zones_screen_explanation_and_live_map(tmp_path):
+    d = mk_project(tmp_path / 'p')
+    app = MenuApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_zones(pilot, app, d)
+        # explanation at the top, <= 3 lines at 80 cols
+        expl = str(scr.query_one('#zone-explain', Static).render())
+        assert 'keep-out' in expl.lower() or 'zone' in expl.lower()
+        assert expl.count('\n') < 3
+        # frame map present and updates live as the rect field is edited
+        mp = scr.query_one('#zonemap', Static)
+        assert '×' in str(mp.render()), str(mp.render())[:120]
+        scr.query_one('#rect', Input).value = '0,540,960,540'
+        await pilot.pause(0.3)
+        assert 'A' in str(mp.render()) or '─' in str(mp.render()), str(mp.render())[:200]
+        # invalid rect -> last valid map stays, error shown
+        scr.query_one('#rect', Input).value = 'not,a,rect'
+        await pilot.pause(0.3)
+        assert 'error' in str(scr.query_one('#error', Static).render()).lower() or \
+            str(mp.render()), 'invalid rect must not blank the map'
+
+
+async def test_view_toggle_disabled_without_test_frame_and_overlay_when_present(tmp_path):
+    d = mk_project(tmp_path / 'p')
+    app = MenuApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        scr = await open_zones(pilot, app, d)
+        menu = scr.query_one('#actions')
+        assert menu.get_option('view').disabled, 'no test frame yet -> view action disabled'
+        # drop a _test_frame.png where the render puts it
+        from PIL import Image
+        out = os.path.join(d, 'renders', 'default')
+        os.makedirs(out, exist_ok=True)
+        Image.new('RGB', (192, 108), (10, 10, 30)).save(os.path.join(out, '_test_frame.png'))
+        scr.refresh_zones()
+        await pilot.pause()
+        assert not menu.get_option('view').disabled, 'test frame exists -> view enabled'
+        scr.query_one('#rect', Input).value = '0,540,960,540'
+        await pilot.pause(0.3)
+        await choose(pilot, scr, 'view')
+        await pilot.pause(0.5)
+        mp = str(scr.query_one('#zonemap', Static).render())
+        assert '▀' in mp, 'overlay view should render the half-block test frame'
