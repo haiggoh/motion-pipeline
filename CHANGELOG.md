@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.7.0] — 2026-11-22 — friendlier inputs, contrast fixer, font roles, zone map, transcript formats, automatic speech model
+## [0.7.1] — 2026-11-22 — friendlier inputs, contrast fixer, font roles, zone map, transcript formats, automatic speech model
 
 - CI colours: hex fields take only `0-9a-fA-F` (max 6, the `#` is a fixed dimmed label outside
   the field); `#fff` short form works; pasting `#FF6A00` is accepted whole, never truncated;
@@ -25,7 +25,7 @@
 - The speech model installs itself on first launch (sha256-pinned, atomic, resumable with a
   Retry row on failure); `whisper-cpp` is a Homebrew dependency of the formula
 - The brew launcher resyncs the per-user venv when the shipped dependency list changes
-  (so upgrading to 0.7.0 installs pypdf into an existing venv)
+  (so upgrading to 0.7.1 installs pypdf into an existing venv)
 
 ## [0.6.4] — 2026-11-21 — standalone --render-test and PTY-test fixes (found by resuming the dogfood session)
 
