@@ -15,14 +15,26 @@ class Missing(Exception):
     pass
 
 
+WHISPER_SRC_TAG = 'b5907'   # newest whisper.cpp tag with release assets (2026-11-22)
+WHISPER_CACHE_BIN = os.path.join(os.path.expanduser('~'), '.cache', 'motion-pipeline', 'bin')
+
+
 def find_cli():
-    """The whisper-cli binary or None. MP_WHISPER_CLI (set-but-missing fails loudly) or PATH."""
+    """The whisper-cli binary or None. MP_WHISPER_CLI (set-but-missing fails loudly), PATH,
+    or the app's own cache bin (what ensure_cli installs for non-Homebrew users, spec B4
+    fallback)."""
     cli_env = os.environ.get('MP_WHISPER_CLI')
     if cli_env:
         if not (os.path.isfile(cli_env) and os.access(cli_env, os.X_OK)):
             raise ValueError(f'MP_WHISPER_CLI is set but is not an executable: {cli_env}')
         return cli_env
-    return shutil.which('whisper-cli')
+    found = shutil.which('whisper-cli')
+    if found:
+        return found
+    cached = os.path.join(WHISPER_CACHE_BIN, 'whisper-cli')
+    if os.path.isfile(cached) and os.access(cached, os.X_OK):
+        return cached
+    return None
 
 
 def find_engine():
@@ -184,3 +196,78 @@ def ensure_model(models_dir, url=None, progress=None):
 def download_model(models_dir, log=print):
     """Legacy alias for ensure_model (kept for callers/tests)."""
     return ensure_model(models_dir)
+
+
+def ensure_cli(progress=None):
+    """Return a working whisper-cli path, installing it when missing (spec B4 fallback for
+    non-Homebrew users; the brew formula also carries whisper-cpp for brew installs).
+    Order: anything find_cli() already sees; else download the whisper.cpp source tarball
+    and build with Command Line Tools' cmake+clang (no Homebrew needed on macOS); if cmake
+    is unavailable, fall back to the macOS x64 release binary under Rosetta. The binary
+    lands in ~/.cache/motion-pipeline/bin. progress(stage) is optional. Tests never hit the
+    network — the download/build steps are injectable via env (MP_WHISPER_SRC_TAG,
+    MP_WHISPER_TARBALL)."""
+    found = find_cli()
+    if found:
+        return found
+    bin_dir = WHISPER_CACHE_BIN
+    os.makedirs(bin_dir, exist_ok=True)
+    dst = os.path.join(bin_dir, 'whisper-cli')
+    tag = os.environ.get('MP_WHISPER_SRC_TAG', WHISPER_SRC_TAG)
+    if progress:
+        progress(f'downloading whisper.cpp {tag} source')
+    tarball = os.environ.get('MP_WHISPER_TARBALL')  # tests: point at a local file:// tarball
+    if tarball is None:
+        tarball = f'https://codeload.github.com/ggml-org/whisper.cpp/tar.gz/refs/tags/{tag}'
+    src_dir = os.path.join(bin_dir, f'src-{tag}')
+    os.makedirs(src_dir, exist_ok=True)
+    r = subprocess.run(['bash', '-c',
+                        f'curl -fsSL {tarball} | tar xz -C {src_dir!r} --strip-components 1 '
+                        f'--exclude "*whisper-bin*"'],
+                       capture_output=True, text=True, timeout=600)
+    if r.returncode != 0 and not os.path.isdir(src_dir):
+        raise ValueError(f'cannot fetch whisper.cpp source: {r.stderr[-200:]}')
+    cmake = shutil.which('cmake')
+    if cmake:
+        if progress:
+            progress('building whisper-cli (Command Line Tools cmake)')
+        r = subprocess.run(['cmake', '-S', src_dir, '-B', os.path.join(src_dir, 'build'),
+                            '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_EXAMPLES=OFF',
+                            '-DGGML_NATIVE=ON'],
+                           capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0:
+            raise ValueError(f'whisper.cpp cmake configure failed: {r.stderr[-300:]}')
+        r = subprocess.run(['cmake', '--build', os.path.join(src_dir, 'build'),
+                            '--target', 'whisper-cli', '-j'],
+                           capture_output=True, text=True, timeout=3600)
+        built = os.path.join(src_dir, 'build', 'bin', 'whisper-cli')
+        if r.returncode != 0 or not os.path.isfile(built):
+            raise ValueError(f'whisper-cli build failed: {r.stderr[-300:]}')
+        shutil.copy2(built, dst)
+        os.chmod(dst, 0o755)
+        return dst
+    # no cmake: Rosetta x64 prebuilt from the release assets
+    if progress:
+        progress('cmake not found — downloading the x64 prebuilt (Rosetta)')
+    url = os.environ.get('MP_WHISPER_PREBUILT_URL') or \
+        f'https://github.com/ggml-org/whisper.cpp/releases/download/{tag}/whisper-bin-x64.zip'
+    zpath = os.path.join(bin_dir, 'whisper-bin-x64.zip')
+    r = subprocess.run(['curl', '-fsSL', url, '-o', zpath], capture_output=True, timeout=600)
+    if r.returncode != 0:
+        raise ValueError('cannot install whisper-cli: no cmake for a source build and the '
+                         f'x64 prebuilt download failed ({r.stderr.decode()[-200:]}) — '
+                         'install with: brew install whisper-cpp')
+    r = subprocess.run(['ditto', '-x', '-k', zpath, os.path.join(bin_dir, 'x64')],
+                       capture_output=True, timeout=120)
+    if r.returncode != 0:
+        raise ValueError(f'cannot unzip the whisper prebuilt: {r.stderr.decode()[-200:]}')
+    pre = None
+    for root, _dirs, files in os.walk(os.path.join(bin_dir, 'x64')):
+        if 'whisper-cli' in files:
+            pre = os.path.join(root, 'whisper-cli')
+            break
+    if not pre:
+        raise ValueError('the x64 prebuilt zip has no whisper-cli inside')
+    shutil.copy2(pre, dst)
+    os.chmod(dst, 0o755)
+    return dst

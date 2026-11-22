@@ -665,7 +665,7 @@ class MenuApp(MenuAppBase):
         """Task 18 (B4): the engine line shows the live model state."""
         st = self.model_state
         if st == 'no whisper-cli':
-            return 'speech engine not installed — brew install whisper-cpp'
+            return 'speech engine not installed — brew install whisper-cpp, or restart the app to self-install'
         if st == 'ready':
             from .. import align_whisper
             try:
@@ -727,7 +727,8 @@ class MenuApp(MenuAppBase):
             scr.start_loading(text='loading…', immediate=True)
             scr.set_timer(0.8, scr.stop_loading)   # visible through launch, then hidden
         scr.call_after_refresh(_launch_loader)
-        # Task 18 (B4): the speech model installs itself on first launch (sha256-pinned)
+        # Task 18 (B4): the speech model installs itself on first launch (sha256-pinned);
+        # the whisper-cli binary self-installs too when Homebrew is absent (2026-11-22)
         from .. import align_whisper
         try:
             cli = align_whisper.find_cli()
@@ -736,13 +737,18 @@ class MenuApp(MenuAppBase):
             cli = eng = None
         if eng:
             self.model_state = 'ready'
-        elif cli:
+        else:
             self.model_state = 'downloading 0%'
             mdir = os.environ.get('MP_MODELS_DIR') or os.path.join(
                 os.path.expanduser('~'), '.cache', 'motion-pipeline', 'models')
 
             def _dl():
                 try:
+                    if not cli:
+                        # non-Homebrew fallback: build/fetch whisper-cli into the user cache
+                        align_whisper.ensure_cli(
+                            progress=lambda s: self.call_from_thread(
+                                self._set_model_state, f'installing speech engine… ({s})'))
                     align_whisper.ensure_model(
                         mdir,
                         progress=lambda d, t: self.call_from_thread(
@@ -752,5 +758,3 @@ class MenuApp(MenuAppBase):
                     self.call_from_thread(self._set_model_state, f'failed: {e}')
 
             self.run_worker(_dl, thread=True, exclusive=True, name='model-download')
-        else:
-            self.model_state = 'no whisper-cli'
