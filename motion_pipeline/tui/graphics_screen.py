@@ -21,8 +21,8 @@ def _pbcopy(text):
 
 class GraphicsScreen(SubmenuScreen):
     TITLE = 'Add motion graphics'
-    BASE_ACTIONS = [('open', 'Open the playbook'), ('reveal', 'Show the project folder in Finder'),
-                    ('copy', 'Copy the hand-off prompt'), ('check', 'Check AI graphics')]
+    ACTIONS = [('open', 'Open the playbook'), ('reveal', 'Show the project folder in Finder'),
+               ('copy', 'Copy the hand-off prompt'), ('check', 'Check AI graphics')]
 
     def compose(self):
         self._fa = None
@@ -31,9 +31,6 @@ class GraphicsScreen(SubmenuScreen):
             self._fa = free_agents.detect()
         except ValueError as e:
             self._fa_error = str(e)
-        self.ACTIONS = list(self.BASE_ACTIONS)
-        if self._fa is not None:
-            self.ACTIONS.append(('free', 'Start a free AI session for this project (free-agents)'))
         yield from super().compose()
 
     def compose_body(self):
@@ -42,6 +39,28 @@ class GraphicsScreen(SubmenuScreen):
         if pd and os.path.isfile(os.path.join(pd, 'transcript_model.json')):
             m = json.load(open(os.path.join(pd, 'transcript_model.json')))
             n_words, n_sections = len(m.get('words', [])), len(m.get('sections', []))
+        # Free-Agents route (recommended) first: dropdowns + launch directly beneath them
+        yield Static('Free-Agents Route (recommended — runs on free inference):', classes='route-head')
+        if self._fa is not None:
+            models = free_agents.models(self._fa)
+            top = models[0]['alias'] if models else Select.BLANK
+            with Horizontal(id='fa-bar'):
+                yield Select([(m['display'], m['alias']) for m in models] or [('(no keyed models)', '')],
+                             id='fa-model', value=top, classes='variant-select')
+                yield Select([(e, e) for e in ('low', 'medium', 'high', 'xhigh', 'max')],
+                             id='fa-effort', value='high', classes='variant-select')
+                from textual.widgets import Button
+                yield Button('Start free AI session', id='fa-launch')
+            yield Static('Launches a free AI session in a new Terminal window for this project — '
+                         'it reads the playbook, asks about the style, and only adds files in '
+                         'ai_graphics/.', classes='muted')
+        else:
+            why = f' ({self._fa_error})' if self._fa_error else ''
+            yield Static('free-agents is not installed — install it from '
+                         'github.com/haiggoh/free-agents to run this step on free inference'
+                         f'{why}.', id='fa-install-hint', classes='muted')
+        # Manual route: the fallback for an external model (Claude/GPT/…)
+        yield Static('Manual route (any external model):', classes='route-head')
         if n_words is None:
             text = '(no project open — pick one in step 0 first)'
         else:
@@ -51,22 +70,10 @@ class GraphicsScreen(SubmenuScreen):
                 f'2. Give your AI two things: this project folder ({show_path(str(pd))}) and the '
                 f'playbook {playbook.OUT_NAME} inside it.\n'
                 '3. Tell it: "Read MOTION_GRAPHICS_PLAYBOOK.md first and follow it." '
-                '(row 3 copies this prompt to the clipboard.)\n'
+                '(the "Copy the hand-off prompt" action copies this to the clipboard.)\n'
                 '4. The AI only adds files in ai_graphics/ — it never changes your settings. '
-                'It will ask you about the style first.\n'
-                '5. When it is done, come back here and choose "Check AI graphics", then render '
-                'in step 7.')
+                'When it is done, choose "Check AI graphics" here, then render in step 7.')
         yield Static(text, id='instructions')
-        if self._fa is not None:
-            models = free_agents.models(self._fa)
-            top = models[0]['alias'] if models else Select.BLANK
-            with Horizontal(id='fa-bar'):
-                yield Select([(m['display'], m['alias']) for m in models] or [('(no keyed models)', '')],
-                             id='fa-model', value=top, classes='variant-select')
-                yield Select([(e, e) for e in ('low', 'medium', 'high', 'xhigh', 'max')],
-                             id='fa-effort', value='high', classes='variant-select')
-        elif self._fa_error:
-            yield Static(self._fa_error, id='fa-error', classes='feedback-error')
         yield Static('', id='status', classes='feedback')
         yield Static('', id='error', classes='feedback-error')
 
@@ -121,7 +128,9 @@ class GraphicsScreen(SubmenuScreen):
                 self.query_one('#log', RichLog),
                 on_finish=lambda rc: self.query_one('#status', Static).update(
                     f'check-graphics exit {rc}' + (' — OK' if rc == 0 else ' — problems above')))
-        elif action_id == 'free':
+
+    def on_button_pressed(self, event) -> None:
+        if getattr(event.button, 'id', None) == 'fa-launch':
             self._launch_free()
 
     def _launch_free(self):

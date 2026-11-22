@@ -141,6 +141,7 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 .format-row > Label { padding: 1 0 0 1; width: auto; color: ansi_bright_black; }
 .format-row > Select { width: 15; margin: 0 0 0 1; }
 .format-row > Checkbox { width: auto; margin: 1 0 0 2; }
+.route-head { text-style: bold; padding: 1 0 0 0; }
 .muted { color: ansi_bright_black; }
 """
 

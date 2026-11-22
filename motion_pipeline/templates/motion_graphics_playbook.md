@@ -86,8 +86,11 @@ One cue list per graphic (`sfx` in the manifest entry), timed to its visual beat
 emphasis / exit). WAV 48 kHz preferred. Peaks <= -6 dBFS; use `gain_db` to balance against the
 voiceover. Only files the user supplied or with a licence that allows use (CC0 / licensed
 library); every file gets its `ai_graphics/sfx/LICENSES.md` line (`<file> — <source/author> —
-<licence>`). Never generate or download audio without the user's approval. Keep SFX off
-VO-critical words unless asked. The menu never writes SFX.
+<licence>`). If the user has not supplied sound effects, find suitable ones on free sources via
+web search (CC0 / public-domain libraries such as freesound.org's CC0 collection, Pixabay,
+or Wikimedia Commons) rather than asking the user to provide them. Never generate or download
+audio without the user's approval. Keep SFX off VO-critical words unless asked. The menu never
+writes SFX.
 
 ## 8 Check your work
 

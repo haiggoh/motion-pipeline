@@ -38,7 +38,7 @@ async def test_menu_shows_graphics_as_step_6_and_hint_0_to_7(tmp_path):
 @pytest.mark.asyncio
 async def test_instructions_show_live_counts_and_path_and_playbook_regenerated(tmp_path, monkeypatch):
     pd = make_project(tmp_path / 'p')
-    monkeypatch.setattr(free_agents, 'detect', lambda *a, **k: None)  # no free-agents row
+    monkeypatch.setattr(free_agents, 'detect', lambda *a, **k: None)  # no free-agents: install hint
     app = MenuApp()
     app.project_dir = pd
     async with app.run_test(size=(100, 30)) as pilot:
@@ -50,11 +50,12 @@ async def test_instructions_show_live_counts_and_path_and_playbook_regenerated(t
         assert f'{len(tr["words"])} words' in text and f'{len(tr["sections"])} sections' in text
         assert 'MOTION_GRAPHICS_PLAYBOOK.md' in text and pd in text
         assert os.path.isfile(os.path.join(pd, 'MOTION_GRAPHICS_PLAYBOOK.md'))  # regenerated on visit
-        # free-agents absent: no 'free' row, no Selects at all
-        menu = app.screen.query_one('#actions')
-        ids = [menu.get_option_at_index(i).id for i in range(menu.option_count)]
-        assert 'free' not in ids
+        # free-agents absent: no Selects, the install hint + manual route instead
         assert not app.screen.query('#fa-model') and not app.screen.query('#fa-effort')
+        assert not app.screen.query('#fa-launch')
+        assert 'github.com/haiggoh/free-agents' in str(app.screen.query_one('#fa-install-hint').render())
+        heads = [str(r.render()) for r in app.screen.query('.route-head')]
+        assert any('Manual route' in h for h in heads), heads
 
 
 @pytest.mark.asyncio
@@ -92,9 +93,9 @@ async def test_free_agents_row_and_selects_only_when_detected(tmp_path, monkeypa
         await pilot.pause()
         app.push_screen(GraphicsScreen())
         await pilot.pause()
-        menu = app.screen.query_one('#actions')
-        ids = [menu.get_option_at_index(i).id for i in range(menu.option_count)]
-        assert 'free' in ids
+        assert app.screen.query_one('#fa-launch')          # launch button under the dropdowns
+        assert 'Free-Agents Route' in str(app.screen.query_one('.route-head').render()) or \
+            any('Free-Agents Route' in str(r.render()) for r in app.screen.query('.route-head'))
         sel = app.screen.query_one('#fa-model', Select)
         assert sel.value == 'nvidia-glm53'  # ladder top is the default
         assert app.screen.query_one('#fa-effort', Select).value == 'high'
