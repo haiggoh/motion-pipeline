@@ -4,8 +4,10 @@ image lands below the actions."""
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+import zipfile
 
 import pytest
 
@@ -322,3 +324,63 @@ def test_prepare_only_prints_stage_lines_in_order(tmp_path, capsys):
     assert names == sorted(names, key=['transcript', 'decode', 'align', 'generate'].index)
     done, total = stages[-1][0], stages[-1][1]
     assert (done, total) == (len(stages), len(stages)) and names[-1] == 'generate'
+
+
+# ---- 2026-11-22: non-Homebrew fallbacks for node/ffmpeg (cache binaries) ----
+
+def test_ffmpeg_bin_falls_back_to_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(render_cli.shutil, 'which', lambda name: None)
+    monkeypatch.setattr(render_cli, 'cache_root', lambda: str(tmp_path))
+    assert render_cli.ffmpeg_bin() is None
+    cached = tmp_path / f'ffmpeg-{render_cli.FFMPEG_PIN}-macos-arm64' / 'ffmpeg'
+    cached.parent.mkdir(parents=True)
+    cached.write_text('#!/bin/bash\n')
+    os.chmod(cached, 0o755)
+    assert render_cli.ffmpeg_bin() == str(cached)
+
+
+def test_node_bin_dir_falls_back_to_cache_tarball(tmp_path, monkeypatch):
+    monkeypatch.delenv('MP_WHISPER_CLI', raising=False)
+    monkeypatch.setattr(render_cli.shutil, 'which', lambda name: None)
+    monkeypatch.setattr(render_cli, 'cache_root', lambda: str(tmp_path))
+    monkeypatch.setattr(render_cli.os.path, 'expanduser', lambda p: str(tmp_path))
+    cached = tmp_path / 'node' / f'v{render_cli.NODE_PIN}' / 'bin' / 'node'
+    cached.parent.mkdir(parents=True)
+    cached.write_text('#!/bin/bash\n')
+    os.chmod(cached, 0o755)
+    assert render_cli.node_bin_dir() == str(cached.parent)
+
+
+def test_ensure_toolchain_bins_downloads_into_cache(tmp_path, monkeypatch):
+    """_ensure_toolchain_bins pulls the pinned node tarball + static ffmpeg into the cache
+    (curl is faked to copy local fixtures; the node tarball is a REAL tar.gz)."""
+    import tarfile
+    monkeypatch.setattr(render_cli, 'cache_root', lambda: str(tmp_path))
+    # real node tarball fixture with bin/node inside
+    src = tmp_path / 'nodesrc'
+    (src / 'node-v24.19.0-darwin-arm64' / 'bin').mkdir(parents=True)
+    (src / 'node-v24.19.0-darwin-arm64' / 'bin' / 'node').write_text('#!/bin/bash\n')
+    tgz = tmp_path / 'node.tgz'
+    with tarfile.open(tgz, 'w:gz') as tf:
+        tf.add(src / 'node-v24.19.0-darwin-arm64', arcname='node-v24.19.0-darwin-arm64')
+    # real ffmpeg zip fixture
+    zpath = tmp_path / 'ff.zip'
+    with zipfile.ZipFile(zpath, 'w') as zf:
+        zf.writestr(f'ffmpeg-{render_cli.FFMPEG_PIN}-macos-arm64/ffmpeg', '#!/bin/bash\n')
+
+    def fake_run(cmd, *a, **k):
+        if cmd[0] == 'curl':
+            src_url = cmd[2]
+            dst = cmd[4]
+            fixture = tgz if 'nodejs' in src_url else zpath
+            if os.path.abspath(fixture) != os.path.abspath(dst):
+                shutil.copy(fixture, dst)
+            return subprocess.CompletedProcess(cmd, 0, '', '')
+        return real_run(cmd, *a, **k)   # ditto runs for real on the real zip
+
+    real_run = subprocess.run
+    monkeypatch.setattr(render_cli.subprocess, 'run', fake_run)
+    bins = render_cli._ensure_toolchain_bins()
+    assert any(b.endswith(os.path.join('node', f'v{render_cli.NODE_PIN}', 'bin')) for b in bins)
+    ff_dir = [b for b in bins if 'ffmpeg' in b][0]
+    assert os.access(os.path.join(ff_dir, 'ffmpeg'), os.X_OK)

@@ -50,6 +50,17 @@ def toolchain_dir():
     return d or os.path.join(os.path.expanduser('~'), '.cache', 'motion-pipeline', 'toolchain')
 
 
+def cache_root():
+    """The app-wide user cache (~/.cache/motion-pipeline); node/ffmpeg fallback binaries live
+    under it. Env MP_CACHE_DIR overrides (set-but-missing fails loudly)."""
+    d = os.environ.get('MP_CACHE_DIR')
+    if d:
+        if not os.path.isdir(d):
+            raise ValueError(f'MP_CACHE_DIR is set but is not a directory: {d}')
+        return d
+    return os.path.join(os.path.expanduser('~'), '.cache', 'motion-pipeline')
+
+
 def chrome_root():
     return os.environ.get('MP_CHROME_DIR') or os.path.join(os.path.expanduser('~'), '.cache',
                                                            'motion-pipeline', 'chrome')
@@ -95,20 +106,83 @@ def node_bin_dir():
             # (0.6.3 dogfood: intermittent >10s node startups crashed the render)
             raise Missing(f'node at {node} did not report a version — run: brew install node')
         raise Missing(f'node ≥22 — run: brew install node (found {v} at {node})')
-    raise Missing('node ≥22 — run: brew install node (the fnm pin is used when present)')
+    # 2026-11-22 fallback for non-Homebrew installs: the pinned node tarball in the app cache
+    cached = os.path.join(cache_root(), 'node', f'v{NODE_PIN}', 'bin')
+    if os.access(os.path.join(cached, 'node'), os.X_OK):
+        return cached
+    raise Missing('node ≥22 — run: brew install node, or `motion-pipeline --setup-render` '
+                  '(installs the pinned node tarball into the app cache)')
+
+
+NODE_TARBALL_URL = 'https://nodejs.org/dist/v{NODE_PIN}/node-v{NODE_PIN}-darwin-arm64.tar.gz'
+FFMPEG_STATIC_URL = 'https://evermeet.cx/ffmpeg/ffmpeg-{FFMPEG_PIN}-macos-arm64.zip'
+FFMPEG_PIN = '7.1'   # pinned static build (evermeet.cx); verified downloadable 2026-11-22
+
+
+def ffmpeg_bin():
+    """ffmpeg from PATH (brew or otherwise) or the static cache build (non-Homebrew fallback)."""
+    found = shutil.which('ffmpeg')
+    if found:
+        return found
+    cached = os.path.join(cache_root(), f'ffmpeg-{FFMPEG_PIN}-macos-arm64', 'ffmpeg')
+    if os.access(cached, os.X_OK):
+        return cached
+    return None
+
+
+def _ensure_toolchain_bins():
+    """Download the pinned node tarball and the static ffmpeg build into the app cache
+    (non-Homebrew fallbacks). Returns the dirs to put on PATH, or raises Missing."""
+    import tarfile
+    root = cache_root()
+    node_dir = os.path.join(root, 'node', f'v{NODE_PIN}')
+    node_ok = os.access(os.path.join(node_dir, 'bin', 'node'), os.X_OK)
+    ff_dir = os.path.join(root, f'ffmpeg-{FFMPEG_PIN}-macos-arm64')
+    ff_ok = os.access(os.path.join(ff_dir, 'ffmpeg'), os.X_OK)
+    if node_ok and ff_ok:
+        return [os.path.join(node_dir, 'bin'), ff_dir]
+    os.makedirs(root, exist_ok=True)
+    if not node_ok:
+        url = NODE_TARBALL_URL.format(NODE_PIN=NODE_PIN)
+        r = subprocess.run(['curl', '-fsSL', url, '-o', os.path.join(root, 'node.tgz')],
+                           capture_output=True, timeout=600)
+        if r.returncode != 0:
+            raise Missing(f'node tarball download failed — run: brew install node ({r.stderr.decode()[-150:]})')
+        with tarfile.open(os.path.join(root, 'node.tgz')) as tf:
+            tf.extractall(os.path.join(root, 'node'), filter='data')
+    if not ff_ok:
+        url = FFMPEG_STATIC_URL.format(FFMPEG_PIN=FFMPEG_PIN)
+        r = subprocess.run(['curl', '-fsSL', url, '-o', os.path.join(root, 'ffmpeg.zip')],
+                           capture_output=True, timeout=600)
+        if r.returncode != 0:
+            raise Missing(f'ffmpeg static build download failed — run: brew install ffmpeg ({r.stderr.decode()[-150:]})')
+        r = subprocess.run(['ditto', '-x', '-k', os.path.join(root, 'ffmpeg.zip'), root],
+                           capture_output=True, timeout=300)
+        if r.returncode != 0:
+            raise Missing(f'cannot unzip the ffmpeg static build: {r.stderr.decode()[-150:]}')
+        os.chmod(os.path.join(ff_dir, 'ffmpeg'), 0o755)   # zips don't carry the exec bit
+    return [os.path.join(node_dir, 'bin'), ff_dir]
 
 
 def preflight():
     """-> (env for the renderer, report lines). Raises Missing / ValueError."""
-    for tool in ('ffmpeg', 'ffprobe'):
+    ff = ffmpeg_bin()
+    if not ff:
+        raise Missing('ffmpeg — run: brew install ffmpeg, or `motion-pipeline --setup-render` '
+                      '(installs a static build into the app cache)')
+    for tool in ('ffprobe',):
         if not shutil.which(tool):
-            raise Missing(f'{tool} — run: brew install ffmpeg')
+            # ffprobe ships with the same package as ffmpeg; PATH one wins, else cache copy
+            cached_ffprobe = os.path.join(os.path.dirname(ff), 'ffprobe')
+            if not os.access(cached_ffprobe, os.X_OK):
+                raise Missing(f'{tool} — run: brew install ffmpeg, or `motion-pipeline --setup-render`')
     hf = find_hyperframes()
     node = node_bin_dir()
     env = dict(os.environ)
-    env['PATH'] = os.pathsep.join([node, os.path.dirname(hf), env.get('PATH', '')])
+    env['PATH'] = os.pathsep.join([node, os.path.dirname(hf), os.path.dirname(ff),
+                                   env.get('PATH', '')])
     chrome = chrome_path()
-    lines = [f'hyperframes: {hf}', f'node: {node}', f'ffmpeg: {shutil.which("ffmpeg")}']
+    lines = [f'hyperframes: {hf}', f'node: {node}', f'ffmpeg: {ff}']
     if os.path.isfile(chrome):
         env['HYPERFRAMES_BROWSER_PATH'] = chrome
         lines.append(f'chrome: {chrome}')
@@ -460,6 +534,13 @@ def _write_sequence(project_dir, p, vout, variant):
 
 def setup(dry_run=False):
     tc = toolchain_dir()
+    if not dry_run:
+        try:
+            bins = _ensure_toolchain_bins()   # 2026-11-22: node + ffmpeg fallbacks for non-brew
+            print(f'[render_cli] fallback bins in app cache: {bins}', flush=True)
+        except Missing as e:
+            print(f'[render_cli] fallback binaries unavailable ({e}) — continuing with PATH tools',
+                  flush=True)
     cmds = [['npm', 'install', '--prefix', tc, f'hyperframes@{hf_pin()}'],
             ['npx', '--yes', '@puppeteer/browsers', 'install', f'chrome-headless-shell@{CHROME_PIN}',
              '--path', chrome_root()]]
