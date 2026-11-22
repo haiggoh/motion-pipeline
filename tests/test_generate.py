@@ -140,3 +140,27 @@ def test_regenerate_leaves_ai_graphics_untouched(d):
     generate.generate(d)
     after = (open(os.path.join(d, 'ai_graphics', 'marker.txt')).read())
     assert before == after == 'ai-owned\n'
+
+
+def test_generate_without_fonts_falls_back_to_bundled_default(tmp_path, capsys):
+    """2026-11-22 user report: a project with fonts:{} must render, not error. The gate stays
+    strict for Save; the render path falls back to a bundled family with a printed note."""
+    import shutil as _sh
+    from motion_pipeline import project
+    from motion_pipeline.scheme import save_scheme
+    from projfix import DARK
+    d = str(tmp_path / 'p')
+    _sh.copytree('samples/globe', d, dirs_exist_ok=True)
+    p = project.default_project('demo')
+    p['fonts'] = {}                      # no fonts configured — the user's case
+    project.save(d, p)
+    save_scheme(os.path.join(d, 'scheme.json'), DARK)
+    from motion_pipeline import transcript, align
+    tr = transcript.load(os.path.join(d, 'transcript.txt'))
+    open(os.path.join(d, 'transcript_model.json'), 'w').write(json.dumps(tr))
+    align.save_timing(os.path.join(d, 'timing.json'), align.estimate_timings(tr, wpm=140))
+    from motion_pipeline import generate
+    generate.generate(d)                 # must not raise
+    out = capsys.readouterr().out
+    assert 'no fonts config' in out and 'Montserrat' in out, out
+    assert os.path.isdir(os.path.join(d, 'src', 'fonts'))

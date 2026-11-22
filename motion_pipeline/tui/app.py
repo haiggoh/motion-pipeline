@@ -702,14 +702,19 @@ class MenuApp(MenuAppBase):
 
     def on_mount(self) -> None:
         from .. import config
-        from .colours_screen import ColoursScreen
-        from .fonts_screen import FontsScreen
-        from .graphics_screen import GraphicsScreen
-        from .project_screen import ProjectScreen
-        from .zones_screen import ZonesScreen
-        self.SCREENS = {'menu': MenuScreen, 'project': ProjectScreen, 'colours': ColoursScreen,
-                        'fonts': FontsScreen, 'zones': ZonesScreen, 'bgtest': BgTestScreen,
-                        'inputs': InputsScreen, 'graphics': GraphicsScreen, 'render': RenderScreen}
+        # 2026-11-22 (user report: launch slow): import screen modules lazily on first push —
+        # only the launch screen is needed at startup, the rest load when their menu row is drawn
+        self.SCREENS = {
+            'menu': MenuScreen,  # same module as the app — free
+            'project': lambda: __import__('motion_pipeline.tui.project_screen', fromlist=['ProjectScreen']).ProjectScreen(),
+            'colours': lambda: __import__('motion_pipeline.tui.colours_screen', fromlist=['ColoursScreen']).ColoursScreen(),
+            'fonts': lambda: __import__('motion_pipeline.tui.fonts_screen', fromlist=['FontsScreen']).FontsScreen(),
+            'zones': lambda: __import__('motion_pipeline.tui.zones_screen', fromlist=['ZonesScreen']).ZonesScreen(),
+            'bgtest': lambda: __import__('motion_pipeline.tui.app', fromlist=['BgTestScreen']).BgTestScreen(),
+            'inputs': lambda: __import__('motion_pipeline.tui.app', fromlist=['InputsScreen']).InputsScreen(),
+            'graphics': lambda: __import__('motion_pipeline.tui.graphics_screen', fromlist=['GraphicsScreen']).GraphicsScreen(),
+            'render': lambda: __import__('motion_pipeline.tui.app', fromlist=['RenderScreen']).RenderScreen(),
+        }
         if self.project_dir is None:
             self.project_dir = config.last_project()
         if config.projects_root() is None:

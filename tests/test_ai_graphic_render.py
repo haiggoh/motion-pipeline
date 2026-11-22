@@ -17,11 +17,18 @@ pytestmark = pytest.mark.slow
 ZONE0 = [760, 440, 400, 200]  # x, y, w, h — inside the 1920x1080 frame, away from centred text
 
 
-def _mean_luma(png, rect):
+def _mean_luma(source, rect):
+    """Mean luma of the zone rect. source is a PNG path or a ('-ss', t, '-i', video) ffmpeg
+    prelude — masters are .mov, so the test extracts stills from the master instead of
+    globbing work frames (render_scene.sh deletes work/frames on success)."""
     x, y, w, h = rect
-    r = subprocess.run(['ffmpeg', '-v', 'error', '-i', png, '-vf',
-                        f'crop={w}:{h}:{x}:{y}', '-f', 'rawvideo', '-pix_fmt', 'gray', '-'],
-                       capture_output=True)
+    if isinstance(source, tuple):
+        pre = list(source)
+    else:
+        pre = ['-i', source]
+    r = subprocess.run(['ffmpeg', '-v', 'error', *pre, '-vf',
+                        f'crop={w}:{h}:{x}:{y}', '-frames:v', '1', '-f', 'rawvideo',
+                        '-pix_fmt', 'gray', '-'], capture_output=True)
     assert r.returncode == 0, r.stderr[-300:]
     return sum(r.stdout) / max(1, len(r.stdout))
 
@@ -54,11 +61,13 @@ def test_ai_graphic_renders_at_its_word(tmp_path):
                         '--variant', 'default', '--mode', 'test', '--out', str(out)],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-2000:]
-    frames = sorted(glob.glob(str(out / 'work_*' / 'frames' / 'frame_*.png')))
-    assert frames, 'no frames rendered'
-    fps = p['fps']
+    # masters are .mov and work/frames is deleted on success — extract the two stills from
+    # the master at the word's scene-relative time instead of globbing post-cleanup frames
+    masters = sorted(glob.glob(str(out / 'scene_*.mov')) + glob.glob(str(out / 'scene_*.mp4')))
+    assert masters, f'no master rendered in {out}: {os.listdir(out)}'
     t_rel = t_word - scene_start
-    i_before = max(0, min(len(frames) - 1, int((t_rel - 0.4) * fps)))
-    i_after = max(0, min(len(frames) - 1, int((t_rel + 0.4) * fps)))
-    before, after = _mean_luma(frames[i_before], ZONE0), _mean_luma(frames[i_after], ZONE0)
+    t_before = max(0.0, t_rel - 0.4)
+    t_after = max(0.0, t_rel + 0.4)
+    before = _mean_luma(('-ss', f'{t_before:.3f}', '-i', masters[0]), ZONE0)
+    after = _mean_luma(('-ss', f'{t_after:.3f}', '-i', masters[0]), ZONE0)
     assert after > before + 40, f'zone-0 luma before {before:.1f} vs after {after:.1f} at {wid}'

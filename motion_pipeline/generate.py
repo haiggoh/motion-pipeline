@@ -154,12 +154,19 @@ def generate(project_path, variant='default', max_seconds=None):
     W, H = pj['resolution']
     aspect = pj['aspect']
     from .scheme import derive_palette
-    from .fonts import font_gate
+    from .fonts import font_gate, default_role_map
     from .background import background_js
     from . import audio_mux  # Task 22: sfx cue list for the page API
     palette = derive_palette(scheme)
     bg_js = background_js(palette, W, H)
-    roles = font_gate(project_path, pj)
+    if not (pj.get('fonts') or {}):
+        # 2026-11-22 user report: a project without a font config must not hard-error at render —
+        # fall back to a bundled family with a note; the fonts screen still guides the choice.
+        print('note: project.json has no fonts config — using bundled Montserrat '
+              '(pick fonts in step 2)', flush=True)
+        roles = default_role_map('Montserrat', project_path)['roles']   # bare role map
+    else:
+        roles = font_gate(project_path, pj)
     font_px = int(H / 12 * ASPECT_FONT_SCALE.get(aspect, 1.0))
     from .project import active_zones
     zones = active_zones(pj)

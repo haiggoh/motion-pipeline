@@ -67,10 +67,16 @@ export PATH="$MP_NODE24_BIN:$MP_VENV/bin:$MP_ROOT/node_modules/.bin:$PATH"
 if [ ! -x "$MP_ROOT/node_modules/.bin/hyperframes" ]; then
   echo "env.sh: hyperframes not installed — cd $MP_ROOT && npm install" >&2; return 1
 fi
-MP_HF_GOT="$("$MP_ROOT/node_modules/.bin/hyperframes" --version 2>/dev/null | tail -1)"
+# version probe runs at most once a day (node startup is the slow part of launch);
+# MP_ENV_SKIP_HF_CHECK=1 skips it entirely (e.g. inside the app, which re-checks on demand)
 MP_HF_PIN="$(sed -n 's/.*"hyperframes": *"\([^"]*\)".*/\1/p' "$MP_ROOT/tools/versions.lock.json" 2>/dev/null | head -1)"
-if [ -n "$MP_HF_PIN" ] && [ "$MP_HF_GOT" != "$MP_HF_PIN" ]; then
-  echo "env.sh: hyperframes version mismatch: got '$MP_HF_GOT', pinned '$MP_HF_PIN' — npm install hyperframes@$MP_HF_PIN" >&2; return 1
+MP_HF_CHECK_CACHE="$MP_TOOLCHAIN_DIR/hf-version.check" 2>/dev/null || true
+if [ -z "${MP_ENV_SKIP_HF_CHECK:-}" ] && [ -n "$MP_HF_PIN" ] && { [ ! -f "${MP_HF_CHECK_CACHE:-/dev/null}" ] || [ -n "$(find "${MP_HF_CHECK_CACHE:-/dev/null}" -mmin -1440 2>/dev/null)" ]; }; then
+  MP_HF_GOT="$("$MP_ROOT/node_modules/.bin/hyperframes" --version 2>/dev/null | tail -1)"
+  if [ "$MP_HF_GOT" != "$MP_HF_PIN" ]; then
+    echo "env.sh: hyperframes version mismatch: got '$MP_HF_GOT', pinned '$MP_HF_PIN' — npm install hyperframes@$MP_HF_PIN" >&2; return 1
+  fi
+  [ -n "${MP_HF_CHECK_CACHE:-}" ] && printf '%s' "$MP_HF_GOT" > "$MP_HF_CHECK_CACHE" 2>/dev/null || true
 fi
 export HF_DIST="$MP_ROOT/node_modules/hyperframes/dist"
 

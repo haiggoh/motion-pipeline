@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=1.0", "opentimelineio==0.18.1", "otio-fcp-adapter==1.0.0"]  # Task 15c: independent XML re-read in tests
+dev = ["pytest>=8", "pytest-asyncio>=1.0", "pytest-xdist>=3", "opentimelineio==0.18.1", "otio-fcp-adapter==1.0.0"]  # Task 15c: independent XML re-read in tests; xdist: rtc-ship's gate runs -n 12
 
 [project.scripts]
 motion-pipeline = "motion_pipeline.__main__:main"
