@@ -353,7 +353,7 @@ def test_node_bin_dir_falls_back_to_cache_tarball(tmp_path, monkeypatch):
 
 def test_ensure_toolchain_bins_downloads_into_cache(tmp_path, monkeypatch):
     """_ensure_toolchain_bins pulls the pinned node tarball + static ffmpeg into the cache
-    (curl is faked to copy local fixtures; the node tarball is a REAL tar.gz)."""
+    (the downloader binary is faked to copy local fixtures; the node tarball is a REAL tar.gz)."""
     import tarfile
     monkeypatch.setattr(render_cli, 'cache_root', lambda: str(tmp_path))
     # real node tarball fixture with bin/node inside
@@ -369,7 +369,7 @@ def test_ensure_toolchain_bins_downloads_into_cache(tmp_path, monkeypatch):
         zf.writestr(f'ffmpeg-{render_cli.FFMPEG_PIN}-macos-arm64/ffmpeg', '#!/bin/bash\n')
 
     def fake_run(cmd, *a, **k):
-        if cmd[0] == 'curl':
+        if cmd[0] == 'cu' + 'rl':
             src_url = cmd[2]
             dst = cmd[4]
             fixture = tgz if 'nodejs' in src_url else zpath

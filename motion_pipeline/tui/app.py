@@ -574,7 +574,7 @@ class RenderScreen(_RenderScreenBase):
         return os.path.join(renders, variants[0] if variants else 'default')
 
 
-class FirstRunScreen(Screen):
+class FirstRunScreen(SubmenuScreen):
     """Asked once: where projects live (remembered in ~/.config/motion-pipeline). Never inside
     the installed package — Homebrew replaces it on every upgrade."""
 
