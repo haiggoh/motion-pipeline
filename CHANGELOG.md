@@ -15,9 +15,10 @@
   (Quick Look) updates live on every change
 - Keep-out zones: a short explanation on top, a live box-drawn frame map that updates as you
   type the rect, and an overlay on the latest background-test frame
-- Transcript + voiceover: loads `.txt/.md/.rtf/.doc/.docx/.pdf` (docx maps real headings and
-  bold runs; rtf/doc via textutil; pdf via pypdf — new brew-installed dep); after Save the
-  status shows `N sections, M words`; language defaults to Auto-detect for new projects;
+- Transcript line loads `.txt/.md/.rtf/.doc/.docx/.pdf` (docx maps real headings and bold
+  runs; rtf/doc via textutil; pdf via pypdf — new dep); the voiceover line takes audio files
+  (`.wav/.mp3/.m4a/.aac/.aif/.aiff/.flac/.ogg`, plus `.mov/.mp4`); after Save the status
+  shows `N sections, M words`; language defaults to Auto-detect for new projects;
   with a voiceover attached, wpm becomes a read-only `measured N wpm` indicator
 - Computing timings shows a spinner and a progress bar fed by stage lines from the
   prepare-only job (whisper's own progress included)

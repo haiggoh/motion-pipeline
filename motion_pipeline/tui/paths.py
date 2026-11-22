@@ -43,7 +43,7 @@ def normalize_dropped_path(text: str) -> str:
 
 # what each field accepts (spec A2): a drop goes to the single field that accepts the file
 TRANSCRIPT_EXTS = ('.txt', '.md', '.rtf', '.doc', '.docx', '.pdf')
-VO_EXTS = ('.wav', '.mp3', '.m4a', '.aif', '.aiff', '.flac', '.mov', '.mp4')
+VO_EXTS = ('.wav', '.mp3', '.m4a', '.aac', '.aif', '.aiff', '.flac', '.ogg', '.mov', '.mp4')
 
 
 class PathInput(Input):

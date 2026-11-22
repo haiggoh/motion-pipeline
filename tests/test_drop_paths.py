@@ -9,7 +9,8 @@ from textual import events
 from textual.widgets import Input
 
 from motion_pipeline.tui.app import MenuApp
-from motion_pipeline.tui.paths import PathInput, normalize_dropped_path, normalize_dropped_paths
+from motion_pipeline.tui.paths import (PathInput, VO_EXTS, normalize_dropped_path,
+                                      normalize_dropped_paths)
 
 D = '/Volumes/Work/x'   # fixture prefix (not a real home dir)
 
@@ -218,3 +219,10 @@ def test_transcript_load_supports_all_formats_in_070(tmp_path):
                              'fixtures', 'transcripts', 'sample.docx'), p)
     model = transcript.load(str(p))
     assert [s['name'] for s in model['sections']] == ['Intro']
+
+
+def test_vo_accepts_audio_formats():
+    f = PathInput(accepts=VO_EXTS)
+    for ext in ('.wav', '.mp3', '.aac', '.flac', '.aiff', '.ogg'):
+        assert f.accepts_path('/x/take' + ext) is True, ext
+    assert f.accepts_path('/x/notes.txt') is False

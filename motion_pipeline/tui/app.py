@@ -415,7 +415,7 @@ class InputsScreen(SubmenuScreen):
         """Once a measured timing exists, the indicator shows 'measured N wpm'."""
         import json
         from textual.widgets import Static
-        if not self.query('#wpm-indicator'):
+        if not self.query('#wpm-indicator'):   # also guards unmounted screens
             return
         pd = getattr(self.app, 'project_dir', None)
         if not pd:
@@ -435,6 +435,11 @@ class InputsScreen(SubmenuScreen):
             self._update_wpm_indicator()
 
     def _on_timing_done(self, rc: int) -> None:
+        # user-reported crash (2026-11-21): the job can finish after the user left this screen
+        # (e.g. entering step 6 mid-job) — then the widgets are gone from the DOM and
+        # query_one raises NoMatches. Guard on DOM presence, not is_mounted (stays True).
+        if not self.query('#timing-spinner'):
+            return
         # Task 17: job finished — hide spinner/bar, show the log with the result
         from textual.widgets import LoadingIndicator, ProgressBar, RichLog
         self.query_one('#timing-spinner', LoadingIndicator).display = False
