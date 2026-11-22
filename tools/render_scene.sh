@@ -125,6 +125,15 @@ for scene in "${SCENES[@]}"; do
   [ $BANDED = 1 ] && sed -i '' 's|<head>|<head><script>window.__BANDED=true</script>|' "$site/index.html"
   [ -f "$ROOT/vendor/gsap.min.js" ] && cp "$ROOT/vendor/gsap.min.js" "$site/gsap.min.js"
   cp "$PROJECT"/src/*.js "$site/" 2>/dev/null || true
+  # Task 1 (0.8.0): stage package graphics + vendor plugins AFTER project src — the package
+  # copy wins, loudly, on a name collision (a project file named like a package file must
+  # neither 404 nor silently win)
+  for f in "$ROOT"/vendor/*.js "$ROOT"/motion_pipeline/graphics/*.js; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    [ -f "$PROJECT/src/$b" ] && echo "staging: package $b overrides project src/$b" >&2
+    cp "$f" "$site/$b"
+  done
   [ -d "$PROJECT/src/fonts" ] && cp -R "$PROJECT/src/fonts" "$site/fonts"  # Task 11: embedded faces
   # AI-owned graphics (ai_layer.py) the generator linked as ai_graphics/<file>
   [ -d "$PROJECT/src/ai_graphics" ] && cp -R "$PROJECT/src/ai_graphics" "$site/ai_graphics"
