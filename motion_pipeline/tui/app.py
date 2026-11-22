@@ -713,13 +713,20 @@ class MenuApp(MenuAppBase):
         if self.project_dir is None:
             self.project_dir = config.last_project()
         if config.projects_root() is None:
-            self.push_screen(FirstRunScreen())
+            scr = FirstRunScreen()
+            self.push_screen(scr)
         else:
             # 0.5.2: always launch in step 0 (New / load project) — every setting depends on a
             # saved project; Home is reached from there via the 'Home' row.
             scr = self.SCREENS['project']()
             scr.root_entry = True
             self.push_screen(scr)
+        # user requirement 2026-11-22: anything loading >100 ms shows a loading animation where
+        # the content lands — the initial launch shows it immediately (free-agents pattern)
+        def _launch_loader():
+            scr.start_loading(text='loading…', immediate=True)
+            scr.set_timer(0.8, scr.stop_loading)   # visible through launch, then hidden
+        scr.call_after_refresh(_launch_loader)
         # Task 18 (B4): the speech model installs itself on first launch (sha256-pinned)
         from .. import align_whisper
         try:

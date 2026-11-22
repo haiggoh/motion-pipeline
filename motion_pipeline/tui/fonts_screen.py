@@ -97,6 +97,8 @@ class FontsScreen(SubmenuScreen):
         fl = self.query_one('#fontlist')
         self._scan_status = Static('scanning fonts…', id='scan-status', classes='muted')
         self._scan_loader = LoadingIndicator(id='scan-loader')
+        # (kept) the scan loader sits where the list lands; the app-level LoadingMixin covers
+        # other >100 ms ops (see base.py)
         fl.mount(self._scan_status)
         fl.mount(self._scan_loader)
         self._scan_worker = self.run_worker(self._scan, thread=True, exclusive=True, name='font-scan')

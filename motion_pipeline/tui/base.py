@@ -9,10 +9,10 @@ import os
 
 from textual.app import App
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.message import Message
-from textual.widgets import Input, OptionList, Static
+from textual.widgets import Input, Label, LoadingIndicator, OptionList, Static
 from textual.widgets.option_list import Option
 
 from .terminal_driver import get_driver_class
@@ -111,6 +111,8 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 #preview, #error, #status { height: auto; }
 #font-preview { height: 1fr; width: 1fr; }   /* Task 13: the inline preview takes the remaining body space */
 #body > #fonts-top { min-height: 14; }  /* Task 13: the fonts role rows (family + 4x3) must stay on-screen at 80x24 */
+/* hidden loader box (LoadingMixin): hidden by default, start_loading() shows it inline */
+.op-loader { display: none; height: auto; }
 /* feedback lines (Task 4): one empty row above the text, dimmed; errors red */
 .feedback { margin: 1 0 0 0; color: ansi_bright_black; }
 .feedback-error { margin: 0; color: ansi_red; }  /* the one empty row goes before the block (D8) */
@@ -149,7 +151,53 @@ def show_path(p: str) -> str:
     return '~' + p[len(home):] if p.startswith(home) else p
 
 
-class MenuAppBase(App):
+LOADING_DELAY_S = 0.1   # show a loader only when an op exceeds 100 ms (user, 2026-11-22)
+
+
+class LoadingMixin:
+    """Debounced loading indicator, ported from free-agents' session_picker pattern
+    (_start_pending_op/_check_pending_op + frame animation): every submenu's panel carries a
+    hidden .op-loader box (declared in compose, toggled here — never mounted dynamically,
+    which Textual prunes); it appears only after LOADING_DELAY_S, or at once with
+    immediate=True (startup). stop_loading() hides it when the op finishes."""
+
+    def start_loading(self, text='loading…', immediate=False):
+        boxes = self.query('.op-loader')
+        if not boxes:
+            return None
+        box = boxes.first()
+        if text:
+            label = box.query('.op-loader-label')
+            if label:
+                label.first().update(text)
+        box.display = bool(immediate)
+        self._op_gen = getattr(self, '_op_gen', 0) + 1
+        gen = self._op_gen
+
+        def _show():   # re-query (the screen may re-compose) and honour a newer op/stop
+            if getattr(self, '_op_gen', 0) != gen:
+                return
+            boxes = self.query('.op-loader')
+            if boxes:
+                boxes.first().display = True
+        timer = None
+        if not immediate:
+            timer = self.set_timer(LOADING_DELAY_S, _show)
+        self._op_loader_timer = timer
+        return box
+
+    def stop_loading(self):
+        timer = getattr(self, '_op_loader_timer', None)
+        if timer is not None:
+            timer.stop()
+            self._op_loader_timer = None
+        self._op_gen = getattr(self, '_op_gen', 0) + 1   # invalidate queued _show callbacks
+        boxes = self.query('.op-loader')
+        if boxes:
+            boxes.first().display = False
+
+
+class MenuAppBase(LoadingMixin, App):
     """App with csl's terminal-native theme (ansi_default everywhere, ansi_color on)."""
 
     CSS = CSL_CSS
@@ -219,6 +267,8 @@ class ActionMenu(OptionList):
         (self.enable_option if enabled else self.disable_option)(action_id)
 
 
+
+
 def route_drop(screen, text: str):
     """Route a dropped/pasted path by WHAT it is (spec A2): the single visible, enabled
     PathInput that accepts it wins; only on ambiguity (zero or several accept) does the
@@ -238,7 +288,7 @@ def route_drop(screen, text: str):
     return fields[0] if fields else None
 
 
-class SubmenuScreen(Screen):
+class SubmenuScreen(LoadingMixin, Screen):
     """Every submenu: bold title, body, then the action rows with `Back` (no save) LAST.
     Menu grammar: digits = actions (when no text field has focus), b/esc = back, q = quit.
     Back never saves — the user may not have all inputs yet and wants to check the other
@@ -253,6 +303,10 @@ class SubmenuScreen(Screen):
     def compose(self):
         with Vertical(classes='panel'):
             yield Static(self.TITLE, classes='title')
+            # hidden loader box; start_loading() shows it where the body content lands
+            with Horizontal(classes='op-loader'):
+                yield LoadingIndicator()
+                yield Label('loading…', classes='op-loader-label muted')
             with Vertical(id='body', classes='body-fill' if self.BODY_FILL else ''):
                 yield from self.compose_body()
             yield ActionMenu(self.ACTIONS + [self.trailing_action()], id='actions')
