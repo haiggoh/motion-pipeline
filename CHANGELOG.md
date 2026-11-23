@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.0] — 2026-11-23 — shared graphics library, text styles, declarative shapes:
+
+- Render sites now stage the package graphics (`mp_lib.js`, DrawSVG) — the 404s are gone; a
+  project file named like a package file loses loudly (`staging: package <n> overrides project src/<n>`)
+- L1 library (`motion_pipeline/graphics/mp_lib.js`) audited (docs/l1-audit.md): existing helpers
+  kept, placement rules enforced — tweens at explicit absolute positions, finite repeats only
+- New "Text animation" step: five base styles (`slide-up` default — byte-identical pages,
+  golden-tested; `sentence-per-screen`, `words-appear`, `one-word-center`, `typewriter` with
+  seeded letter delays); the zone gate reads the style's real geometry
+- Declarative `shapes:` manifest block + `MP.runShapes` runner; `file` entries unchanged, unknown
+  shape types refused naming the valid set
+- Migrations: the dogfood project runs on `shapes:` now (still-compared against a byte-identical
+  backup, late-scene spans included); the P&G rewrite is DEFERRED to 0.8.x — the audit admitted no
+  shared helper (all brand constants); waypoint `retrofit-pgcubeone-r04`
+- Known limitation: the base text layer's word tweens still use gsap `delay` (not absolute
+  positions); custom graphics arm after `fonts.ready` to stay correct
+- Bugfixes: RichLog NameError after toolchain setup (exit-0 path); job-done callbacks on removed
+  screens no longer crash; the font-cache test no longer overwrites its tracked fixture
+
 ## [0.7.1] — 2026-11-22 — non-Homebrew fallbacks, crash fix, in-place loader, graphics route
 
 - No Homebrew needed for the render toolchain: node and ffmpeg fall back to sha256-verified
