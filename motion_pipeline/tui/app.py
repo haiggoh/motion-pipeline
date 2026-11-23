@@ -338,7 +338,7 @@ class InputsScreen(SubmenuScreen):
         yield Label('Transcript path — .txt/.md/.rtf/.doc/.docx/.pdf (drag a file from Finder; '
                     'docx maps real headings, rtf/doc load as plain text via textutil)')
         yield PathInput(id='transcript', value='transcript.txt', accepts=TRANSCRIPT_EXTS)
-        yield Label('voiceover file (optional)')
+        yield Label('voiceover file — ' + ' '.join(VO_EXTS) + ' (or .mov/.mp4 video)')
         yield PathInput(id='vo', placeholder='audio/vo.wav', accepts=VO_EXTS)
         with Horizontal(classes='path-row'):
             yield Label('wpm')
@@ -347,8 +347,9 @@ class InputsScreen(SubmenuScreen):
             yield Select([('Deutsch', 'de'), ('English', 'en'), ('Auto-detect', 'auto')],
                          id='language', allow_blank=False)
             yield Label('aligner')
-            yield Select([('Auto (speech model if installed)', 'auto'), ('Classical', 'classical'),
-                         ('Speech model', 'whisper')], id='aligner', allow_blank=False)
+            yield Select([('Whisper (falls back to estimate when not installed)', 'auto'),
+                         ('Estimate only (no speech model)', 'classical'),
+                         ('Whisper (required)', 'whisper')], id='aligner', allow_blank=False)
         yield Static('', id='status', classes='feedback')
         yield Static('', id='error', classes='feedback-error')
         yield Static('', id='engine-status', classes='muted')  # Task 17: speech-model engine line

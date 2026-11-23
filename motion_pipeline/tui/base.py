@@ -52,6 +52,9 @@ Select { border: none; background: ansi_default; }
 Select > SelectCurrent, Select > SelectCurrent:ansi { border: round ansi_bright_black; background: ansi_default; color: ansi_default; background-tint: ansi_default 0%; }
 Select:focus > SelectCurrent, Select:focus > SelectCurrent:ansi { border: round ansi_bright_blue; background-tint: ansi_default 0%; }
 Select > SelectOverlay { border: round ansi_bright_black; background: ansi_default; color: ansi_default; }
+/* the free-AI launch button wears the same rounded frame as the dropdowns beside it */
+#fa-launch { border: round ansi_bright_black; background: ansi_default; color: ansi_default; }
+#fa-launch:focus { border: round ansi_bright_blue; background-tint: ansi_default 0%; }
 /* SelectOverlay IS an OptionList: `OptionList:focus { border: none }` above outranks a plain
    `Select > SelectOverlay` while the overlay is open (it has focus) — repeat with :focus */
 Select > SelectOverlay:focus { border: round ansi_bright_blue; background: ansi_default; background-tint: ansi_default 0%; }

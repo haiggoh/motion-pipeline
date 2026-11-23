@@ -48,9 +48,9 @@ class GraphicsScreen(SubmenuScreen):
                 yield Select([(m['display'], m['alias']) for m in models] or [('(no keyed models)', '')],
                              id='fa-model', value=top, classes='variant-select')
                 yield Select([(e, e) for e in ('low', 'medium', 'high', 'xhigh', 'max')],
-                             id='fa-effort', value='high', classes='variant-select')
+                             id='fa-effort', value='max', classes='variant-select')
                 from textual.widgets import Button
-                yield Button('Start free AI session', id='fa-launch')
+                yield Button('Start free AI session', id='fa-launch')   # rounded frame via #fa-launch CSS
             yield Static('Launches a free AI session in a new Terminal window for this project — '
                          'it reads the playbook, asks about the style, and only adds files in '
                          'ai_graphics/.', classes='muted')
