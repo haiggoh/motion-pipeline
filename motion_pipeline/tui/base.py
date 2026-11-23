@@ -114,7 +114,11 @@ Checkbox.-on > .toggle--button { color: ansi_bright_blue; }
 .variant-select { width: 22; }
 .variant-name { width: 24; }
 #preview, #error, #status { height: auto; }
-#font-preview { height: 1fr; width: 1fr; }   /* Task 13: the inline preview takes the remaining body space */
+/* 0.8.1: the inline font preview is removed; the list gets the space. The [x] checkbox row is
+   a borderless button rendering literal [x]/[ ] text (get-haiggoh style). */
+#all-roles { border: none; background: ansi_default; color: ansi_default; padding: 0; width: auto; min-width: 0; height: 1; }
+#all-roles:focus { border: none; background-tint: ansi_default 0%; }
+#fonts-top > Vertical { height: 1fr; }   /* 0.8.1: with the inline preview gone, the font list fills the body height */
 #body > #fonts-top { min-height: 14; }  /* Task 13: the fonts role rows (family + 4x3) must stay on-screen at 80x24 */
 /* hidden loader box (LoadingMixin): hidden by default, start_loading() shows it inline */
 .op-loader { display: none; height: auto; }

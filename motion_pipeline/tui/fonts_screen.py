@@ -13,14 +13,31 @@ import subprocess
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
-from textual.widgets import Checkbox, Input, Label, ListItem, ListView, LoadingIndicator, Select, Static
+from textual.widgets import Button, Input, Label, ListItem, ListView, LoadingIndicator, Select, Static
 
 from .. import font_index
 from .. import font_preview
 from .. import fonts as fonts_mod
 from .. import project as project_mod
-from .ansi_image import render_ansi_image
 from .base import SubmenuScreen
+
+
+class CheckRow(Button):
+    """get-haiggoh-style checkbox: a borderless button row rendering literal `[x]` / `[ ]`
+    (a str '[x]' would be eaten as markup — use rich Text). `.value` mirrors Checkbox."""
+    def __init__(self, label, value=True, id=None):
+        from rich.text import Text
+        self._label_text = label
+        super().__init__(Text('[x] ' + label if value else '[ ] ' + label), id=id)
+        self.value = value
+
+    def action_toggle(self):
+        self.value = not self.value
+        from rich.text import Text
+        self.label = Text(('[x] ' if self.value else '[ ] ') + self._label_text)
+
+    def _on_button_pressed(self, event):
+        self.action_toggle()
 
 
 class RoleRow(Horizontal):
@@ -74,14 +91,12 @@ class FontsScreen(SubmenuScreen):
                         yield Label(role, classes='role-label')
                         yield Static('(none)', id=f'role-{role}-family')
                         yield Select([], id=f'role-{role}-weight', allow_blank=True, classes='weight')
-                yield Checkbox('Apply to all roles', id='all-roles', value=True)   # B2: replaces the dropdown
-                yield Label('Preview')
-                yield Input(id='sample-text', value=font_preview.SAMPLE_TEXT)
+                yield CheckRow('Apply to all roles', value=True, id='all-roles')   # B2 + 0.8.1: [x] look
                 yield Static('', id='licence-warning', classes='feedback')
                 yield Static('', id='status', classes='feedback')
                 yield Static('', id='error', classes='feedback-error')
-        # Task 13 (B2): the inline preview takes the FULL body width and the remaining height
-        yield Static('', id='font-preview')
+        # 0.8.1: the inline preview is REMOVED (user) — the freed space goes to the font list
+        # (fonts-top is 1fr under BODY_FILL, so the list now fills the body height)
 
     def on_mount(self):
         self._all = {}       # family -> list[Face]
@@ -90,8 +105,7 @@ class FontsScreen(SubmenuScreen):
         self._seq = 0
         self._role_family = {r: None for r in fonts_mod.ROLES}
         self._edit_role = None      # None while "Apply to all roles" is on (B2)
-        self._preview_token = 0
-        self._sharp_open = False    # Task 13: becomes True once the sharp window is opened
+        self._sharp_open = False    # becomes True once the sharp window is opened
         self._refresh_list('')
         # the loader sits where the list will appear (never a bottom status row)
         fl = self.query_one('#fontlist')
@@ -175,24 +189,19 @@ class FontsScreen(SubmenuScreen):
     def on_input_changed(self, event):
         if event.input.id == 'font-search':
             self._refresh_list(event.value)
-        elif event.input.id == 'sample-text':
-            self._schedule_preview()
-
-    def on_select_changed(self, event):
-        self._schedule_preview()
 
     def on_role_row_picked(self, event: RoleRow.Picked) -> None:
         self._edit_role = event.role
         self._refresh_editing()
 
-    def on_checkbox_changed(self, event) -> None:
-        if getattr(event.checkbox, 'id', None) == 'all-roles':
-            if not event.value and self._edit_role is None:
+    def on_button_pressed(self, event) -> None:
+        if getattr(event.button, 'id', None) == 'all-roles':
+            if not event.button.value and self._edit_role is None:
                 self._edit_role = 'headline'    # unticked with no row picked -> headline
             self._refresh_editing()
 
     def _refresh_editing(self):
-        all_on = bool(self.query_one('#all-roles', Checkbox).value)
+        all_on = bool(self.query_one('#all-roles', CheckRow).value)
         for row in self.query(RoleRow):
             row.set_class(not all_on and row.role == self._edit_role, '-editing')
 
@@ -201,7 +210,7 @@ class FontsScreen(SubmenuScreen):
         fam = next(s[0] for s in self._shown if s[1] == seq)
         self._selected = fam
         self.query_one('#family', Static).update(f'Family: {fam}')
-        if self.query_one('#all-roles', Checkbox).value:
+        if self.query_one('#all-roles', CheckRow).value:
             targets = fonts_mod.ROLES
         else:
             targets = (self._edit_role or 'headline',)   # unticked with no row picked -> headline
@@ -215,18 +224,12 @@ class FontsScreen(SubmenuScreen):
                         'Copied into the project\'s gitignored fonts/ only on Save; never committed to this repo.')
         else:
             warn.update('')
-        self._schedule_preview()
 
-    # --- preview (Task 10): inline half-block, debounced 150 ms; sharp = Quick Look PNG at 2x ---
+    # --- sharp preview (Quick Look) only — the inline preview was removed in 0.8.1 (user) ---
     PX_BY_ROLE = {'headline': 24, 'label': 14, 'body': 16, 'emphasis': 16}
 
-    def _schedule_preview(self):
-        self._preview_token += 1
-        token = self._preview_token
-        self.set_timer(0.15, lambda: self._update_preview(token))
-
     def _preview_lines(self):
-        text = self.query_one('#sample-text', Input).value or font_preview.SAMPLE_TEXT
+        text = font_preview.SAMPLE_TEXT   # 0.8.1: the sample-text input went away with the inline preview
         lines = []
         for role in fonts_mod.ROLES:
             fam = self._role_family.get(role)
@@ -258,34 +261,6 @@ class FontsScreen(SubmenuScreen):
         return os.path.join(os.environ.get('TMPDIR', '/tmp'),
                             f'motion-pipeline-preview-{os.getpid()}.png')
 
-    def on_resize(self, event):
-        self._schedule_preview()   # Task 13: recompute the preview size on resize
-
-    def _update_preview(self, token):
-        if token != self._preview_token or not self._all:
-            return
-        lines = self._preview_lines()
-        if not lines:
-            return
-        fg, bg = self._preview_colors()
-        pv = self.query_one('#font-preview', Static)
-        # Task 13 (B2): the preview fills the space it is given (full body width x remaining
-        # height); px per role scales so each line fills that width (one line per role)
-        max_w = pv.content_region.width or 44
-        max_h = pv.content_region.height or 12
-        width_px = max_w * 2          # half-block: 2 image px per cell horizontally
-        factor = width_px / 88.0
-        scaled = [(text, path, idx, int(px * factor)) for text, path, idx, px in lines]
-        img = font_preview.render_sample(scaled, width_px, fg, bg, scale=1.0)
-        png = os.path.join(os.environ.get('TMPDIR', '/tmp'),
-                           f'motion-pipeline-preview-inline-{os.getpid()}.png')
-        img.save(png)
-        pv.update(render_ansi_image(png, max_w=max_w, max_h=max_h))
-        if self._sharp_open:
-            # once the sharp window is open, the SAME png is rewritten on every update
-            sharp = font_preview.render_sample(scaled, width_px, fg, bg, scale=2.0)
-            sharp.save(self._sharp_png_path())
-
     def _sharp_preview(self):
         err = self.query_one('#error', Static)
         err.update('')
@@ -294,8 +269,7 @@ class FontsScreen(SubmenuScreen):
             if not lines:
                 raise ValueError('pick a font family in the list first')
             fg, bg = self._preview_colors()
-            pv = self.query_one('#font-preview', Static)
-            width_px = (pv.content_region.width or 44) * 2
+            width_px = 44 * 2   # fixed sharp-preview width (the inline area is gone in 0.8.1)
             factor = width_px / 88.0
             scaled = [(text, path, idx, int(px * factor)) for text, path, idx, px in lines]
             img = font_preview.render_sample(scaled, width_px, fg, bg, scale=2.0)

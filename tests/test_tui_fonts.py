@@ -80,8 +80,11 @@ async def test_save_bundled_font_config_new_shape(tmp_path, monkeypatch):
         await pilot.pause()
         scr = app.screen
         await wait_scan(pilot, scr)
-        # B2: all-roles checkbox is on by default (was the #edit-role dropdown)
-        assert scr.query_one('#all-roles', Checkbox).value is True
+        # B2 + 0.8.1: all-roles row is on by default and renders a literal [x] (get-haiggoh style)
+        from motion_pipeline.tui.fonts_screen import CheckRow
+        cb = scr.query_one('#all-roles', CheckRow)
+        assert cb.value is True
+        assert '[x]' in str(cb.label), str(cb.label)
         seq = next(s for f, s in scr._shown if f == 'Montserrat')
         scr.on_list_view_selected(SimpleNamespace(item=SimpleNamespace(id=f'font-{seq}')))
         await pilot.pause()
@@ -92,3 +95,50 @@ async def test_save_bundled_font_config_new_shape(tmp_path, monkeypatch):
         assert head['family'] == 'Montserrat' and head['weight'] == 700
         assert head['file'].startswith('motion_pipeline/fonts/Montserrat/')
         assert str(scr.query_one('#licence-warning', Static).render()) == ''
+
+
+@pytest.mark.asyncio
+async def test_font_list_fills_freed_preview_space_and_no_inline_preview(tmp_path, monkeypatch):
+    """0.8.1: inline preview removed (user) — the list now gets the body height at 80x24."""
+    import motion_pipeline.font_index as fi
+    from motion_pipeline.font_index import BUNDLED_DIR
+    real = fi.scan
+    monkeypatch.setattr(fi, 'scan', lambda dirs=None, cache_path=None, progress=None:
+                        real(dirs=[BUNDLED_DIR], cache_path=str(tmp_path / 'c.json')))
+    from motion_pipeline import project
+    project.save(str(tmp_path), project.default_project('demo'))
+    app = MenuApp()
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=(80, 24)) as pilot:
+        app.push_screen(FontsScreen())
+        await pilot.pause()
+        scr = app.screen
+        for _ in range(100):
+            await pilot.pause(0.05)
+            if scr._all:
+                break
+        assert scr._all, 'scan never finished'
+        assert not scr.query('#font-preview') and not scr.query('#sample-text'), 'inline preview gone'
+        # the freed space goes to the list's row: fonts-top now fills the whole body
+        top = scr.query_one('#fonts-top')
+        body = scr.query_one('#body')
+        assert top.region.height >= body.region.height - 1, (top.region, body.region)
+        lv = scr.query_one('#fonts', ListView)
+        from tui_probe import on_screen
+        assert on_screen(app, lv), lv.region
+
+
+def test_font_scan_is_recursive_into_subfolders(tmp_path):
+    """User question 2026-11-23: are subfolders considered? Yes — os.walk is recursive;
+    pin it so a regression can't hide missing nested fonts."""
+    import os
+    import shutil
+    from motion_pipeline import font_index
+    from motion_pipeline.font_index import BUNDLED_DIR
+    nested = tmp_path / 'fonts' / 'P7S1_Hausschriften_2024_2'
+    nested.mkdir(parents=True)
+    shutil.copy(os.path.join(BUNDLED_DIR, 'Montserrat', 'Montserrat-Regular.ttf'),
+                nested / 'Nested-Regular.ttf')
+    faces = font_index.scan(dirs=[str(tmp_path / 'fonts')], cache_path=str(tmp_path / 'c.json'))
+    assert any('P7S1_Hausschriften_2024_2' in f['path'] for f in faces), \
+        'nested subfolder font missing from the scan'
