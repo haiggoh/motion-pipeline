@@ -269,7 +269,7 @@ def check_graphics(project_dir):
         return 3
     # every ai_graphics file must be referenced by a manifest entry
     gdir = os.path.join(project_dir, ai_layer.DIR)
-    referenced = {g['file'] for g in entries}
+    referenced = {g['file'] for g in entries if g.get('file')}  # shapes: entries reference no file
     problems = []
     # determinism lint (waypoint optional-check-graphics, user-approved 2026-11-19): the
     # renderer seeks frames, so AI scripts must not use rAF/timers/Date/unseeded random or

@@ -24,8 +24,9 @@
 
   MP.enter = (el, ref, o) => {
     o = o || {};
-    MP.tl.fromTo(el, { opacity: 0, y: o.y != null ? o.y : 24 },
-                 { opacity: 1, y: 0, duration: o.d != null ? o.d : 0.5, ease: o.ease || 'power2.out' },
+    MP.tl.fromTo(el, { opacity: 0, y: o.y != null ? o.y : 24, scale: o.scale != null ? o.scale : 1 },
+                 { opacity: o.opacity != null ? o.opacity : 1, y: 0, scale: 1,
+                   duration: o.d != null ? o.d : 0.5, ease: o.ease || 'power2.out' },
                  at(ref, o.at));
     return el;
   };
@@ -92,6 +93,7 @@
       const p = Object.assign({}, s.props || {});
       if (s.type === 'el') {
         cur = MP.el(p.tag || 'div', p.style || null, layer, p.html != null ? p.html : null);
+        if (p.id) cur.id = p.id;
         if (s.anchor) named[s.anchor] = cur;
         made.push(cur);
       } else if (s.type === 'inZone') {

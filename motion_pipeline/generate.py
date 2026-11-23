@@ -296,9 +296,16 @@ def generate(project_path, variant='default', max_seconds=None):
              f'data-anchor="{g["element"]}"></script>\n')
             if (g.get('file') or '').endswith('.js') else
             (f'<script data-ai-id="{g["id"]}" data-anchor="{g["element"]}">\n'
-             f'MP.runShapes({json.dumps(g["shapes"])}, '
+             # arm AFTER the page's font-gated tweens (they use vars delay and would land
+             # after ours if we extended the timeline end first — the dogfood arming pattern)
+             f'(() => {{ let armed = false; const arm = () => {{ if (armed) return; armed = true;\n'
+             f'  MP.runShapes({json.dumps(g["shapes"])}, '
              f'{{ layer: document.querySelector(\'[data-ai-id="{g["id"]}"]\'), '
-             f'sceneName: {sec_name!r} }});\n</script>\n')
+             f'sceneName: {sec_name!r} }}); }};\n'
+             f'  if (document.fonts?.ready) document.fonts.ready.then(arm);\n'
+             f'  else if (document.readyState === "complete") arm();\n'
+             f'  else window.addEventListener("load", arm, {{ once: true }});\n'
+             f'}})();\n</script>\n')
             for g in mine if (g.get('file') or '').endswith('.js') or 'shapes' in g)
         layers = sorted({g['layer'] for g in mine
                          if (g.get('file') or '').endswith('.html') or 'shapes' in g})
