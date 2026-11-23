@@ -131,12 +131,17 @@ class FontsScreen(SubmenuScreen):
             return   # no project yet — not an error
         try:
             p = project_mod.load(pd)
-            cfg = fonts_mod.normalise_fonts(p.get('fonts', {}), pd)
+            cfg_in = p.get('fonts') or {'family': 'Montserrat'}  # no fonts config: bundled fallback, NOT an error
+            cfg = fonts_mod.normalise_fonts(cfg_in, pd)
         except (ValueError, OSError, json.JSONDecodeError) as e:
             # Task 6 (X2): name the corrupt project.json — never show defaults as real state
             from textual.widgets import Static
             self.query_one('#error', Static).update(f'error: project.json: {e}')
             return
+        if not p.get('fonts'):
+            from textual.widgets import Static
+            self.query_one('#status', Static).update(
+                'no client fonts — using bundled Montserrat (OFL); pick fonts to override')
         for role, r in cfg['roles'].items():
             self._set_role_family(role, r['family'], r['weight'])
 
