@@ -5,7 +5,8 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-from textual.widgets import Checkbox, Label, ListView, LoadingIndicator, Select, Static
+from textual.widgets import Label, ListView, LoadingIndicator, Select, Static
+from motion_pipeline.tui.fonts_screen import CheckRow
 
 from motion_pipeline import font_index, project
 from motion_pipeline.font_index import BUNDLED_DIR
@@ -58,7 +59,7 @@ async def test_all_roles_checkbox_default_on_picks_every_role(tmp_path, monkeypa
         await pilot.pause()
         scr = app.screen
         await wait_scan(pilot, scr)
-        assert scr.query_one('#all-roles', Checkbox).value is True   # default ON (user)
+        assert scr.query_one('#all-roles', CheckRow).value is True   # default ON (user)
         pick(scr, 'Montserrat')
         await pilot.pause()
         for role in ('headline', 'label', 'body', 'emphasis'):
@@ -77,7 +78,7 @@ async def test_untick_click_role_row_applies_to_that_role_only_and_highlights(tm
         await pilot.pause()
         scr = app.screen
         await wait_scan(pilot, scr)
-        scr.query_one('#all-roles', Checkbox).value = False     # untick -> headline is the target
+        scr.query_one('#all-roles', CheckRow).value = False     # untick -> headline is the target
         await pilot.pause()
         from motion_pipeline.tui.fonts_screen import RoleRow
         row = next(r for r in scr.query(RoleRow) if r.role == 'label')
@@ -88,13 +89,13 @@ async def test_untick_click_role_row_applies_to_that_role_only_and_highlights(tm
         await pilot.pause()
         assert 'Montserrat' in str(scr.query_one('#role-label-family', Static).render())
         for role in ('headline', 'body', 'emphasis'):
-            assert '(none)' in str(scr.query_one(f'#role-{role}-family', Static).render()), role
+            assert 'Montserrat' in str(scr.query_one(f'#role-{role}-family', Static).render()), role  # fallback prefill
         # the picked row is highlighted soft-blue (computed style, not CSS text)
         lbl = row.query_one('.role-label', Label)
         assert lbl.styles.color is not None and lbl.styles.color.ansi == 12, lbl.styles.color  # bright_blue
         assert row.has_class('-editing')
         # tick again -> highlight removed
-        scr.query_one('#all-roles', Checkbox).value = True
+        scr.query_one('#all-roles', CheckRow).value = True
         await pilot.pause()
         assert not row.has_class('-editing')
 
@@ -139,13 +140,12 @@ async def test_pick_family_for_headline_only(tmp_path, monkeypatch):
         scr = app.screen
         await wait_scan(pilot, scr)
         # B2: the dropdown is gone; untick all-roles so the pick applies to headline only
-        scr.query_one('#all-roles', Checkbox).value = False
+        scr.query_one('#all-roles', CheckRow).value = False
         await pilot.pause()
         pick(scr, 'Helvetica')
         await pilot.pause()
         assert 'Helvetica' in str(scr.query_one('#role-headline-family', Static).render())
-        assert '(none)' in str(scr.query_one('#role-body-family', Static).render())
-        assert str(scr.query_one('#role-body-family', Static).render()) == '(none)'  # untouched
+        assert 'Montserrat' in str(scr.query_one('#role-body-family', Static).render())  # untouched role keeps the fallback prefill
 
 
 @pytest.mark.asyncio
@@ -179,7 +179,7 @@ async def test_save_invalid_config_writes_nothing(tmp_path, monkeypatch):
         scr = app.screen
         await wait_scan(pilot, scr)
         # B2: all-roles is the default; no dropdown to set
-        assert scr.query_one('#all-roles', Checkbox).value is True
+        assert scr.query_one('#all-roles', CheckRow).value is True
         pick(scr, 'Montserrat')
         scr._all['Montserrat'] = []  # gate must fail: no faces left for the selected family
         await pilot.pause()

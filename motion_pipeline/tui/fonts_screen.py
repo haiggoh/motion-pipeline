@@ -24,20 +24,33 @@ from .base import SubmenuScreen
 
 class CheckRow(Button):
     """get-haiggoh-style checkbox: a borderless button row rendering literal `[x]` / `[ ]`
-    (a str '[x]' would be eaten as markup — use rich Text). `.value` mirrors Checkbox."""
+    (a str '[x]' would be eaten as markup — use rich Text). `.value` mirrors Checkbox,
+    including posting a change message when set directly."""
+
+    class Toggled(Message):
+        def __init__(self, row):
+            super().__init__()
+            self.row = row
+
     def __init__(self, label, value=True, id=None):
         from rich.text import Text
         self._label_text = label
+        self._value = bool(value)
         super().__init__(Text('[x] ' + label if value else '[ ] ' + label), id=id)
-        self.value = value
 
-    def action_toggle(self):
-        self.value = not self.value
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, v):
+        self._value = bool(v)
         from rich.text import Text
-        self.label = Text(('[x] ' if self.value else '[ ] ') + self._label_text)
+        self.label = Text(('[x] ' if self._value else '[ ] ') + self._label_text)
+        self.post_message(self.Toggled(self))
 
     def _on_button_pressed(self, event):
-        self.action_toggle()
+        self.value = not self._value
 
 
 class RoleRow(Horizontal):
@@ -194,9 +207,9 @@ class FontsScreen(SubmenuScreen):
         self._edit_role = event.role
         self._refresh_editing()
 
-    def on_button_pressed(self, event) -> None:
-        if getattr(event.button, 'id', None) == 'all-roles':
-            if not event.button.value and self._edit_role is None:
+    def on_check_row_toggled(self, event) -> None:
+        if event.row.id == 'all-roles':
+            if not event.row.value and self._edit_role is None:
                 self._edit_role = 'headline'    # unticked with no row picked -> headline
             self._refresh_editing()
 
