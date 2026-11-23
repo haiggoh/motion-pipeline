@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.1] — 2026-11-23 — font menu fixes + inputs/graphics UX (user feedback)
+
+- Font menu: the inline font preview is removed (the freed space goes to the font list,
+  which now fills the body at 80x24); the "Apply to all roles" row renders a literal
+  `[x]`/`[ ]` like the get-haiggoh pickers; a fonts-less project shows a muted
+  bundled-Montserrat note instead of a font-gate error
+- Bugfix: a fonts-less project crashed background-test/full renders from any working
+  directory but the repo root (bundled face refs were package-relative) — the fallback
+  role map is now resolved to absolute paths
+- Font scan recursion into subfolders pinned by test (subfolders were already scanned)
+- Transcript + voiceover: the voiceover field names the accepted file types; language
+  defaults to auto-detect; the aligner entry reads "Whisper (falls back to estimate when
+  not installed)" and the non-whisper option is renamed "Estimate only (no speech model)"
+  (legacy "classical" still loads)
+- "Start free AI session" wears the same rounded frame as the dropdowns beside it; max
+  effort is the default
+- Premiere/DaVinci timeline export (`<variant>_sequence.xml`, FCP 7 XML) was already
+  written into every render output since 0.6.x — now documented here (user asked where)
+
 ## [0.8.0] — 2026-11-23 — shared graphics library, text styles, declarative shapes:
 
 - Render sites now stage the package graphics (`mp_lib.js`, DrawSVG) — the 404s are gone; a
