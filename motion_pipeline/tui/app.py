@@ -214,6 +214,9 @@ class _RenderScreenBase(SubmenuScreen):
         self.query_one('#actions', ActionMenu).set_enabled('setup', missing)
 
     def _on_setup_done(self, rc):
+        if not self.query('#actions'):
+            return                     # job-done on a removed screen (B2)
+        from textual.widgets import RichLog   # B1: was used unimported in this method (ruff F821)
         self._job_running = False
         menu = self.query_one('#actions', ActionMenu)
         menu.set_enabled('run', True)
@@ -228,6 +231,8 @@ class _RenderScreenBase(SubmenuScreen):
                                   on_finish=self._on_check_done)
 
     def _on_check_done(self, rc):
+        if not self.query('#actions'):
+            return                     # job-done on a removed screen (B2)
         self._job_running = False
         menu = self.query_one('#actions', ActionMenu)
         menu.set_enabled('cancel', False)
@@ -239,6 +244,8 @@ class _RenderScreenBase(SubmenuScreen):
 
     def on_render_done(self, rc):
         from textual.widgets import RichLog
+        if not self.query('#actions'):
+            return                     # job-done on a removed screen (B2)
         self._job_running = False
         menu = self.query_one('#actions', ActionMenu)
         menu.set_enabled('run', True)
@@ -272,6 +279,8 @@ class BgTestScreen(_RenderScreenBase):
     def on_render_done(self, rc):
         import glob
         import subprocess
+        if not self.query('#image'):
+            return                     # job-done on a removed screen (B2)
         super().on_render_done(rc)
         out = self.outdir() or self.app.default_out()
         # show the rendered test frame inside the terminal (Rich ANSI half-block image)

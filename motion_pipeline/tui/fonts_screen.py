@@ -113,6 +113,8 @@ class FontsScreen(SubmenuScreen):
         self._scan_status.update(f'scanning fonts… {done}/{total}')
 
     def _on_scan_done(self, faces):
+        if not self.query('#font-search'):
+            return                     # thread callback on a removed screen (B2)
         fams = font_index.families(faces)
         self._all = dict(sorted(fams.items(),
                                 key=lambda kv: (not any(f['bundled'] for f in kv[1]), kv[0])))

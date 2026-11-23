@@ -177,7 +177,8 @@ def scan(dirs: list[str] | None = None, cache_path: str | None = None,
         out.extend(faces)
         if progress is not None:
             progress(i, total)
-    _save_cache(cache_path, fresh)
+    if fresh != cache:                 # B3: an unchanged tree must not rewrite the cache file
+        _save_cache(cache_path, fresh)
     return out
 
 

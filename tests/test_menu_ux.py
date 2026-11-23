@@ -194,10 +194,18 @@ async def test_brew_launcher_runs_menu_and_fonts_without_crash(tmp_path):
     # the pinned deps WITHOUT network (pip no-ops on satisfied requirements; 2026-11-21:
     # --system-site-packages alone was not enough — it exposes the BASE python, not the
     # suite venv — and the pip call still timed out under gate load)
-    env = dict(env, MP_FONT_CACHE=os.path.join(root, 'tests', 'fixtures', 'font-index-mini.json'))
+    import shutil
+    fixture = os.path.join(root, 'tests', 'fixtures', 'font-index-mini.json')
+    pristine = tmp_path / 'fixture-pristine.json'
+    shutil.copy(fixture, pristine)              # B3 guard: the tracked fixture must survive the run
+    cache_copy = tmp_path / 'font-index-mini.json'
+    shutil.copy(fixture, cache_copy)             # B3: MP_FONT_CACHE must never point at the repo file
+    env = dict(env, MP_FONT_CACHE=str(cache_copy))
     r = subprocess.run([str(venv / 'bin' / 'python'), '-c', code],
                        capture_output=True, text=True, timeout=120, env=env)
     assert r.returncode == 0, r.stderr[-800:]   # the hard guard: menu runs without crash
+    import filecmp
+    assert filecmp.cmp(fixture, pristine, shallow=False), 'B3: the tracked fixture changed during the run'
     if 'FONTS_OK True' not in r.stdout:
         # font list stays empty under some environments (load, font dirs) — loud skip,
         # not a failure (2026-11-21: FONTS_OK False on a loaded box, deps guard is static)
