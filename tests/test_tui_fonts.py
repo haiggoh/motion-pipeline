@@ -4,13 +4,13 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from textual.widgets import Checkbox, Input, ListView, Select, Static
+from textual.widgets import Input, ListView, Static
+from tui_probe import choose
 
 from motion_pipeline import font_index, project
 from motion_pipeline.font_index import BUNDLED_DIR
 from motion_pipeline.tui.app import MenuApp
 from motion_pipeline.tui.fonts_screen import FontsScreen
-from tui_probe import choose
 
 _REAL_SCAN = font_index.scan  # captured BEFORE any monkeypatch (else the fake recurses)
 
@@ -133,6 +133,7 @@ def test_font_scan_is_recursive_into_subfolders(tmp_path):
     pin it so a regression can't hide missing nested fonts."""
     import os
     import shutil
+
     from motion_pipeline import font_index
     from motion_pipeline.font_index import BUNDLED_DIR
     nested = tmp_path / 'fonts' / 'P7S1_Hausschriften_2024_2'

@@ -6,10 +6,10 @@
 - the free-session effort default is 'max'
 """
 import pytest
+from projfix import make_project
 
 from motion_pipeline.tui.app import MenuApp
 from motion_pipeline.tui.paths import VO_EXTS
-from projfix import make_project
 
 
 @pytest.mark.asyncio

@@ -10,10 +10,11 @@ foreign CWD crashes; the fonts screen shows the error text.
 import os
 
 import pytest
-
 from projfix import make_project
+
 from motion_pipeline import fonts as fonts_mod
-from motion_pipeline import generate, project as project_mod
+from motion_pipeline import generate
+from motion_pipeline import project as project_mod
 
 
 def _fontsless_project(tmp_path):
@@ -40,7 +41,8 @@ def test_generate_fonts_less_project_from_foreign_cwd(tmp_path, monkeypatch):
     src = os.path.join(pd, 'src')
     fonts_out = os.path.join(src, 'fonts')
     assert os.path.isdir(fonts_out) and os.listdir(fonts_out), 'faces not embedded'
-    page = open(os.path.join(src, 'scene_00_welcome.html')).read()
+    with open(os.path.join(src, 'scene_00_welcome.html')) as f:
+        page = f.read()
     assert '@font-face' in page
 
 
