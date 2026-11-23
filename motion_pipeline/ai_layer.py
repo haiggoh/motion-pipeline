@@ -25,6 +25,9 @@ DIR = 'ai_graphics'
 MANIFEST = os.path.join(DIR, 'manifest.json')
 _ID = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
 LAYERS = ('above', 'below')
+# L1 helpers a declarative shape step may call (mp_lib.js). `random` is a PRNG factory, not a
+# scene action — it stays out of the vocabulary (determinism rule).
+SHAPE_TYPES = ('el', 'enter', 'exit', 'drawOn', 'float', 'inZone')
 
 
 def load_manifest(project_dir, words):
@@ -52,12 +55,43 @@ def load_manifest(project_dir, words):
             raise ValueError(f'{where}: duplicate id')
         seen.add(gid)
         fname = g.get('file')
-        if not isinstance(fname, str) or os.path.isabs(fname) or '..' in fname.split('/'):
-            raise ValueError(f'{where}: file must be a relative path inside {DIR}/')
-        if not fname.endswith(('.html', '.js')):
-            raise ValueError(f'{where}: file {fname!r} must be .html or .js')
-        if not os.path.isfile(os.path.join(project_dir, DIR, fname)):
-            raise ValueError(f'{where}: file {fname!r} not found in {DIR}/')
+        shapes = g.get('shapes')
+        norm_shapes = []
+        if (fname is None) == (shapes is None):
+            raise ValueError(f'{where}: exactly one of "file" or "shapes" is required')
+        if fname is not None:
+            if not isinstance(fname, str) or os.path.isabs(fname) or '..' in fname.split('/'):
+                raise ValueError(f'{where}: file must be a relative path inside {DIR}/')
+            if not fname.endswith(('.html', '.js')):
+                raise ValueError(f'{where}: file {fname!r} must be .html or .js')
+            if not os.path.isfile(os.path.join(project_dir, DIR, fname)):
+                raise ValueError(f'{where}: file {fname!r} not found in {DIR}/')
+        else:
+            if not isinstance(shapes, list) or not shapes:
+                raise ValueError(f'{where}: shapes must be a non-empty list')
+            for si, s in enumerate(shapes):
+                swhere = f'{where} shape {si}'
+                if not isinstance(s, dict):
+                    raise ValueError(f'{swhere}: must be an object')
+                stype = s.get('type')
+                if stype not in SHAPE_TYPES:
+                    raise ValueError(f'{swhere}: unknown shape type {stype!r} — want one of '
+                                     f'{list(SHAPE_TYPES)} (L1 helpers in mp_lib.js)')
+                at = s.get('at')
+                if isinstance(at, str):
+                    if at.startswith('#'):
+                        if at[1:] not in sections:
+                            raise ValueError(f'{swhere}: unknown section {at[1:]!r}')
+                    elif at not in word_section:
+                        raise ValueError(f'{swhere}: unknown word id {at!r}')
+                elif isinstance(at, (int, float)) and not isinstance(at, bool):
+                    at = float(at)
+                else:
+                    raise ValueError(f'{swhere}: at must be a word id, a "#section" or seconds, got {at!r}')
+                props = s.get('props', {})
+                if not isinstance(props, dict):
+                    raise ValueError(f'{swhere}: props must be an object')
+                norm_shapes.append({'type': stype, 'at': at, 'props': props})
         anchor = g.get('anchor')
         if not isinstance(anchor, dict) or len(anchor) != 1 or set(anchor) - {'word', 'section'}:
             raise ValueError(f'{where}: anchor must have exactly one of "word" or "section"')
@@ -101,8 +135,13 @@ def load_manifest(project_dir, words):
             if not isinstance(gd, (int, float)) or isinstance(gd, bool) or not -60 <= gd <= 12:
                 raise ValueError(f'{cwhere}: gain_db must be -60..12, got {gd!r}')
             cues.append({'file': cf, 'offset': float(off), 'gain_db': float(gd)})
-        out.append({'id': gid, 'file': fname, 'section': section, 'element': element,
-                    'anchor': anchor, 'layer': layer, 'sfx': cues})
+        entry = {'id': gid, 'section': section, 'element': element,
+                 'anchor': anchor, 'layer': layer, 'sfx': cues}
+        if fname is not None:
+            entry['file'] = fname
+        else:
+            entry['shapes'] = norm_shapes
+        out.append(entry)
     return out
 
 

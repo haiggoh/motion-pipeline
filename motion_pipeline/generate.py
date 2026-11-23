@@ -201,6 +201,8 @@ def generate(project_path, variant='default', max_seconds=None):
     ai_out = os.path.join(out_dir, 'ai_graphics')
     _sh.rmtree(ai_out, ignore_errors=True)
     for g in ai:
+        if not g.get('file'):
+            continue  # declarative shapes entry: nothing to copy
         dst = os.path.join(ai_out, g['file'])
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         _sh.copy2(os.path.join(project_path, ai_layer.DIR, g['file']), dst)
@@ -285,14 +287,23 @@ def generate(project_path, variant='default', max_seconds=None):
         mine = [g for g in ai if g['section'] == sec_name]
         ai_html = ''.join(
             f'<div class="ai-graphic ai-{g["layer"]}" data-ai-id="{g["id"]}" data-anchor="{g["element"]}">'
-            f'{open(os.path.join(project_path, ai_layer.DIR, g["file"])).read()}</div>\n'
-            for g in mine if g['file'].endswith('.html'))
-        ai_js = ''.join(f'<script src="ai_graphics/{g["file"]}" data-ai-id="{g["id"]}" '
-                        f'data-anchor="{g["element"]}"></script>\n'
-                        for g in mine if g['file'].endswith('.js'))
-        layers = sorted({g['layer'] for g in mine if g['file'].endswith('.html')})
+            + (open(os.path.join(project_path, ai_layer.DIR, g['file'])).read()
+               if (g.get('file') or '').endswith('.html') else '')
+            + '</div>\n'
+            for g in mine if (g.get('file') or '').endswith('.html') or 'shapes' in g)
+        ai_js = ''.join(
+            (f'<script src="ai_graphics/{g["file"]}" data-ai-id="{g["id"]}" '
+             f'data-anchor="{g["element"]}"></script>\n')
+            if (g.get('file') or '').endswith('.js') else
+            (f'<script data-ai-id="{g["id"]}" data-anchor="{g["element"]}">\n'
+             f'MP.runShapes({json.dumps(g["shapes"])}, '
+             f'{{ layer: document.querySelector(\'[data-ai-id="{g["id"]}"]\'), '
+             f'sceneName: {sec_name!r} }});\n</script>\n')
+            for g in mine if (g.get('file') or '').endswith('.js') or 'shapes' in g)
+        layers = sorted({g['layer'] for g in mine
+                         if (g.get('file') or '').endswith('.html') or 'shapes' in g})
         ai_css = ('.ai-graphic{position:absolute;inset:0;pointer-events:none}\n' if layers else '') + \
-            ''.join(f".ai-{l}{{z-index:{1 if l == 'below' else 3}}}\n" for l in layers)
+            ''.join(f".ai-{lyr}{{z-index:{1 if lyr == 'below' else 3}}}\n" for lyr in layers)
         ai_anchors = json.dumps({g['id']: {'element': g['element'], 'layer': g['layer'],
                                            **({'start': rel[g['anchor']['word']]['start']}
                                               if 'word' in g['anchor'] else {})} for g in mine})

@@ -74,4 +74,35 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   };
+
+  MP.runShapes = (steps, ctx) => {
+    // Declarative L2 runner (0.8.0): steps = [{type, at, props?, anchor?}] — `type` is an L1
+    // helper name; an `el` step creates an element inside ctx.layer and becomes the current
+    // target (registered under `anchor` when given); every other helper acts on that target
+    // and places its tween at the absolute position MP.at(step.at, props.at_off || 0).
+    // Unknown type: named on the console (MP_SHAPES_UNKNOWN) and skipped — never a silent
+    // default (validation in ai_layer.py refuses it earlier anyway).
+    ctx = ctx || {};
+    const layer = ctx.layer || document.getElementById('root');
+    let cur = null;
+    const made = [], named = {};
+    for (const s of (steps || [])) {
+      const fn = MP[s.type];
+      if (typeof fn !== 'function') { console.error(`MP_SHAPES_UNKNOWN ${s.type}`); continue; }
+      const p = Object.assign({}, s.props || {});
+      if (s.type === 'el') {
+        cur = MP.el(p.tag || 'div', p.style || null, layer, p.html != null ? p.html : null);
+        if (s.anchor) named[s.anchor] = cur;
+        made.push(cur);
+      } else if (s.type === 'inZone') {
+        if (p.targets || cur) MP.inZone(p.targets || cur, p.zone);
+      } else {
+        const target = (s.anchor && named[s.anchor]) || p.targets || cur;
+        if (!target) { console.error(`MP_SHAPES_NO_TARGET ${s.type}`); continue; }
+        if (s.type === 'float') MP.float(target, s.at, p.to != null ? p.to : s.at, p);
+        else MP[s.type](target, s.at, p);
+      }
+    }
+    return made;
+  };
 })();

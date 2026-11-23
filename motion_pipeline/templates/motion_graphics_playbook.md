@@ -68,6 +68,12 @@ MP.exit(icon, '#{example_section}', {d: 0.3});
 Anchor to word ids or section names only (`MP.at`). A new voiceover take re-times everything
 anchored this way automatically. A graphic lives inside the scene it is anchored to.
 
+By default declare graphics as a declarative `shapes:` block in `ai_graphics/manifest.json`
+(entry schema: `{"id", "anchor", "layer", "shapes": [{"type", "at", "props"}]}`, `type` one of
+the L1 helpers `el/enter/exit/drawOn/float/inZone`) — the generic runner `MP.runShapes`
+places every tween at the absolute position you name. Ship a `.js` script only for one-off
+complex motion the block cannot express.
+
 Scene table (scene, section, start, end, duration, first/last word id):
 {scene_table}
 
