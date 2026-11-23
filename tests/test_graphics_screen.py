@@ -17,7 +17,8 @@ from tui_probe import choose
 
 def test_step_list_has_graphics_before_render():
     ids = [k for k, _ in STEPS]
-    assert ids == ['project', 'colours', 'fonts', 'zones', 'bgtest', 'inputs', 'graphics', 'render']
+    assert ids == ['project', 'colours', 'fonts', 'zones', 'bgtest', 'inputs', 'textstyle',
+                   'graphics', 'render']
 
 
 @pytest.mark.asyncio
@@ -29,10 +30,10 @@ async def test_menu_shows_graphics_as_step_6_and_hint_0_to_7(tmp_path):
         app.push_screen(MenuScreen())
         await pilot.pause()
         menu = app.screen.query_one('#actions')
-        assert menu.numbers['6'] == 'graphics' and menu.numbers['7'] == 'render'  # digit -> step
+        assert menu.numbers['7'] == 'graphics' and menu.numbers['8'] == 'render'  # digit -> step
         prompts = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
-        assert any(p.startswith('6) Add motion graphics') for p in prompts) and '7) Render' in prompts
-        assert '0-7' in str(app.screen.query_one('.hint').render())
+        assert any(p.startswith('7) Add motion graphics') for p in prompts) and '8) Render' in prompts
+        assert '0-8' in str(app.screen.query_one('.hint').render())
 
 
 @pytest.mark.asyncio

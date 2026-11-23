@@ -67,7 +67,9 @@ RichLog:focus { background-tint: ansi_default 0%; }
 Header, Footer { background: ansi_default; color: ansi_bright_black; }
 .panel { padding: 0 1; background: ansi_default; height: 1fr; }
 .title { text-style: bold; padding: 0 0 1 0; }
-.subtitle { color: ansi_bright_cyan; padding: 0 0 1 0; }
+.subtitle { color: ansi_bright_cyan; padding: 0 0 1 0; text-wrap: nowrap; overflow-x: hidden;
+            text-overflow: ellipsis; }  /* never wraps: a long projects path must not push the
+            menu off 80x24 (0.8.0 Task 4 added a 9th step) */
 /* key hint (and the home menu's version footer) are DOCKED to the bottom: they claim their
    rows first, so content can never push them off-screen (a 1fr spacer still takes >= 1 row) */
 .hint { color: ansi_bright_black; dock: bottom; }

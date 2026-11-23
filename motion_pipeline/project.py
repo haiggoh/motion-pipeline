@@ -12,6 +12,8 @@ Set-but-invalid settings fail loudly naming the key (user's global rule).
 import json
 import os
 
+from . import text_styles
+
 ASPECTS = {'16:9': (1920, 1080), '9:16': (1080, 1920), '1:1': (1080, 1080), '4:5': (1080, 1350)}
 UHD = (3840, 2160)
 FPS_CHOICES = (25, 30, 50, 60)
@@ -19,7 +21,7 @@ REQUIRED_KEYS = ('name', 'aspect', 'resolution', 'fps', 'variants')
 # every key the menu owns in project.json. Anything else is refused by validate(): AI
 # additions belong in ai_graphics/ (ai_layer.py), never in the menu's files (0.5.0 Task 4d).
 OWNED_KEYS = REQUIRED_KEYS + ('zones', 'fonts', 'transcript', 'vo', 'graphics', 'wpm', 'language',
-                             'aligner', 'full_master')
+                             'aligner', 'full_master', 'text_style')
 AGENTS_TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'project_AGENTS.md')
 
 
@@ -37,7 +39,7 @@ def default_project(name, aspect='16:9', fps=60, uhd=False):
     return {'name': name, 'aspect': aspect, 'resolution': resolution_for(aspect, uhd),
             'fps': fps, 'variants': ['default'], 'zones': [], 'fonts': {},
             'transcript': 'transcript.txt', 'vo': None, 'wpm': 140, 'language': 'auto',
-            'aligner': 'auto', 'full_master': False}
+            'aligner': 'auto', 'full_master': False, 'text_style': text_styles.DEFAULT}
 
 
 def validate(p):
@@ -70,6 +72,9 @@ def validate(p):
         raise ValueError(f"invalid aligner {p['aligner']!r} — want 'auto', 'classical' or 'whisper' (key 'aligner')")
     if 'full_master' in p and not isinstance(p['full_master'], bool):
         raise ValueError(f"invalid full_master {p['full_master']!r} — want true/false (key 'full_master')")
+    if 'text_style' in p and p['text_style'] not in text_styles.STYLES:
+        raise ValueError(f"invalid text_style {p['text_style']!r} — want one of "
+                         f"{sorted(text_styles.STYLES)} (key 'text_style')")
     if not isinstance(p['variants'], list) or not p['variants']:
         raise ValueError("invalid variants: want a non-empty list of scheme names")
     for z in p.get('zones', []):

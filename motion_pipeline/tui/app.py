@@ -26,6 +26,7 @@ STEPS = [
     ('zones', 'Keep-out zones'),
     ('bgtest', 'Background test'),
     ('inputs', 'Transcript + voiceover'),
+    ('textstyle', 'Text animation'),        # 0.8.0 Task 4 / Q1 — L0 base text style
     ('graphics', 'Add motion graphics'),   # Task 23 / M5 — gated on fresh saved timings
     ('render', 'Render'),
 ]
@@ -43,7 +44,7 @@ class MenuScreen(Screen):
             menu = ActionMenu(STEPS + [('quit', 'Quit')], spaced=True, first_number=0, nav_gap=0, id='actions')  # Quit is not a nav row
             yield menu
             with Vertical(classes='footer'):
-                yield Static('↑↓ move · Enter/click select · 0-7 step · q quit', classes='hint')
+                yield Static('↑↓ move · Enter/click select · 0-8 step · q quit', classes='hint')
                 yield Static(f'motion-pipeline v{__version__}', classes='version')
 
     def subtitle(self):
@@ -712,6 +713,7 @@ class MenuApp(MenuAppBase):
             'zones': lambda: __import__('motion_pipeline.tui.zones_screen', fromlist=['ZonesScreen']).ZonesScreen(),
             'bgtest': lambda: __import__('motion_pipeline.tui.app', fromlist=['BgTestScreen']).BgTestScreen(),
             'inputs': lambda: __import__('motion_pipeline.tui.app', fromlist=['InputsScreen']).InputsScreen(),
+            'textstyle': lambda: __import__('motion_pipeline.tui.textstyle_screen', fromlist=['TextStyleScreen']).TextStyleScreen(),
             'graphics': lambda: __import__('motion_pipeline.tui.graphics_screen', fromlist=['GraphicsScreen']).GraphicsScreen(),
             'render': lambda: __import__('motion_pipeline.tui.app', fromlist=['RenderScreen']).RenderScreen(),
         }

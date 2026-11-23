@@ -68,7 +68,7 @@ async def test_graphics_gate_refreshes_on_resume_and_says_why(tmp_path):
         menu = app.screen.query_one('#actions')
         opt = menu.get_option('graphics')
         assert not opt.disabled, 'fresh timings must enable the graphics step'
-        assert str(opt.prompt) == '6) Add motion graphics', str(opt.prompt)
+        assert str(opt.prompt) == '7) Add motion graphics', str(opt.prompt)
         # make timings stale, then leave and come back
         with open(os.path.join(d, 'transcript.txt'), 'w') as f:
             f.write('# S\na completely different transcript\n')
