@@ -7,6 +7,7 @@ exit 1; with the default layout it exits 0) and the typewriter data-k spans are 
 import glob
 import json
 import os
+import re
 import subprocess
 
 import pytest
@@ -67,16 +68,21 @@ def test_every_style_spans_match_granularity(tmp_path, name):
         if st.granularity == 'word':
             assert len(span_ids) == len(set(span_ids)), f'{name}/{page}: word id spanned twice'
             assert 'data-k=' not in html
+            lines = re.findall(r'<div class="line".*?</div>', html, re.S)
+            multi = any(len(SPAN_ID.findall(ln)) > 1 for ln in lines)
+            assert (not multi) or ('</span> <span' in html), f'{name}/{page}: word spans are space-joined'
         else:
             ks = SPAN_K.findall(html)
             assert ks and len(ks) == len(span_ids), f'{name}/{page}: letter spans need data-k'
+            assert '</span> <span' not in html, f'{name}/{page}: letter spans must be adjacent, not spaced'
 
 
 def test_typewriter_deterministic_with_fixed_seed(tmp_path):
     _, p1 = _gen(tmp_path / 'a', style_name='typewriter')
     _, p2 = _gen(tmp_path / 'b', style_name='typewriter')
     assert p1 == p2, 'typewriter pages must be byte-identical across generations (fixed seed)'
-    assert any('MP.random(' in html for html in p1.values()), 'seeded PRNG expected in tween JS'
+    assert any('MP.random(0x7e57)' in html for html in p1.values()), \
+        'the documented per-style seed constant must be in the tween JS'
 
 
 def _proj(sub, style_name, zones):

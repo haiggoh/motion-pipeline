@@ -51,6 +51,23 @@ def test_no_unbounded_repeat_in_mp_lib():
     assert not re.search(r'repeat\s*:\s*-1', src), 'mp_lib must not use repeat: -1 (10^10 marker)'
 
 
+def test_no_delay_property_anywhere_in_mp_lib():
+    """Stronger than the per-call parse: a `delay:` property anywhere in mp_lib.js would
+    append that tween at the timeline end (gsap semantics) — banned outright in L1."""
+    src = open(MP_LIB).read()
+    assert not re.search(r'\bdelay\s*:', src), 'vars delay appends at the timeline end — banned in L1'
+
+
+def test_mp_lib_exports_only_the_audited_helpers():
+    """The L1 audit (docs/l1-audit.md) fixed the surface at the 7 helpers + MP.at; the only
+    addition since is the Task 6 runner MP.runShapes. Pin the set so a future helper
+    (esp. a project-specific one) cannot land silently."""
+    src = open(MP_LIB).read()
+    exported = sorted(set(re.findall(r'MP\.(\w+)\s*=', src)))
+    assert exported == sorted(['el', 'enter', 'exit', 'drawOn', 'float', 'inZone', 'random',
+                               'runShapes']), exported
+
+
 def test_every_tween_uses_absolute_position_not_vars_delay():
     src = open(MP_LIB).read()
     calls = list(_tween_calls(src))

@@ -27,7 +27,11 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     p = project.load(a.project)
-    style = text_styles.STYLES[p.get('text_style', text_styles.DEFAULT)]  # zone gate sees the style's real geometry
+    _style_name = p.get('text_style', text_styles.DEFAULT)
+    if _style_name not in text_styles.STYLES:
+        raise ValueError(f"invalid text_style {_style_name!r} — want one of "
+                         f"{sorted(text_styles.STYLES)} (key 'text_style')")
+    style = text_styles.STYLES[_style_name]  # zone gate sees the style's real geometry
     tr = json.load(open(os.path.join(a.project, 'transcript_model.json')))
     W, H = p['resolution']
     from motion_pipeline.generate import ASPECT_FONT_SCALE

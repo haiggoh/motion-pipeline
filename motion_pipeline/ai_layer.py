@@ -91,7 +91,13 @@ def load_manifest(project_dir, words):
                 props = s.get('props', {})
                 if not isinstance(props, dict):
                     raise ValueError(f'{swhere}: props must be an object')
-                norm_shapes.append({'type': stype, 'at': at, 'props': props})
+                anchor = s.get('anchor')
+                if anchor is not None and not isinstance(anchor, str):
+                    raise ValueError(f'{swhere}: anchor must be a string (element name)')
+                step = {'type': stype, 'at': at, 'props': props}
+                if anchor is not None:
+                    step['anchor'] = anchor   # runShapes registers/looks up elements by it
+                norm_shapes.append(step)
         anchor = g.get('anchor')
         if not isinstance(anchor, dict) or len(anchor) != 1 or set(anchor) - {'word', 'section'}:
             raise ValueError(f'{where}: anchor must have exactly one of "word" or "section"')

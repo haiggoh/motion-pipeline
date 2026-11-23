@@ -55,6 +55,25 @@ def test_shapes_entry_loads_and_normalises(tmp_path):
     assert 'file' not in got[0] and got[0]['section'] == sec
 
 
+def test_shape_anchor_survives_validation_and_emission(tmp_path):
+    """QC finding: ai_layer must keep the step-level `anchor` (runShapes registers/looks up
+    elements by it) — a stripped anchor fails only at render time with MP_SHAPES_NO_TARGET."""
+    pd = _project(tmp_path)
+    wid = _words(pd)[0]['id']
+    json.dump({'graphics': [{'id': 'w', 'anchor': {'word': wid}, 'shapes': [
+        {'type': 'el', 'at': wid, 'anchor': 'box', 'props': {'tag': 'div'}},
+        {'type': 'enter', 'at': wid, 'anchor': 'box', 'props': {'d': 0.3}},
+    ]}]}, open(os.path.join(pd, 'ai_graphics', 'manifest.json'), 'w'))
+    got = ai_layer.load_manifest(pd, _words(pd))
+    assert got[0]['shapes'][0].get('anchor') == 'box', got[0]['shapes']
+    assert got[0]['shapes'][1].get('anchor') == 'box'
+    generate.generate(pd)
+    src = os.path.join(pd, 'src')
+    pages = ''.join(open(os.path.join(src, f)).read() for f in sorted(os.listdir(src))
+                    if f.startswith('scene_') and f.endswith('.html'))
+    assert '"anchor": "box"' in pages, 'the anchor must reach the emitted MP.runShapes JSON'
+
+
 def test_unknown_shape_type_refused_naming_it(tmp_path):
     pd = _project(tmp_path)
     wid = _words(pd)[0]['id']

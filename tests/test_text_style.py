@@ -14,6 +14,7 @@ import pytest
 from motion_pipeline import project as project_mod
 from motion_pipeline import text_styles
 from motion_pipeline.tui.app import MenuApp, STEPS
+from projfix import make_project
 from tui_probe import on_screen
 
 
@@ -45,6 +46,30 @@ def test_steps_has_text_animation_after_inputs():
     ids = [k for k, _ in STEPS]
     assert ids == ['project', 'colours', 'fonts', 'zones', 'bgtest', 'inputs',
                    'textstyle', 'graphics', 'render'], ids
+
+
+def test_generate_refuses_unknown_text_style_with_valid_names(tmp_path):
+    """QC finding: generate() indexed STYLES directly — a bogus text_style raised a bare
+    KeyError. Now it raises the same friendly message validate() gives."""
+    from motion_pipeline import generate
+    pd = make_project(str(tmp_path / 'p'))
+    p = project_mod.load(pd)
+    p['text_style'] = 'bogus'
+    json.dump(p, open(os.path.join(pd, 'project.json'), 'w'))  # write raw, bypassing validate
+    with pytest.raises(ValueError) as ei:
+        generate.generate(pd)
+    assert 'bogus' in str(ei.value) and 'slide-up' in str(ei.value), str(ei.value)
+
+
+def test_text_styles_importable_before_generate():
+    """QC finding: text_styles and generate reference each other — both imports are lazy
+    (function-level), so either module must import cleanly first, in either order."""
+    import subprocess
+    import sys
+    for order in ('import motion_pipeline.text_styles, motion_pipeline.generate',
+                  'import motion_pipeline.generate, motion_pipeline.text_styles'):
+        r = subprocess.run([sys.executable, '-c', order], capture_output=True, text=True)
+        assert r.returncode == 0, (order, r.stderr[-300:])
 
 
 def test_styles_table_shape():

@@ -149,7 +149,11 @@ def generate(project_path, variant='default', max_seconds=None):
     from .scheme import resolve_variant
     pj = json.load(open(os.path.join(project_path, 'project.json')))
     from . import text_styles
-    style = text_styles.STYLES[pj.get('text_style', text_styles.DEFAULT)]
+    _style_name = pj.get('text_style', text_styles.DEFAULT)
+    if _style_name not in text_styles.STYLES:
+        raise ValueError(f"invalid text_style {_style_name!r} — want one of "
+                         f"{sorted(text_styles.STYLES)} (key 'text_style')")
+    style = text_styles.STYLES[_style_name]
     style_css = style.css
     tween_js = style.tween_js()
     scheme = resolve_variant(project_path, variant)
@@ -278,8 +282,9 @@ def generate(project_path, variant='default', max_seconds=None):
                     letter_off[w['id']] = off + len(piece)
                 else:
                     spans.append(f'<span id="{pid}" data-id="{w["id"]}"{emph}>{html.escape(piece)}</span>')
+            sep = '' if style.granularity == 'letter' else ' '   # letters are adjacent, not spaced
             line_html.append(f'<div class="line" data-line="{li}" style="left:{x}px;top:{y + li * lh}px;'
-                             f'font-size:{f_px}px">{" ".join(spans)}</div>')
+                             f'font-size:{f_px}px">{sep.join(spans)}</div>')
         card_id = f'card-{slug}'  # ids only from slugs (Task 12) — never the raw section name
         element_ids[sec_name] = card_id
         tj = json.dumps({w['id']: rel[w['id']] for w in words})  # scene-relative (Task 12)

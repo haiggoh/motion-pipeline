@@ -52,7 +52,7 @@
     const fdur = Math.max(0.2, span * (o.per || 0.5));
     const amp = o.amp != null ? o.amp : 6;
     MP.tl.to(el, { y: `+=${amp}`, duration: fdur, yoyo: true,
-                   repeat: Math.max(1, Math.ceil(span / fdur) - 1), ease: 'sine.inOut' }, a);
+                   repeat: Math.max(0, Math.ceil(span / fdur) - 1), ease: 'sine.inOut' }, a);
     return el;
   };
 
