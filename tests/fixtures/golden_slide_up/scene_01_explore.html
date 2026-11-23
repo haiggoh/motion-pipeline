@@ -1,0 +1,133 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:'mp-headline';src:url('fonts/headline-Montserrat-Bold.ttf');font-weight:700;font-style:normal}
+@font-face{font-family:'mp-label';src:url('fonts/label-Montserrat-SemiBold.ttf');font-weight:600;font-style:normal}
+@font-face{font-family:'mp-body';src:url('fonts/body-Montserrat-Regular.ttf');font-weight:400;font-style:normal}
+@font-face{font-family:'mp-emphasis';src:url('fonts/emphasis-Montserrat-Bold.ttf');font-weight:700;font-style:normal}
+body{margin:0;width:1920px;height:1080px;overflow:hidden;
+font-family:'mp-body';color:#f5f7ff}
+#root{position:absolute;width:1920px;height:1080px;overflow:hidden}
+#bg{position:absolute;inset:0}
+.line{position:absolute;z-index:2;font-weight:400;white-space:nowrap;
+overflow:hidden;height:112px}
+.line span{display:inline-block;transform:translateY(110%);opacity:0}
+.line span.emph{font-family:'mp-emphasis';font-weight:700;color:#ffb400}
+.card{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+font-family:'mp-headline';font-size:135px;font-weight:700;color:#f5f7ff;
+background:#0b1a4c;opacity:0}
+</style></head><body>
+<div id="root" data-composition-id="explore" data-width="1920" data-height="1080" data-fps="60" data-duration="5.900">
+<canvas id="bg" width="1920" height="1080"></canvas>
+<div id="card-explore" class="card">Explore</div>
+
+<div class="line" data-line="0" style="left:153px;top:594px;font-size:90px"><span id="el-w9" data-id="w9">Spin</span> <span id="el-w10" data-id="w10">the</span> <span id="el-w11" data-id="w11" class="emph">world</span> <span id="el-w12" data-id="w12">,</span> <span id="el-w13" data-id="w13">watch</span> <span id="el-w14" data-id="w14">the</span> <span id="el-w15" data-id="w15">story</span></div>
+<div class="line" data-line="1" style="left:153px;top:706px;font-size:90px"><span id="el-w16" data-id="w16">unfold</span> <span id="el-w17" data-id="w17">across</span> <span id="el-w18" data-id="w18">it.</span></div>
+</div>
+<script src="gsap.min.js"></script>
+<script src="DrawSVGPlugin.min.js"></script>
+
+<script>
+// Task 22 page API: defined BEFORE any ai_graphics script loads; mp_lib.js loads AFTER it
+// (its IIFE reads window.MP immediately — loading it before MP logs MP_LIB_NO_MP)
+const tl = gsap.timeline({paused: true});
+window.__timelines = window.__timelines || {};   // hyperframes does not predefine it
+window.__timelines['explore'] = tl;
+const T = {"w9": {"start": 0.007000000000000117, "end": 0.4359999999999995}, "w10": {"start": 0.4359999999999995, "end": 0.8640000000000003}, "w11": {"start": 0.8640000000000003, "end": 1.2929999999999997}, "w12": {"start": 1.2929999999999997, "end": 1.7209999999999996}, "w13": {"start": 1.7209999999999996, "end": 2.15}, "w14": {"start": 2.15, "end": 2.579}, "w15": {"start": 2.579, "end": 3.007}, "w16": {"start": 3.007, "end": 3.4359999999999995}, "w17": {"start": 3.4359999999999995, "end": 3.8640000000000003}, "w18": {"start": 3.8640000000000003, "end": 4.293000000000001}};
+const SECTIONS = {"Welcome": -3.85, "Explore": 0.0};
+window.MP = {
+  tl, timings: T, anchors: {},
+  at(ref, offset) { offset = offset || 0;
+    if (typeof ref === 'number') return ref + offset;
+    if (ref[0] === '#') return (SECTIONS[ref.slice(1)] != null ? SECTIONS[ref.slice(1)] : 0) + offset;
+    const w = T[ref]; return (w ? w.start : 0) + offset; },
+  scene: {name: 'Explore', slug: 'explore', start: 3.85, end: 9.75, duration: 5.900},
+  frame: {W: 1920, H: 1080, fps: 60, aspect: '16:9'},
+  palette: {"background_dark": "#0b1a4c", "background_light": "#1251a6", "accent": "#ffb400", "text": "#f5f7ff", "secondary_text": "#a6b0c8", "label_tint": "#a17f4e", "particle_colour": "#635955", "highlight_bar": "#ffb400", "gradient_stops": ["#0b1a4c", "#1251a6"]},
+  fonts: {"headline": "mp-headline", "label": "mp-label", "body": "mp-body", "emphasis": "mp-emphasis"},
+  zones: [],
+  sfx: [],
+  random: null  // set by mp_lib.js
+};
+</script>
+<script src="mp_lib.js"></script>
+
+<script>
+(async () => {
+  // Task 11 font gate: every role's face must load before the timeline is built;
+  // on failure log MP_FONT_MISSING (render_scene.sh greps it -> exit 5) and do NOT register
+  for (const f of [{"role": "headline", "w": 700, "file": "fonts/headline-Montserrat-Bold.ttf"}, {"role": "label", "w": 600, "file": "fonts/label-Montserrat-SemiBold.ttf"}, {"role": "body", "w": 400, "file": "fonts/body-Montserrat-Regular.ttf"}, {"role": "emphasis", "w": 700, "file": "fonts/emphasis-Montserrat-Bold.ttf"}]) {
+    let loaded = [];
+    try { loaded = await document.fonts.load(`${f.w} 16px mp-${f.role}`); } catch (e) {}
+    if (!loaded.length) { console.error(`MP_FONT_MISSING ${f.role} ${f.file}`); return; }
+  }
+
+
+const s2l = v => { v /= 255; return v <= 0.04045 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+const l2s = v => 255*(v <= 0.0031308 ? 12.92*v : 1.055*Math.pow(Math.max(v,0), 1/2.4) - 0.055);
+function toOklab(r,g,b){ r=s2l(r); g=s2l(g); b=s2l(b);
+  const l=Math.cbrt(0.4122214708*r+0.5363325363*g+0.0514459929*b),
+        m=Math.cbrt(0.2119034982*r+0.6806995451*g+0.1073969566*b),
+        s=Math.cbrt(0.0883024619*r+0.2817188376*g+0.6299787005*b);
+  return [0.2104542553*l+0.7936177850*m-0.0040720468*s,
+          1.9779984951*l-2.4285922050*m+0.4505937099*s,
+          0.0259040371*l+0.7827717662*m-0.8086757660*s]; }
+function fromOklab(L,a,b){ const l=(L+0.3963377774*a+0.2158037573*b)**3,
+        m=(L-0.1055613458*a-0.0638541728*b)**3, s=(L-0.0894841775*a-1.2914855480*b)**3;
+  return [l2s(4.0767416621*l-3.3077115913*m+0.2309699292*s),
+          l2s(-1.2684380046*l+2.6097574011*m-0.3413193965*s),
+          l2s(-0.0041960699*l-0.7034186147*m+1.7076147010*s)]; }
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t; return (t^t>>>14)>>>0; }; }
+
+const BW=1920, BH=1080, STOPS=["#0b1a4c", "#1251a6"], PARTICLE="#635955", SAT=1.15,
+      GLOW={cx:0.5, cy:0.42, sx:0.45, sy:0.9};
+function hex(h){ return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+function mixHex(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }
+const stops=STOPS.map(hex), particle=hex(PARTICLE);
+const field=new Float32Array(BW*BH*3);
+for(let y=0;y<BH;y++){ const Y=(y+.5)/BH, dy=(Y-GLOW.cy)*0.5625/GLOW.sy;
+  for(let x=0;x<BW;x++){ const X=(x+.5)/BW, dx=(X-GLOW.cx)/GLOW.sx,
+    g=Math.exp(-0.5*(dx*dx+dy*dy)), o=(y*BW+x)*3;
+    const n=stops.length-1, ft=Math.min(Math.max(X,0),1)*n, i=Math.floor(ft);
+    const base=mixHex(stops[Math.min(i,n)], stops[Math.min(i+1,n)], ft-i);
+    const c=base.map((v,k)=> v + (stops[n][k]-v)*0.85*g);
+    const [L,A,B]=toOklab(c[0],c[1],c[2]), c1=fromOklab(L,A*SAT,B*SAT);
+    const d=0.2126*(c[0]-c1[0])+0.7152*(c[1]-c1[1])+0.0722*(c[2]-c1[2]);
+    for(let k=0;k<3;k++) field[o+k]=c1[k]+d; } }
+function paintBg(T){
+  const cv=document.getElementById('bg'); if(!cv) return;
+  const ctx=cv.getContext('2d'), img=ctx.createImageData(BW,BH);
+  const rnd=mulberry32(Math.round(T*60)*2654435761>>>0), S16=1/65536, A=2.0, C=0.35;
+  const BW2=BW>>1, NB=new Float32Array(Math.max(1,BW2*(BH>>1)));
+  for(let i=0;i<NB.length;i++){ const r=rnd(); NB[i]=A*C*((r&0xFFFF)-(r>>>16))*S16; }
+  let BCB=null, BCR=null;
+  if(window.__BANDED){  // known-bad (gate discriminant, test-only): 4:2:0-style chroma —
+    BCB=new Float32Array(BW2*(BH>>1)); BCR=new Float32Array(BW2*(BH>>1));   // 2x2 block average,
+    for(let by=0;by<(BH>>1);by++) for(let bx=0;bx<BW2;bx++){               // quantised to even 8-bit
+      let R=0,G=0,B=0;
+      for(let dy=0;dy<2;dy++) for(let dx=0;dx<2;dx++){ const o=((by*2+dy)*BW+(bx*2+dx))*3; R+=field[o]; G+=field[o+1]; B+=field[o+2]; }
+      R/=4; G/=4; B/=4;
+      BCB[by*BW2+bx]=Math.round((128-0.1179*R-0.2864*G+0.4043*B)/2)*2;
+      BCR[by*BW2+bx]=Math.round((128+0.4043*R-0.3390*G-0.0653*B)/2)*2; }
+  }
+  for(let y=0,p=0;y<BH;y++){ const br=(y>>1)*BW2;
+    for(let x=0;x<BW;x++,p++){ const o=p*3,q=p*4;
+      const r=rnd(), n=A*(1-C)*((r&0xFFFF)-(r>>>16))*S16 + NB[br+(x>>1)];
+      let R=field[o]+n, G=field[o+1]+n, B=field[o+2]+n;
+      if(window.__BANDED){ const Y=0.2126*R+0.7152*G+0.0722*B, bi=br+(x>>1);
+        R=Y+1.5748*(BCR[bi]-128); G=Y-0.1873*(BCB[bi]-128)-0.4681*(BCR[bi]-128); B=Y+1.8556*(BCB[bi]-128); }
+      img.data[q]=R; img.data[q+1]=G; img.data[q+2]=B; img.data[q+3]=255; } }
+  ctx.putImageData(img,0,0); }
+function bgTick(){ paintBg(performance.now()/1000); }
+if (window.gsap && gsap.ticker) { gsap.ticker.add(bgTick); } else { const loop=()=>{ bgTick(); requestAnimationFrame(loop); }; loop(); }
+
+const card = document.getElementById('card-explore');
+tl.to(card, {duration: 0.6, opacity: 1, ease: 'power2.out'});
+tl.to(card, {duration: 0.4, opacity: 0, delay: 1.2, ease: 'power2.in'});
+for (const el of document.querySelectorAll('.line span')) {
+  const t = T[el.dataset.id];
+  tl.to(el, {duration: 0.35, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'});
+}
+tl.to(document.querySelectorAll('.line[data-line="0"] span'), {color: '#a6b0c8', duration: 0.3, delay: 3.007});
+})();
+</script>
+</body></html>

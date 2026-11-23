@@ -15,7 +15,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from motion_pipeline import generate, project  # noqa: E402
+from motion_pipeline import generate, project, text_styles  # noqa: E402
 
 
 def main(argv=None):
@@ -27,6 +27,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     p = project.load(a.project)
+    style = text_styles.STYLES[p.get('text_style', text_styles.DEFAULT)]  # zone gate sees the style's real geometry
     tr = json.load(open(os.path.join(a.project, 'transcript_model.json')))
     W, H = p['resolution']
     from motion_pipeline.generate import ASPECT_FONT_SCALE
@@ -37,7 +38,7 @@ def main(argv=None):
         words = [w for w in tr['words'] if w['section'] == sec['name']]
         if not words:
             continue
-        lines = generate.layout_lines(words, max(8, int(W * 0.84 / (font_px * 0.52))), font_px)
+        lines = style.layout(words, max(8, int(W * 0.84 / (font_px * 0.52))), font_px)
         zs = [z for z in project.active_zones(p) if z['section'] == sec['name']]
         x, y = generate.place_text_block(lines, W, H, font_px, line_h, zs)
         max_w = max(len(''.join(pc for _, pc, _ in ln)) for ln in lines)

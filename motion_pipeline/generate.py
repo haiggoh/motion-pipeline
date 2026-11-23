@@ -148,6 +148,10 @@ def generate(project_path, variant='default', max_seconds=None):
     scheme — scheme.resolve_variant). Returns the list of written files."""
     from .scheme import resolve_variant
     pj = json.load(open(os.path.join(project_path, 'project.json')))
+    from . import text_styles
+    style = text_styles.STYLES[pj.get('text_style', text_styles.DEFAULT)]
+    style_css = style.css
+    tween_js = style.tween_js()
     scheme = resolve_variant(project_path, variant)
     timing = json.load(open(os.path.join(project_path, 'timing.json')))
     tr = json.load(open(os.path.join(project_path, 'transcript_model.json')))
@@ -243,7 +247,7 @@ def generate(project_path, variant='default', max_seconds=None):
         # fit: shrink font by 0.9 until the block fits 0.9*H and avoids the zones (floor 0.5x)
         f_px = font_px
         while True:
-            lines = layout_lines(words, max(8, int(W * 0.84 / (f_px * 0.52))), f_px)
+            lines = style.layout(words, max(8, int(W * 0.84 / (f_px * 0.52))), f_px)
             lh = int(f_px * 1.25)
             if _avoids_zones(lines, W, H, f_px, lh, zs):
                 break
@@ -255,13 +259,23 @@ def generate(project_path, variant='default', max_seconds=None):
         # DOM: one absolutely positioned line per layout line; words html-escaped; hyphenation
         # piece k>0 gets id el-<id>-<k+1>; element_ids maps the word id to the FIRST piece id
         line_html = []
+        letter_off = {}
         for li, ln in enumerate(lines):
             spans = []
             for w, piece, k in ln:
                 emph = ' class="emph"' if w['emphasized'] else ''
                 pid = f'el-{w["id"]}' if k == 0 else f'el-{w["id"]}-{k + 1}'
                 element_ids.setdefault(w['id'], pid)
-                spans.append(f'<span id="{pid}" data-id="{w["id"]}"{emph}>{html.escape(piece)}</span>')
+                if style.granularity == 'letter':
+                    # letter spans keep data-id = word id (AI anchors stay word-addressed)
+                    # plus data-k = letter index within the word
+                    off = letter_off.get(w['id'], 0)
+                    for j, ch in enumerate(piece):
+                        spans.append(f'<span id="{pid}-L{off + j}" data-id="{w["id"]}" '
+                                     f'data-k="{off + j}"{emph}>{html.escape(ch)}</span>')
+                    letter_off[w['id']] = off + len(piece)
+                else:
+                    spans.append(f'<span id="{pid}" data-id="{w["id"]}"{emph}>{html.escape(piece)}</span>')
             line_html.append(f'<div class="line" data-line="{li}" style="left:{x}px;top:{y + li * lh}px;'
                              f'font-size:{f_px}px">{" ".join(spans)}</div>')
         card_id = f'card-{slug}'  # ids only from slugs (Task 12) — never the raw section name
@@ -309,7 +323,7 @@ font-family:'mp-body';color:{palette['text']}}}
 #bg{{position:absolute;inset:0}}
 .line{{position:absolute;z-index:2;font-weight:{roles['body']['weight']};white-space:nowrap;
 overflow:hidden;height:{lh}px}}
-{ai_css}.line span{{display:inline-block;transform:translateY(110%);opacity:0}}
+{ai_css}{style_css}
 .line span.emph{{font-family:'mp-emphasis';font-weight:{roles['emphasis']['weight']};color:{palette['accent']}}}
 .card{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
 font-family:'mp-headline';font-size:{int(H / 8)}px;font-weight:{roles['headline']['weight']};color:{palette['text']};
@@ -362,10 +376,7 @@ window.MP = {{
 const card = document.getElementById('{card_id}');
 tl.to(card, {{duration: 0.6, opacity: 1, ease: 'power2.out'}});
 tl.to(card, {{duration: 0.4, opacity: 0, delay: 1.2, ease: 'power2.in'}});
-for (const el of document.querySelectorAll('.line span')) {{
-  const t = T[el.dataset.id];
-  tl.to(el, {{duration: 0.35, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'}});
-}}
+{tween_js}
 {dim_js_s}
 }})();
 </script>

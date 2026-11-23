@@ -1,0 +1,18 @@
+[
+  {
+    "index": 0,
+    "name": "Welcome",
+    "slug": "welcome",
+    "start": 0.0,
+    "end": 3.85,
+    "file": "scene_00_welcome.html"
+  },
+  {
+    "index": 1,
+    "name": "Explore",
+    "slug": "explore",
+    "start": 3.85,
+    "end": 9.75,
+    "file": "scene_01_explore.html"
+  }
+]
