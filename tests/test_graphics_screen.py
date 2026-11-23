@@ -99,7 +99,9 @@ async def test_free_agents_row_and_selects_only_when_detected(tmp_path, monkeypa
             any('Free-Agents Route' in str(r.render()) for r in app.screen.query('.route-head'))
         sel = app.screen.query_one('#fa-model', Select)
         assert sel.value == 'nvidia-glm53'  # ladder top is the default
-        assert app.screen.query_one('#fa-effort', Select).value == 'high'
+        assert app.screen.query_one('#fa-effort', Select).value == 'max'  # 0.8.1: max effort is the default
+        from textual.widgets import Button
+        assert app.screen.query_one('#fa-launch', Button).styles.border_top[0] == 'round'
 
 
 @pytest.mark.asyncio
