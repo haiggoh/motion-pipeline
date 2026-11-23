@@ -48,6 +48,12 @@ Every scene page defines `window.MP` BEFORE any ai_graphics script runs:
   `MP.drawOn(svgEl, ref, {d, ease})` (DrawSVG, vendored), `MP.float(el, fromRef, toRef, {amp, per})`,
   `MP.inZone(el, i)` (fills active zone i), `MP.random(seed)` (mulberry32).
 
+Placement rules (0.8.0, pinned by `tests/test_mp_lib_rules.py`): every tween goes on `MP.tl` at
+an explicit absolute position — the call's last argument, e.g. `MP.tl.to(el, vars, MP.at(ref))` —
+never through a vars `delay`, which appends at the timeline end and buries later tweens. The
+repeat count is always finite; the `-1` marker sets gsap's 10^10 duration and buries anything
+appended afterwards. `MP.float` sizes its finite repeat to the from→to span itself.
+
 Worked example — a line icon drawn on inside zone 0 at word `{example_word}`, exiting at the
 section end, with an entrance whoosh and an exit tick:
 ```js
