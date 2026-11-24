@@ -206,6 +206,27 @@ async def test_failed_render_shows_exit_and_hint_not_a_traceback(tmp_path):
         assert on_screen(app, app.screen.query_one('#status'))
 
 
+@pytest.mark.parametrize('size', [(80, 24), (100, 30)])
+async def test_failed_render_status_keeps_the_whole_error_line(tmp_path, size):
+    """0.8.3 (user, 2026-11-24): the status showed 'split it with a #  — see the log below' — the
+    hint was cut where the log panel WRAPPED the line. The status must carry the full source line."""
+    msg = ('error: section "default" does not fit one frame at 16:9 — '
+           'split it with a # heading or move the zone')
+    cmd = ['bash', '-c', f"echo '{msg}' >&2; exit 2"]
+    app = MenuApp(test_render_cmd=cmd)
+    app.project_dir = str(tmp_path)
+    async with app.run_test(size=size) as pilot:
+        app.push_screen(app.SCREENS['bgtest']()); await pilot.pause()
+        from tui_probe import choose
+        await choose(pilot, app.screen, 'run')
+        for _ in range(40):
+            await pilot.pause(0.05)
+            if 'exit' in str(app.screen.query_one('#status').render()):
+                break
+        status = ' '.join(str(app.screen.query_one('#status').render()).split())
+        assert 'failed (exit 2)' in status and 'heading or move the zone' in status, status
+
+
 @pytest.mark.slow
 @pytest.mark.flaky  # render job window too tight under shared-box load
 async def test_background_test_real_render_shows_image_below_actions(tmp_path):

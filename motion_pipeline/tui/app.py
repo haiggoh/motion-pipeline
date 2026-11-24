@@ -255,7 +255,10 @@ class _RenderScreenBase(SubmenuScreen):
         out = self.open_target()
         if rc != 0:
             # name WHY, from the log (render_cli prints 'missing dependency: …' / 'error: …')
-            lines = [x.text if hasattr(x, 'text') else str(x) for x in self.query_one('#log', RichLog).lines]
+            log = self.query_one('#log', RichLog)
+            lines = getattr(log, 'source_lines', None)            # unwrapped (jobs.run_command)
+            if lines is None:
+                lines = [x.text if hasattr(x, 'text') else str(x) for x in log.lines]
             why = next((x for x in reversed(lines)
                         if x.startswith(('missing dependency', 'error', 'disk guard', 'no '))), '')
             self.query_one('#status', Static).update(

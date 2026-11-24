@@ -33,8 +33,11 @@ def run_command(app, cmd, log, on_finish=None):
     """Run cmd (list) as a worker; each output line is written to `log` (a RichLog with
     wrap=True). The final log line is honest: 'done (exit 0)' or 'failed (exit N)'.
     on_finish(rc), if given, is called (via call_from_thread) when the command exits —
-    not after a cancel. Returns the Job."""
+    not after a cancel. Returns the Job.
+    The unwrapped output lines are kept on `log.source_lines`: RichLog.lines holds the WRAPPED
+    display strips, so a status built from it loses whatever wrapped onto the next strip (0.8.3)."""
     job = Job()
+    log.source_lines = []
 
     def _run():
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -45,6 +48,7 @@ def run_command(app, cmd, log, on_finish=None):
         for line in proc.stdout or []:
             if job.cancelled:
                 break
+            log.source_lines.append(line.rstrip('\n'))
             if app.is_running:
                 app.call_from_thread(log.write, line.rstrip('\n'))
         try:
