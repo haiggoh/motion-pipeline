@@ -1,6 +1,7 @@
-"""transcript.py — plain-text transcript with sections and key-word markup (Task 6).
+"""transcript.py — plain-text transcript with sections (= chapters, D1') and key-word markup.
 
-Markup (decide-question 1, user-approved default): `# Section name` lines start a section,
+Markup (decide-question 1, user-approved default): `# Section name` lines start a section —
+under decision D1' a section IS a chapter (pages are derived at generate time, 6c),
 blank lines separate paragraphs, `*word*` marks emphasis (key words). Output model (pinned):
   {"sections": [{"name": str, "char_start": int}],
    "words": [{"id": "w<index>", "text": str, "section": str, "emphasized": bool}]}
