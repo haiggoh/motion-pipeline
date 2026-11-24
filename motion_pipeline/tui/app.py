@@ -393,9 +393,35 @@ class InputsScreen(SubmenuScreen):
         self.query_one('#vo', Input).value = p.get('vo') or ''
         self.query_one('#wpm', Input).value = str(p.get('wpm', 140))
         self.query_one('#language', Select).value = p.get('language', 'auto')   # B4: auto default
+        self._check_language_against_transcript(pd, p)
         self.query_one('#aligner', Select).value = p.get('aligner', 'auto')
         self._sync_wpm_field()
         self._update_wpm_indicator()
+
+    LANG_NAMES: ClassVar[dict] = {'de': 'Deutsch', 'en': 'English'}
+
+    def _check_language_against_transcript(self, pd, p):
+        """0.8.3 (D-LANG): a saved 'de'/'en' the loaded transcript clearly contradicts — an old
+        default looks exactly like a choice — shows Auto-detect plus a note. Nothing is written:
+        project.json changes only when the user saves (no hidden change)."""
+        from textual.widgets import Select
+
+        from .. import language_detect, transcript_formats
+        saved = p.get('language', 'auto')
+        if saved not in self.LANG_NAMES:
+            return
+        path = p.get('transcript') or 'transcript.txt'
+        path = path if os.path.isabs(path) else os.path.join(pd, path)
+        try:
+            detected = language_detect.detect(transcript_formats.to_markup(path))
+        except (OSError, ValueError, UnicodeDecodeError):
+            return                     # unreadable transcript: keep the saved choice, say nothing
+        if detected is None or detected == saved:
+            return
+        self.query_one('#language', Select).value = 'auto'
+        self.query_one('#status', Static).update(
+            f'language: saved {self.LANG_NAMES[saved]}, but the transcript reads as '
+            f'{self.LANG_NAMES[detected]} — switched to Auto-detect (Save to keep)')
 
     def _project_wpm(self):
         pd = getattr(self.app, 'project_dir', None)
