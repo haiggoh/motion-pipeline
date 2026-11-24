@@ -131,3 +131,45 @@ async def test_same_weight_faces_stay_distinct(tmp_path, ttc_fonts):
         app.pop_screen()
         scr2 = await _open_fonts(app, pilot)
         assert _shown(scr2, 'label').startswith('Condensed Bold ('), _shown(scr2, 'label')
+
+
+async def test_user_flow_by_keys_only(tmp_path, ttc_fonts):
+    """M1 QC (R4): drive the shipped bindings — focus the dropdown, Enter, arrows, Enter, then the
+    '1' action digit (Save) — instead of calling screen methods. Proves the change event, the
+    label refresh and the save binding are wired, not just the methods behind them."""
+    from textual.widgets import Select, Static
+    pd = str(tmp_path / 'proj')
+    p = project_mod.default_project('p')
+    project_mod.save(pd, p)
+    app = MenuApp()
+    app.project_dir = pd
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        scr = await _open_fonts(app, pilot)
+        for role in ROLES:
+            scr._set_role_family(role, 'Montserrat')
+            _pick(scr, role, 'Regular')                      # starting state: 4x Regular
+        await pilot.pause()
+        # the headline DEFAULT is Bold: the label must read Regular now, or the key pick below
+        # could 'pass' without the label ever moving (that mutation survived once)
+        before = str(scr.query_one('#role-headline-family', Static).render())
+        assert before.endswith('· Regular (400)'), before
+        sel = scr.query_one('#role-headline-weight', Select)
+        sel.focus()
+        await pilot.pause()
+        await pilot.press('enter')                           # open the dropdown
+        await pilot.pause()
+        prompts = [str(p) for p, _v in sel._options]
+        here, there = prompts.index('Regular (400)'), prompts.index('Bold (700)')
+        for _ in range(there - here):
+            await pilot.press('down')
+        await pilot.press('enter')                           # choose Bold
+        await pilot.pause()
+        label = str(scr.query_one('#role-headline-family', Static).render())
+        assert label.endswith('· Bold (700)'), label
+        scr.query_one('#fonts').focus()                      # digits act when no text field has focus
+        await pilot.press('1')                               # 1) Save font config
+        await pilot.pause(0.3)
+    roles = _saved_roles(pd)
+    assert (roles['headline']['index'], roles['headline']['weight']) == (1, 700), roles['headline']
+    assert all(roles[r]['index'] == 0 for r in ROLES if r != 'headline'), roles

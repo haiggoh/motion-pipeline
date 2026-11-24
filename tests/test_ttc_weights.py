@@ -1,7 +1,7 @@
 """0.8.3 bug 1 (user, 2026-11-24: 'font weight selection doesn't stick'): every face of a .ttc
 collection read as weight 400 — read_os2_weight looked for the table directory at byte 12 of the
 FILE instead of byte 12 of the face. Faces in .ttf files were fine, so only collections broke."""
-from ttc_fixture import BOLD, REGULAR, build_ttc, os2_weights
+from ttc_fixture import BOLD, REGULAR, SEMIBOLD, build_ttc, os2_weights
 
 from motion_pipeline import font_index
 
@@ -37,3 +37,14 @@ def test_missing_os2_weight_inferred_from_style_name(tmp_path):
     assert font_index.read_os2_weight(str(d / 'NoOS2.ttc'), 1) is None
     faces = font_index.scan(dirs=[str(d)], cache_path=str(tmp_path / 'cache.json'))
     assert {f['style']: f['weight'] for f in faces} == {'Regular': 400, 'Bold': 700}
+
+
+def test_style_fallback_prefers_the_longest_weight_word(tmp_path):
+    """M1 QC: 'SemiBold' contains 'bold' — the table must be checked longest-first (600, not 700)."""
+    d = tmp_path / 'f'
+    build_ttc(str(d / 'Semi.ttc'), [REGULAR, SEMIBOLD], strip_os2=(1,))
+    faces = font_index.scan(dirs=[str(d)], cache_path=str(tmp_path / 'cache.json'))
+    assert {f['style']: f['weight'] for f in faces} == {'Regular': 400, 'SemiBold': 600}
+    assert font_index.weight_from_style('Demi Bold') == 600
+    assert font_index.weight_from_style('Extra Bold') == 800
+    assert font_index.weight_from_style('Ultra Light Italic') == 200

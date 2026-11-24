@@ -224,7 +224,9 @@ async def test_failed_render_status_keeps_the_whole_error_line(tmp_path, size):
             if 'exit' in str(app.screen.query_one('#status').render()):
                 break
         status = ' '.join(str(app.screen.query_one('#status').render()).split())
-        assert 'failed (exit 2)' in status and 'heading or move the zone' in status, status
+        # the WHOLE line: head, middle and the tail that used to wrap away (M1 QC: tail-only
+        # asserts let a 'keep the last 40 chars' mutation pass)
+        assert 'failed (exit 2)' in status and msg in status, status
 
 
 @pytest.mark.slow

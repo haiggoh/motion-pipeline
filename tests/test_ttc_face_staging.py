@@ -64,3 +64,16 @@ def test_single_face_files_are_copied_unchanged(tmp_path):
     generate.generate(pd)
     with open(_staged(pd, 'headline'), 'rb') as a, open(BOLD, 'rb') as b:
         assert a.read() == b.read()
+
+
+def test_extracted_face_tables_are_byte_identical_to_the_source_face(tmp_path):
+    """M1 QC: glyph ORDER can match while outline BYTES are corrupt — compare every table's raw
+    bytes with the same face read out of the collection by fontTools (the instrument)."""
+    from fontTools.ttLib import TTCollection
+    pd = _ttc_project(tmp_path, headline_index=1)
+    generate.generate(pd)
+    src = TTCollection(os.path.join(pd, 'fonts', 'Duo.ttc')).fonts[1].reader
+    out = TTFont(_staged(pd, 'headline')).reader
+    assert sorted(out.keys()) == sorted(src.keys())
+    for tag in src.keys():
+        assert out[tag] == src[tag], f'table {tag} differs after extraction'

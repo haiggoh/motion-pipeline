@@ -13,7 +13,9 @@ def _plant_082_cache(cache, ttc):
     st = os.stat(ttc)
     stale = [{'family': 'Montserrat', 'style': s, 'weight': 400, 'italic': False, 'path': ttc,
               'index': i, 'bundled': False} for i, s in enumerate(('Regular', 'Bold'))]
-    with open(cache, 'w') as f:                       # exactly what 0.8.2 stored: no parser key
+    # exactly what 0.8.2 stored — `git show v0.8.2:motion_pipeline/font_index.py` line 177:
+    # fresh[path] = {'mtime_ns': key[0], 'size': key[1], 'faces': [...]} (no parser key)
+    with open(cache, 'w') as f:
         json.dump({ttc: {'mtime_ns': st.st_mtime_ns, 'size': st.st_size, 'faces': stale}}, f)
 
 
