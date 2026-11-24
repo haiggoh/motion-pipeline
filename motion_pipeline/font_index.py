@@ -60,19 +60,23 @@ def cache_file() -> str:
 
 def read_os2_weight(path: str, index: int = 0) -> int | None:
     """OS/2 usWeightClass: TTC header ('ttcf') -> face offset, then offset table -> table
-    directory -> 'OS/2' -> uint16 at byte 4 of the table. None when the file has no OS/2."""
+    directory -> 'OS/2' -> uint16 at byte 4 of the table. None when the file has no OS/2.
+    The table directory sits 12 bytes after the FACE's offset table (off), not the file start —
+    0.8.2 seeked to byte 12 of the file, and read face i's offset from byte 8+4i (numFonts for
+    face 0, face i-1's offset otherwise), so TTC faces read None/the wrong face (0.8.3 bug 1)."""
     try:
         with open(path, 'rb') as f:
+            off = 0
             tag = f.read(4)
             if tag == b'ttcf':
-                f.seek(8 + index * 4)
+                f.seek(12 + index * 4)        # ttcf, version, numFonts, THEN the offset array
                 off = struct.unpack('>I', f.read(4))[0]
                 f.seek(off)
                 tag = f.read(4)
             if tag not in (b'\x00\x01\x00\x00', b'OTTO', b'true', b'typ1'):
                 return None
             num_tables = struct.unpack('>H', f.read(2))[0]
-            f.seek(12)
+            f.seek(off + 12)
             for _ in range(num_tables):
                 ttag = f.read(4)
                 f.read(4)                                     # checksum
@@ -84,6 +88,23 @@ def read_os2_weight(path: str, index: int = 0) -> int | None:
         return None
     except (OSError, struct.error):
         return None
+
+
+# style-name words -> CSS weight, checked longest-first so 'semibold' wins over 'bold'
+_STYLE_WEIGHTS = (('hairline', 100), ('ultralight', 200), ('extralight', 200), ('thin', 100),
+                  ('semibold', 600), ('demibold', 600), ('extrabold', 800), ('ultrabold', 800),
+                  ('black', 900), ('heavy', 900), ('light', 300), ('medium', 500),
+                  ('bold', 700), ('book', 400), ('regular', 400))
+
+
+def weight_from_style(style: str | None) -> int:
+    """Weight inferred from a style name when the face has no OS/2 table (0.8.3: no silent 400
+    for a face called 'Bold')."""
+    low = (style or '').lower().replace(' ', '').replace('-', '')
+    for word, w in _STYLE_WEIGHTS:
+        if word in low:
+            return w
+    return 400
 
 
 def _face_count(path: str) -> int:
@@ -109,7 +130,7 @@ def _scan_file(path: str, bundled: bool) -> list[Face]:
             if index == 0 and not path.endswith(('.ttf', '.otf', '.ttc', '.otc')):
                 return []                                     # e.g. an unreadable .dfont
             continue
-        weight = read_os2_weight(path, index) or 400
+        weight = read_os2_weight(path, index) or weight_from_style(style)
         low = (style or '').lower()
         faces.append(Face(family=family or '', style=style or '', weight=weight,
                           italic=('italic' in low or 'oblique' in low), path=path,
