@@ -404,6 +404,9 @@ class InputsScreen(SubmenuScreen):
         """0.8.3 (D-LANG): a saved 'de'/'en' the loaded transcript clearly contradicts — an old
         default looks exactly like a choice — shows Auto-detect plus a note. Nothing is written:
         project.json changes only when the user saves (no hidden change)."""
+        import xml.etree.ElementTree as ET
+        import zipfile
+
         from textual.widgets import Select
 
         from .. import language_detect, transcript_formats
@@ -414,8 +417,11 @@ class InputsScreen(SubmenuScreen):
         path = path if os.path.isabs(path) else os.path.join(pd, path)
         try:
             detected = language_detect.detect(transcript_formats.to_markup(path))
-        except (OSError, ValueError, UnicodeDecodeError):
-            return                     # unreadable transcript: keep the saved choice, say nothing
+        except (OSError, ValueError, UnicodeDecodeError, zipfile.BadZipFile, KeyError,
+                ET.ParseError):
+            # unreadable/corrupt transcript (a .docx that is not a zip, lacks
+            # word/document.xml or has broken XML included): keep the saved choice, say nothing
+            return
         if detected is None or detected == saved:
             return
         self.query_one('#language', Select).value = 'auto'

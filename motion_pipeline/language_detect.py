@@ -28,8 +28,10 @@ MIN_SHARE = 0.70        # the winner must own this share of all stopword hits
 
 
 def detect(text: str) -> str | None:
-    """'de' | 'en' | None. Words in ALL CAPS are skipped (cue labels like '(9er-TEILUNG)')."""
-    words = [w.lower() for w in re.findall(r"[^\W\d_][\w'-]*", text or '') if not w.isupper()]
+    """'de' | 'en' | None. Words containing any uppercase letter are skipped — cue labels
+    like '(9er-TEILUNG)' (mixed-case) and ALL-CAPS labels alike, plus sentence-initial
+    capitals (negligible for stopword ratios)."""
+    words = [w.lower() for w in re.findall(r"[^\W\d_][\w'-]*", text or '') if w.islower()]
     tokens = [t for w in words for t in _WORD.findall(w)]
     if len(tokens) < MIN_WORDS:
         return None
