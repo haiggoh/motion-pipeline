@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.2] — 2026-11-24 — lint-clean sweep + fixture hardening (user: /check-code on the whole codebase)
+
+- Whole-repo lint sweep: ruff 533 -> 0, shellcheck 7 -> 0, biome clean (vendor/ excluded from
+  biome.json). Package code: new motion_pipeline/util.py IO helpers (read_text/read_bytes/
+  load_json/dump_json) replace every leaking open(); subprocess probes carry explicit
+  check=False; isinstance guards raise TypeError; class-level mutable defaults are
+  ClassVar-annotated; blind excepts at the UI/probe boundaries are scoped per-file-ignores
+  with the reason documented; tests get per-file-ignores for the test-idiomatic rules only
+- Fixture hardening: deleted tests/fixtures/font-index-mini.json (fake paths that never
+  validated, so the pinned cache always missed); the menu test now builds a validating
+  cache at runtime from real bundled fonts in a tmp dir; the no-rewrite guard stays in
+  test_font_cache.py
+- Full gate: 434 passed / 11 skipped / EXIT:0
+
 ## [0.8.1] — 2026-11-23 — font menu fixes + inputs/graphics UX (user feedback)
 
 - Font menu: the inline font preview is removed (the freed space goes to the font list,
