@@ -1,6 +1,7 @@
 """Session tripwire: tests must never write into the repo's own projects/ folder (2026-11-10:
 a menu test created projects/1/ via a cwd-relative default). Fails the session if the set of
 files under projects/ changed. Each xdist worker checks its own session."""
+import json
 import os
 
 import pytest
@@ -34,7 +35,7 @@ def _isolated_config(tmp_path_factory, monkeypatch):
     cfg = tmp_path_factory.mktemp('mpcfg')
     root = tmp_path_factory.mktemp('mproot')
     monkeypatch.setenv('MP_CONFIG_DIR', str(cfg))
-    (cfg / 'config.json').write_text('{"projects_root": "%s"}\n' % root)
+    (cfg / 'config.json').write_text(json.dumps({'projects_root': str(root)}) + '\n')
     return root
 
 

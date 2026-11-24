@@ -4,10 +4,22 @@ import os
 
 import pytest
 
-from motion_pipeline.scheme import (CONTRAST_TEXT, PALETTE_KEYS, contrast, contrast_failures,
-                                    derive_palette, load_scheme, mix, resolve_variant,
-                                    save_scheme, srgb_to_oklab, suggest_contrast_fix,
-                                    validate_scheme, variant_path, _hex_to_srgb)
+from motion_pipeline.scheme import (
+    CONTRAST_TEXT,
+    PALETTE_KEYS,
+    _hex_to_srgb,
+    contrast,
+    contrast_failures,
+    derive_palette,
+    load_scheme,
+    mix,
+    resolve_variant,
+    save_scheme,
+    srgb_to_oklab,
+    suggest_contrast_fix,
+    validate_scheme,
+    variant_path,
+)
 
 DARK = {'name': 'demo-dark', 'background_dark': '#0b1a4c', 'background_light': '#1251a6',
         'accent': '#ffb400', 'text': '#f5f7ff'}

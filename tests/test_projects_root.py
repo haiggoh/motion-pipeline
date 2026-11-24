@@ -7,11 +7,11 @@ import os
 
 import pytest
 from textual.widgets import Input
+from tui_probe import choose
 
 from motion_pipeline import config
 from motion_pipeline.tui.app import MenuApp, MenuScreen
 from motion_pipeline.tui.project_screen import ProjectScreen
-from tui_probe import choose
 
 
 async def test_first_run_asks_for_projects_root_and_remembers_it(fresh_config, tmp_path):

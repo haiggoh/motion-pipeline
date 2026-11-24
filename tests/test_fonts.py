@@ -1,5 +1,4 @@
 """Task 3 tests: bundled OFL fonts, role map, font gate, licence audit."""
-import json
 import os
 
 import pytest
@@ -105,7 +104,8 @@ def test_bundled_licence_audit_clean_and_red_on_planted_missing_ofl():
     import importlib.resources
     root = importlib.resources.files('motion_pipeline') / 'fonts' / 'Montserrat'
     # simulate a missing OFL by pointing the audit at a temp copy
-    import tempfile, shutil
+    import shutil
+    import tempfile
     with tempfile.TemporaryDirectory() as td:
         shutil.copytree(str(root), os.path.join(td, 'Montserrat'))
         os.remove(os.path.join(td, 'Montserrat', 'OFL.txt'))

@@ -30,7 +30,7 @@ def now():
 
 
 def git(*args, cwd):
-    r = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True)
+    r = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, check=False)
     return r.stdout.strip() if r.returncode == 0 else None
 
 

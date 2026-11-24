@@ -7,9 +7,9 @@ import shutil
 import subprocess
 
 import pytest
+from test_generate import DARK, make_project
 
 from motion_pipeline import generate, project
-from test_generate import DARK, make_project
 from motion_pipeline.scheme import save_scheme
 
 pytestmark = pytest.mark.slow
@@ -48,8 +48,9 @@ def test_render_uses_embedded_font(tmp_path):
     m1 = os.path.join(d1, 'renders', 'default', sj1[0]['file'].replace('.html', '.mov'))
     m2 = os.path.join(d2, 'renders', 'default', sj2[0]['file'].replace('.html', '.mov'))
     assert os.path.isfile(m1) and os.path.isfile(m2), (m1, m2)
-    from PIL import Image
     import io
+
+    from PIL import Image
     # frame 0 is black (fade-in) for both — compare a still where text is visible; test-mode
     # masters cap at 60 frames, so clamp into the rendered span
     t1 = min((sj1[0]['start'] + sj1[0]['end']) / 2, 0.5)

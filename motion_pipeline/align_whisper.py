@@ -3,12 +3,13 @@
 U2 probe needs the user's permission and pins the whisper.cpp -ojf JSON layout."""
 import difflib
 import hashlib
-import json
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+
+from .util import load_json
 
 
 class Missing(Exception):
@@ -86,12 +87,12 @@ def transcribe(cli, model, wav16k, language, prompt, progress_pct=None):
         rc = proc.wait(timeout=3600)
         if rc != 0:
             raise ValueError(f'whisper-cli failed ({rc}): {"".join(stderr_tail)[-300:]}')
-        data = json.load(open(base + '.ojf.json'))
+        data = load_json(base + '.ojf.json')
     words = data.get('words')
     if words is None and isinstance(data.get('segments'), list):  # segment-word layouts
         words = [w for s in data['segments'] for w in s.get('words', [])]
     if not isinstance(words, list):
-        raise ValueError(f'whisper -ojf JSON has no word list (keys: {sorted(data)})')
+        raise TypeError(f'whisper -ojf JSON has no word list (keys: {sorted(data)})')
     return [{'text': str(w.get('text', w.get('word', ''))).strip(),
              'start': float(w['start']), 'end': float(w['end'])} for w in words]
 
@@ -130,7 +131,8 @@ def snap(recognised, transcript_words, classical_timing, model_path):
         first = next((w for w in transcript_words if w.get('section') == s), None)
         if first:
             sections[s] = next(o['start'] for o in words_out if o['id'] == first['id'])
-    sha = hashlib.sha256(open(model_path, 'rb').read(65536)).hexdigest()[:12]
+    with open(model_path, 'rb') as _f:
+        sha = hashlib.sha256(_f.read(65536)).hexdigest()[:12]
     return {'source': str(model_path),
             'method': (f'whisper.cpp {os.path.basename(model_path)} (sha256 {sha}) snapped to '
                        f'transcript; classical fallback for {len(tr) - matched} words'),
@@ -222,9 +224,9 @@ def ensure_cli(progress=None):
     src_dir = os.path.join(bin_dir, f'src-{tag}')
     os.makedirs(src_dir, exist_ok=True)
     r = subprocess.run(['bash', '-c',
-                        f'curl -fsSL {tarball} | tar xz -C {src_dir!r} --strip-components 1 '
-                        f'--exclude "*whisper-bin*"'],
-                       capture_output=True, text=True, timeout=600)
+                        (f'curl -fsSL {tarball} | tar xz -C {src_dir!r} --strip-components 1 '
+                         f'--exclude "*whisper-bin*"')],
+                       capture_output=True, text=True, timeout=600, check=False)
     if r.returncode != 0 and not os.path.isdir(src_dir):
         raise ValueError(f'cannot fetch whisper.cpp source: {r.stderr[-200:]}')
     cmake = shutil.which('cmake')
@@ -234,12 +236,12 @@ def ensure_cli(progress=None):
         r = subprocess.run(['cmake', '-S', src_dir, '-B', os.path.join(src_dir, 'build'),
                             '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_EXAMPLES=OFF',
                             '-DGGML_NATIVE=ON'],
-                           capture_output=True, text=True, timeout=1800)
+                           capture_output=True, text=True, timeout=1800, check=False)
         if r.returncode != 0:
             raise ValueError(f'whisper.cpp cmake configure failed: {r.stderr[-300:]}')
         r = subprocess.run(['cmake', '--build', os.path.join(src_dir, 'build'),
                             '--target', 'whisper-cli', '-j'],
-                           capture_output=True, text=True, timeout=3600)
+                           capture_output=True, text=True, timeout=3600, check=False)
         built = os.path.join(src_dir, 'build', 'bin', 'whisper-cli')
         if r.returncode != 0 or not os.path.isfile(built):
             raise ValueError(f'whisper-cli build failed: {r.stderr[-300:]}')
@@ -252,13 +254,13 @@ def ensure_cli(progress=None):
     url = os.environ.get('MP_WHISPER_PREBUILT_URL') or \
         f'https://github.com/ggml-org/whisper.cpp/releases/download/{tag}/whisper-bin-x64.zip'
     zpath = os.path.join(bin_dir, 'whisper-bin-x64.zip')
-    r = subprocess.run(['curl', '-fsSL', url, '-o', zpath], capture_output=True, timeout=600)
+    r = subprocess.run(['curl', '-fsSL', url, '-o', zpath], capture_output=True, timeout=600, check=False)
     if r.returncode != 0:
         raise ValueError('cannot install whisper-cli: no cmake for a source build and the '
                          f'x64 prebuilt download failed ({r.stderr.decode()[-200:]}) — '
                          'install with: brew install whisper-cpp')
     r = subprocess.run(['ditto', '-x', '-k', zpath, os.path.join(bin_dir, 'x64')],
-                       capture_output=True, timeout=120)
+                       capture_output=True, timeout=120, check=False)
     if r.returncode != 0:
         raise ValueError(f'cannot unzip the whisper prebuilt: {r.stderr.decode()[-200:]}')
     pre = None

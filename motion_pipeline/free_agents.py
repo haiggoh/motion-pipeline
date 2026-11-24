@@ -13,10 +13,11 @@ Model lists are resolved LIVE through a preference ladder (never a hardcoded mod
   (2) dispatch-preferences order (FA_DISPATCH_PREFS / dispatch-preferences.local.json override),
   (3) raw --inventory order.
 """
-import json
 import os
 import shlex
 import subprocess
+
+from .util import load_json
 
 
 class FreeAgents:
@@ -57,9 +58,9 @@ def detect(env=None, home=None, path=None):
                 continue
             for ver in os.listdir(fad):
                 root = os.path.join(fad, ver)
-                if os.path.isfile(os.path.join(root, '.claude-plugin', 'plugin.json')):
-                    if best is None or _version_key(ver) > _version_key(best[0]):
-                        best = (ver, root)
+                if os.path.isfile(os.path.join(root, '.claude-plugin', 'plugin.json')) \
+                        and (best is None or _version_key(ver) > _version_key(best[0])):
+                    best = (ver, root)
     if best:
         return _mk(best[1])
     for d in (path or '').split(os.pathsep):
@@ -67,7 +68,7 @@ def detect(env=None, home=None, path=None):
             continue
         cand = os.path.join(d, 'free-agents-resolve.sh')
         if os.path.isfile(cand):
-            r = subprocess.run(['bash', cand], capture_output=True, text=True)
+            r = subprocess.run(['bash', cand], capture_output=True, text=True, check=False)
             if r.returncode == 0 and r.stdout.strip():
                 return _mk(r.stdout.strip().splitlines()[0])
             break
@@ -77,7 +78,7 @@ def detect(env=None, home=None, path=None):
 def _inventory(fa):
     """remote-session.sh --inventory TSV, 8 fields (pinned live 2026-11-16/18, U7):
     alias, provider, display, tier, local-capable-hidden, key_ok, broken, catalog model id."""
-    r = subprocess.run(fa.inventory_cmd, capture_output=True, text=True)
+    r = subprocess.run(fa.inventory_cmd, capture_output=True, text=True, check=False)
     if r.returncode != 0:
         raise RuntimeError(f'{os.path.basename(fa.inventory_cmd[0])} --inventory failed '
                            f'(exit {r.returncode}): {r.stderr.strip()[:300]}')
@@ -114,7 +115,7 @@ def _ladder(fa, env):
     sp = os.path.join(fa.root, 'config', 'session-preferences.json')
     if os.path.isfile(sp):
         try:
-            order = json.load(open(sp)).get('order')
+            order = load_json(sp).get('order')
             if isinstance(order, list) and order:
                 return [str(x) for x in order]
         except (ValueError, OSError):
@@ -122,7 +123,7 @@ def _ladder(fa, env):
     dp = _dispatch_prefs_path(fa, env)
     if dp:
         try:
-            d = json.load(open(dp))
+            d = load_json(dp)
             so = d.get('session_order')
             if isinstance(so, list) and so:
                 return [str(x) for x in so]
@@ -163,9 +164,7 @@ def build_launch(fa, alias, effort, project_dir, playbook):
     """The exact inner shell command, the osascript argv and the first prompt (separated so
     tests can round-trip the quoting)."""
     prompt = FIRST_PROMPT.format(playbook=playbook)
-    inner = 'cd {cd} && {launcher} {alias} --effort {effort} --prompt {prompt}'.format(
-        cd=shlex.quote(project_dir), launcher=shlex.quote(fa.launcher), alias=shlex.quote(alias),
-        effort=shlex.quote(effort), prompt=shlex.quote(prompt))
+    inner = f'cd {shlex.quote(project_dir)} && {shlex.quote(fa.launcher)} {shlex.quote(alias)} --effort {shlex.quote(effort)} --prompt {shlex.quote(prompt)}'
     script = 'tell application "Terminal" to do script ' + _applescript_string(inner)
     return inner, ['osascript', '-e', script], prompt
 
@@ -177,7 +176,7 @@ def launch(fa, alias, effort, project_dir, playbook, runner=None):
     project folder. osascript failure -> RuntimeError quoting stderr + the manual fallback."""
     inner, argv, _prompt = build_launch(fa, alias, effort, project_dir, playbook)
     env = dict(os.environ, FA_PRE_TRUST='1')
-    run = runner or (lambda a, e: subprocess.run(a, capture_output=True, text=True, env=e))
+    run = runner or (lambda a, e: subprocess.run(a, capture_output=True, text=True, env=e, check=False))
     r = run(argv, env)
     if r.returncode != 0:
         raise RuntimeError(f'osascript failed (exit {r.returncode}): '

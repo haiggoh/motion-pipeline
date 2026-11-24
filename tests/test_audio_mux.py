@@ -4,8 +4,6 @@ import json
 import os
 import subprocess
 
-import pytest
-
 from motion_pipeline import audio_mux
 
 

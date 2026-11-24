@@ -142,7 +142,8 @@ def test_estimate_wpm_is_per_word():
 
 
 def test_say_german_vo_monotonic_and_inside_audio(tmp_path):
-    import shutil, subprocess
+    import shutil
+    import subprocess
     if not shutil.which('say'):
         pytest.skip('say not available (printed)')
     wav = tmp_path / 'vo.aiff'

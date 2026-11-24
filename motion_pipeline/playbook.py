@@ -1,10 +1,10 @@
 """playbook.py — render the menu-owned MOTION_GRAPHICS_PLAYBOOK.md into a project with live
 facts (Task 22). Regenerated on every visit to the step and every Save inputs — hand edits are
 overwritten on purpose."""
-import json
 import os
 
 from . import project as project_mod
+from .util import load_json, read_text
 
 TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates',
                         'motion_graphics_playbook.md')
@@ -16,7 +16,7 @@ def write_playbook(project_dir):
     p = project_mod.load(project_dir)
     W, H = p['resolution']
     fps = p['fps']
-    from .scheme import resolve_variant, derive_palette
+    from .scheme import derive_palette, resolve_variant
     palette = derive_palette(resolve_variant(project_dir, p['variants'][0] if p['variants'] else 'default'))
     palette_table = '\n'.join(f'- `{k}`: `{v}`' for k, v in sorted(palette.items()))
     from . import fonts as fonts_mod
@@ -29,9 +29,9 @@ def write_playbook(project_dir):
     scenes = []
     sp = os.path.join(project_dir, 'src', 'scenes.json')
     if os.path.isfile(sp):
-        scenes = json.load(open(sp))
+        scenes = load_json(sp)
     tr_path = os.path.join(project_dir, 'transcript_model.json')
-    words = json.load(open(tr_path))['words'] if os.path.isfile(tr_path) else []
+    words = load_json(tr_path)['words'] if os.path.isfile(tr_path) else []
     rows = []
     for s in scenes:
         ws = [w for w in words if w.get('section') == s['name']]
@@ -56,7 +56,7 @@ def write_playbook(project_dir):
     example_words = [w['id'] for w in words if w.get('section') == scenes[0]['name']] if scenes else []
     example_word = example_words[0] if example_words else (words[0]['id'] if words else 'w0')
     example_section = scenes[0]['name'] if scenes else 'Intro'
-    text = open(TEMPLATE).read()
+    text = read_text(TEMPLATE)
     for key, val in {
         'project_name': p['name'], 'width': W, 'height': H, 'fps': fps, 'aspect': p['aspect'],
         'palette_table': palette_table, 'fonts_table': fonts_table, 'scene_table': scene_table,

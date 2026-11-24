@@ -4,9 +4,8 @@ import os
 import subprocess
 
 import pytest
-from textual.widgets import Button, Input, Static
+from textual.widgets import Input, Static
 
-from tui_probe import choose
 from motion_pipeline.tui.app import MenuApp
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -83,9 +82,11 @@ async def test_bgtest_shows_inline_image_and_link(tmp_path, monkeypatch):
 
 def test_jobs_on_finish_fires(tmp_path):
     import asyncio
+
+    from textual.widgets import RichLog
+
     from motion_pipeline.tui.app import MenuApp
     from motion_pipeline.tui.jobs import run_command
-    from textual.widgets import RichLog
 
     async def go():
         app = MenuApp()

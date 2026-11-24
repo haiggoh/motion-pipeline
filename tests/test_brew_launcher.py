@@ -13,7 +13,7 @@ FORMULA = os.environ.get('MP_TAP_FORMULA')
 
 
 def _extract_launcher(formula_text, version, libexec):
-    m = re.search(r'\(bin/"motion-pipeline"\)\.write <<~EOS\n(.*?)\n\s*EOS', formula_text, re.S)
+    m = re.search(r'\(bin/"motion-pipeline"\)\.write <<~EOS\n(.*?)\n\s*EOS', formula_text, re.DOTALL)
     assert m, 'launcher heredoc not found in formula'
     script = textwrap.dedent(m.group(1))
     script = script.replace('#{version}', version)
@@ -28,7 +28,7 @@ def _make_fake_venv(home):
     os.makedirs(os.path.join(venv, 'bin'))
     py = os.path.join(venv, 'bin', 'python')
     with open(py, 'w') as f:
-        f.write('#!/bin/bash\nif [ "$1" = "-c" ]; then exec %s "$@"; fi\necho "FAKE_PYTHON $*"\n' % sys.executable)
+        f.write(f'#!/bin/bash\nif [ "$1" = "-c" ]; then exec {sys} "$@"; fi\necho "FAKE_PYTHON $*"\n'.executable)
     os.chmod(py, 0o755)
     pip = os.path.join(venv, 'bin', 'pip')
     with open(pip, 'w') as f:

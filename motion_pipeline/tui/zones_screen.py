@@ -6,24 +6,26 @@ zones of other aspects stay on disk, listed dimmed as inactive).
 """
 import json
 import os
+from typing import ClassVar
 
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, Label, ListItem, ListView, Static
 
 from .. import project as project_mod
 from .. import transcript as transcript_mod
+from ..util import read_text
 from .base import ActionMenu, SubmenuScreen
 
 
 def _load(project_dir):
     path = os.path.join(project_dir, 'project.json')
-    return json.loads(open(path).read()) if os.path.isfile(path) else \
+    return json.loads(read_text(path)) if os.path.isfile(path) else \
         project_mod.default_project(os.path.basename(project_dir))
 
 
 class ZonesScreen(SubmenuScreen):
     TITLE = 'Keep-out zones'
-    ACTIONS = [('save', 'Add/update zone'), ('delete', 'Delete selected zone'),
+    ACTIONS: ClassVar[list] = [('save', 'Add/update zone'), ('delete', 'Delete selected zone'),
                ('view', 'Show zones on test frame')]
     BODY_FILL = True
     EXPLAIN = ('A keep-out zone hides a frame rectangle from the rendered graphics. Each zone is '

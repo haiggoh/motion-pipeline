@@ -12,7 +12,8 @@ Cache: MP_FONT_CACHE (or ~/.cache/motion-pipeline/font-index.json), keyed by
 import json
 import os
 import struct
-from typing import Callable, TypedDict
+from collections.abc import Callable
+from typing import TypedDict
 
 from PIL import ImageFont
 
@@ -191,8 +192,8 @@ def families(faces: list[Face], include_hidden: bool = False) -> dict[str, list[
         if not include_hidden and f['family'].startswith('.'):
             continue
         out.setdefault(f['family'], []).append(f)
-    for fam in out:
-        out[fam].sort(key=lambda f: (f['weight'], f['italic']))
+    for flist in out.values():
+        flist.sort(key=lambda f: (f['weight'], f['italic']))
     return out
 
 

@@ -1,15 +1,16 @@
 """graphics_screen.py — the "Add motion graphics" step (plan Task 23 / M5): live instructions,
 status line, hand-off actions, and — only when free-agents is detected — the model/effort
 Selects plus the free-session launcher row."""
-import json
 import os
 import subprocess
 import sys
+from typing import ClassVar
 
 from textual.containers import Horizontal
 from textual.widgets import RichLog, Select, Static
 
 from .. import free_agents, playbook
+from ..util import load_json
 from .base import SubmenuScreen, show_path
 from .jobs import run_command
 
@@ -21,7 +22,7 @@ def _pbcopy(text):
 
 class GraphicsScreen(SubmenuScreen):
     TITLE = 'Add motion graphics'
-    ACTIONS = [('open', 'Open the playbook'), ('reveal', 'Show the project folder in Finder'),
+    ACTIONS: ClassVar[list] = [('open', 'Open the playbook'), ('reveal', 'Show the project folder in Finder'),
                ('copy', 'Copy the hand-off prompt'), ('check', 'Check AI graphics')]
 
     def compose(self):
@@ -37,7 +38,7 @@ class GraphicsScreen(SubmenuScreen):
         pd = getattr(self.app, 'project_dir', None)
         n_words = n_sections = None
         if pd and os.path.isfile(os.path.join(pd, 'transcript_model.json')):
-            m = json.load(open(os.path.join(pd, 'transcript_model.json')))
+            m = load_json(os.path.join(pd, 'transcript_model.json'))
             n_words, n_sections = len(m.get('words', [])), len(m.get('sections', []))
         # Free-Agents route (recommended) first: dropdowns + launch directly beneath them
         yield Static('Free-Agents Route (recommended — runs on free inference):', classes='route-head')
@@ -85,7 +86,7 @@ class GraphicsScreen(SubmenuScreen):
         if pd and os.path.isfile(os.path.join(pd, 'project.json')):
             try:
                 playbook.write_playbook(pd)  # menu-owned: regenerated on every visit to the step
-            except Exception:
+            except Exception:  # noqa: S110 — deliberate: playbook regeneration failure is non-fatal here
                 pass
         self.refresh_status()
 
@@ -100,7 +101,7 @@ class GraphicsScreen(SubmenuScreen):
         try:
             from .. import ai_layer
             mp = os.path.join(pd, 'transcript_model.json')
-            words = json.load(open(mp))['words'] if os.path.isfile(mp) else []
+            words = load_json(mp)['words'] if os.path.isfile(mp) else []
             entries = ai_layer.load_manifest(pd, words)
             n_sfx = sum(len(g.get('sfx', [])) for g in entries)
             self.query_one('#status', Static).update(

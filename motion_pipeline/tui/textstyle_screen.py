@@ -7,18 +7,20 @@ default.
 """
 import json
 import os
+from typing import ClassVar
 
 from textual.containers import Vertical
 from textual.widgets import Label, ListItem, ListView, Static
 
 from .. import project as project_mod
 from .. import text_styles
+from ..util import read_text
 from .base import SubmenuScreen
 
 
 class TextStyleScreen(SubmenuScreen):
     TITLE = 'Text animation'
-    ACTIONS = [('save', 'Save as project text style')]
+    ACTIONS: ClassVar[list] = [('save', 'Save as project text style')]
     BODY_FILL = True
     EXPLAIN = ('How the base text enters each scene. Saved as "text_style" in project.json; '
                'projects saved before 0.8.0 have no key and render the default.')
@@ -42,7 +44,7 @@ class TextStyleScreen(SubmenuScreen):
         pj = os.path.join(pd, 'project.json') if pd else None
         if pj and os.path.isfile(pj):
             try:
-                return json.loads(open(pj).read()).get('text_style', text_styles.DEFAULT)
+                return json.loads(read_text(pj)).get('text_style', text_styles.DEFAULT)
             except (ValueError, OSError):
                 return text_styles.DEFAULT
         return text_styles.DEFAULT

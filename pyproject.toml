@@ -31,3 +31,18 @@ markers = [
     "slow: real render / venv install (minutes); the full gate runs them, the inner loop uses -m 'not slow'",
     "flaky: load-sensitive TUI/PTY/venv tests — run in their own low-parallelism shard (.rtc/pre-flight.sh), never in the parallel gate",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"motion_pipeline/tui/**" = ["BLE001"]
+# boundary guards that deliberately catch Exception (probes must not crash; menu must not die):
+# align.py (probe fallback), playbook.py (parse fallback), projects_list.py, render_cli.py (node probe),
+# free_agents.py
+"motion_pipeline/align.py" = ["BLE001"]
+"motion_pipeline/playbook.py" = ["BLE001"]
+"motion_pipeline/projects_list.py" = ["BLE001"]
+"motion_pipeline/render_cli.py" = ["BLE001"]
+"motion_pipeline/free_agents.py" = ["BLE001"]
+# Test code is allowed the idioms the production rules forbid: fixtures are opened
+# ad-hoc, subprocess probes deliberately ignore return codes, tuple unpacking is the
+# house fixture style. Production code (motion_pipeline/, tools/) stays fully linted.
+"tests/**" = ["SIM115", "PLW1510", "RUF059", "ASYNC230", "ASYNC221", "BLE001"]

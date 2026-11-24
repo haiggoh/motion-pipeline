@@ -9,16 +9,26 @@ Save: project.load → copy_client_faces → font_gate (validate BEFORE write) �
 import json
 import os
 import subprocess
+from typing import ClassVar
 
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
-from textual.widgets import Button, Input, Label, ListItem, ListView, LoadingIndicator, Select, Static
+from textual.widgets import (
+    Button,
+    Input,
+    Label,
+    ListItem,
+    ListView,
+    LoadingIndicator,
+    Select,
+    Static,
+)
 
-from .. import font_index
-from .. import font_preview
+from .. import font_index, font_preview
 from .. import fonts as fonts_mod
 from .. import project as project_mod
+from ..util import load_json
 from .base import SubmenuScreen
 
 
@@ -57,7 +67,7 @@ class RoleRow(Horizontal):
     """A role row is clickable/focusable (Enter or click): picking it selects the edit
     target role (spec B2) and posts RoleRow.Picked."""
 
-    BINDINGS = [Binding('enter', 'pick', show=False)]
+    BINDINGS: ClassVar[list] = [Binding('enter', 'pick', show=False)]
     can_focus = True   # class attribute in Textual 8, not a ctor kwarg
 
     class Picked(Message):
@@ -88,7 +98,7 @@ def bundled_ref(abs_path):
 
 class FontsScreen(SubmenuScreen):
     TITLE = 'Font'
-    ACTIONS = [('save', 'Save font config'), ('sharp', 'Sharp preview (Quick Look)')]
+    ACTIONS: ClassVar[list] = [('save', 'Save font config'), ('sharp', 'Sharp preview (Quick Look)')]
     BODY_FILL = True
 
     def compose_body(self):
@@ -239,7 +249,7 @@ class FontsScreen(SubmenuScreen):
             warn.update('')
 
     # --- sharp preview (Quick Look) only — the inline preview was removed in 0.8.1 (user) ---
-    PX_BY_ROLE = {'headline': 24, 'label': 14, 'body': 16, 'emphasis': 16}
+    PX_BY_ROLE: ClassVar[dict] = {'headline': 24, 'label': 14, 'body': 16, 'emphasis': 16}
 
     def _preview_lines(self):
         text = font_preview.SAMPLE_TEXT   # 0.8.1: the sample-text input went away with the inline preview
@@ -264,9 +274,9 @@ class FontsScreen(SubmenuScreen):
             if os.path.isfile(sp):
                 try:
                     from .. import scheme as scheme_mod
-                    pal = scheme_mod.derive_palette(json.load(open(sp)))
+                    pal = scheme_mod.derive_palette(load_json(sp))
                     fg, bg = pal['text'], pal['background_dark']
-                except Exception:
+                except Exception:  # noqa: S110 — deliberate: unreadable scheme.json falls back to default colours
                     pass
         return fg, bg
 

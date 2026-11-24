@@ -13,7 +13,6 @@ async def test_setup_success_starts_check(tmp_path, monkeypatch):
 
     def fake_run_command(app, cmd, log, on_finish=None):
         recorded['cmd'] = list(cmd)
-        return None
 
     monkeypatch.setattr(app_mod, 'run_command', fake_run_command)
     a = MenuApp()

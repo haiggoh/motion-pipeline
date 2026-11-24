@@ -3,10 +3,10 @@ field (SelectCurrent), none on the Select wrapper (v0.4.x drew two), round + def
 overlay when expanded, all on-screen at 80x24."""
 from textual.widgets import Select
 from textual.widgets._select import SelectCurrent, SelectOverlay
+from tui_probe import bg_is_default, on_screen
 
 from motion_pipeline import fonts as fonts_mod
 from motion_pipeline.tui.app import MenuApp
-from tui_probe import bg_is_default, on_screen
 
 
 async def test_weight_selects_have_one_round_frame_and_rounded_overlay(tmp_path):

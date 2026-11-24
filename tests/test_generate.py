@@ -87,7 +87,7 @@ def test_reveal_onset_equals_word_start(d):
     generate.generate(d)
     intro = read_scene(d, 'Intro')
     tmap = {w['id']: w for w in timing['words']}
-    emb = json.loads(re.search(r'const T = (\{.*?\});', intro, re.S).group(1))
+    emb = json.loads(re.search(r'const T = (\{.*?\});', intro, re.DOTALL).group(1))
     for wid, t in emb.items():
         assert t['start'] == tmap[wid]['start']
         assert t['end'] == tmap[wid]['end']
@@ -146,16 +146,18 @@ def test_generate_without_fonts_falls_back_to_bundled_default(tmp_path, capsys):
     """2026-11-22 user report: a project with fonts:{} must render, not error. The gate stays
     strict for Save; the render path falls back to a bundled family with a printed note."""
     import shutil as _sh
+
+    from projfix import DARK
+
     from motion_pipeline import project
     from motion_pipeline.scheme import save_scheme
-    from projfix import DARK
     d = str(tmp_path / 'p')
     _sh.copytree('samples/globe', d, dirs_exist_ok=True)
     p = project.default_project('demo')
     p['fonts'] = {}                      # no fonts configured — the user's case
     project.save(d, p)
     save_scheme(os.path.join(d, 'scheme.json'), DARK)
-    from motion_pipeline import transcript, align
+    from motion_pipeline import align, transcript
     tr = transcript.load(os.path.join(d, 'transcript.txt'))
     open(os.path.join(d, 'transcript_model.json'), 'w').write(json.dumps(tr))
     align.save_timing(os.path.join(d, 'timing.json'), align.estimate_timings(tr, wpm=140))

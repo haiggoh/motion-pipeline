@@ -39,7 +39,10 @@ def test_query_in_band_window_resize_respects_terminal(monkeypatch, term_program
 
 
 def test_get_driver_class_posix_returns_subclass():
-    from motion_pipeline.tui.terminal_driver import AppleTerminalSafeDriver, get_driver_class
+    from motion_pipeline.tui.terminal_driver import (
+        AppleTerminalSafeDriver,
+        get_driver_class,
+    )
     if os.name == 'posix':
         assert get_driver_class() is AppleTerminalSafeDriver
     else:

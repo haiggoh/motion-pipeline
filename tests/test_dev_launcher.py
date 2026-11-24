@@ -3,8 +3,9 @@ on PATH), says which checkout + commit it runs, and fails loudly on a bad setup.
 import os
 import subprocess
 
-from motion_pipeline import __version__
 from projfix import ROOT
+
+from motion_pipeline import __version__
 
 L = os.path.join(ROOT, 'bin', 'motion-pipeline-dev')
 

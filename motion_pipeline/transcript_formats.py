@@ -9,8 +9,8 @@ named error when missing). The source file is never written.
 import os
 import re
 import subprocess
-import zipfile
 import xml.etree.ElementTree as ET
+import zipfile
 
 SUPPORTED = ('.txt', '.md', '.rtf', '.doc', '.docx', '.pdf')
 _W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
@@ -84,7 +84,7 @@ def _docx_to_markup(path):
 def _textutil(path):
     """macOS textutil plain-text conversion (headings are NOT recovered — noted in the UI)."""
     r = subprocess.run(['textutil', '-convert', 'txt', '-stdout', path],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, timeout=30, check=False)
     if r.returncode != 0:
         raise ValueError(f'cannot convert {path}: {r.stderr.strip()[-200:]}')
     return r.stdout

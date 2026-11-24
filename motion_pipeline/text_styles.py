@@ -10,8 +10,9 @@ STYLES directly (pinned by a monkeypatched-row test).
 Determinism: tween JS may use MP.random ONLY with a fixed per-style seed (Task 5 test:
 two generations identical, different seed differs).
 """
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import Literal
 
 DEFAULT = 'slide-up'
 
@@ -26,7 +27,9 @@ class TextStyle:
 
 
 def _default_layout(words, max_chars, font_px):
-    from motion_pipeline.generate import layout_lines  # lazy: generate imports this module
+    from motion_pipeline.generate import (
+        layout_lines,  # lazy: generate imports this module
+    )
     return layout_lines(words, max_chars, font_px)
 
 

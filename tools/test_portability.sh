@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2015  # the `A && B || C` arms here are deliberate fallbacks
 # test_portability.sh — gate suite for the generic backend (Task 9), ported from the PGCube
 # 10-bit plan's gates. Run: bash tools/test_portability.sh   (exit 0 = PORTABLE)
 set -uo pipefail

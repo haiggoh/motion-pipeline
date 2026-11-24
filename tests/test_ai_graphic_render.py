@@ -8,9 +8,9 @@ import shutil
 import subprocess
 
 import pytest
+from projfix import ROOT, make_project
 
 from motion_pipeline import generate
-from projfix import ROOT, make_project
 
 pytestmark = pytest.mark.slow
 

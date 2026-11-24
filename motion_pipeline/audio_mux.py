@@ -5,9 +5,11 @@ import json
 import os
 import subprocess
 
+from .util import load_json
+
 
 def _run(cmd):
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if r.returncode != 0:
         raise RuntimeError(f'ffmpeg failed ({r.returncode}): {" ".join(cmd)}\n{r.stderr[-500:]}')
     return r
@@ -16,7 +18,7 @@ def _run(cmd):
 def video_md5(path: str) -> str:
     """Hash of the video bitstream (ffmpeg md5 muxer over -c:v copy)."""
     r = subprocess.run(['ffmpeg', '-v', 'error', '-i', path, '-map', '0:v', '-c', 'copy',
-                        '-f', 'md5', '-'], capture_output=True, text=True)
+                        '-f', 'md5', '-'], capture_output=True, text=True, check=False)
     if r.returncode != 0:
         raise RuntimeError(f'video_md5 failed on {path}: {r.stderr[-300:]}')
     return r.stdout.strip().split('=')[-1]
@@ -33,7 +35,7 @@ def sfx_cues(project_dir, timing, model):
     scenes = None
     sp = os.path.join(project_dir, 'src', 'scenes.json')
     if os.path.isfile(sp):
-        scenes = {s['name']: s for s in json.load(open(sp))}
+        scenes = {s['name']: s for s in load_json(sp)}
     last_end = max((w['end'] for w in timing['words']), default=0.0)
     out = []
     for g in ai_layer.load_manifest(project_dir, words):
@@ -41,7 +43,7 @@ def sfx_cues(project_dir, timing, model):
             if isinstance(cue, dict):
                 pass
             else:
-                raise ValueError(f"graphic {g['id']!r} sfx cue {i}: want an object")
+                raise TypeError(f"graphic {g['id']!r} sfx cue {i}: want an object")
             anchor = g.get('anchor', {})
             if 'word' in anchor and anchor['word'] in times:
                 t0 = times[anchor['word']]['start']
@@ -77,7 +79,7 @@ def _audio_filters(vo, cues, start, end, sr):
     in_scene = [(base_in + i, c) for i, c in enumerate(cues) if start <= c['time'] < end]
     parts = []
     for j, (inp, c) in enumerate(in_scene):
-        ms = int(round((c['time'] - start) * 1000))
+        ms = round((c['time'] - start) * 1000)
         vol = 10 ** (c['gain_db'] / 20.0)
         parts.append(f'[{inp}:a]aresample={sr},aformat=channel_layouts=stereo,'
                      f'adelay={ms}|{ms},volume={vol:.4f}[sfx{j}]')
@@ -112,8 +114,7 @@ def join(scenes, out_mov, vo, sfx_cues, sr: int = 48000):
     (skip the joined master with a loud message)."""
     lst = out_mov + '.concat.txt'
     with open(lst, 'w') as f:
-        for s in scenes:
-            f.write(f"file '{s['file']}'\n")
+        f.writelines(f"file '{s['file']}'\n" for s in scenes)
     start, end = 0.0, sum(s['end'] - s['start'] for s in scenes)
     inputs, fc = _audio_filters(vo, sfx_cues, start, end, sr)
     for extra in ([], ['-fflags', '+genpts']):
@@ -125,12 +126,12 @@ def join(scenes, out_mov, vo, sfx_cues, sr: int = 48000):
                '-map', '[sfx]', '-c:a:1', 'pcm_s24le', '-ar', str(sr), '-ac', '2',
                '-metadata:s:a:1', 'title=SFX',
                '-filter_complex', fc, out_mov]
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if r.returncode != 0:
             continue
         got = subprocess.run(['ffprobe', '-v', 'error', '-count_frames', '-select_streams', 'v',
                               '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', out_mov],
-                             capture_output=True, text=True).stdout.strip()
+                             capture_output=True, text=True, check=False).stdout.strip()
         return True, int(got) if got else -1  # (ok, frame_count) — the caller compares with Σ scenes
     if os.path.exists(lst):
         os.remove(lst)
@@ -142,8 +143,7 @@ def preview(scene_movs, out_mp4):
     1280-wide yuv420p 8-bit H.264 CRF 23 + AAC 192k stereo."""
     lst = out_mp4 + '.concat.txt'
     with open(lst, 'w') as f:
-        for m in scene_movs:
-            f.write(f"file '{m}'\n")
+        f.writelines(f"file '{m}'\n" for m in scene_movs)
     cmd = ['ffmpeg', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', lst,
            '-vf', 'scale=1280:-2', '-c:v', 'libx264', '-crf', '23', '-pix_fmt', 'yuv420p',
            '-c:a', 'aac', '-b:a', '192k', '-ac', '2', out_mp4]

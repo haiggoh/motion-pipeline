@@ -1,0 +1,15 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
+  "files": {
+    "ignore": [
+      "vendor/**",
+      "**/*.min.js"
+    ]
+  },
+  "linter": {
+    "ignore": [
+      "vendor/**",
+      "**/*.min.js"
+    ]
+  }
+}

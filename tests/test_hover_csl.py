@@ -4,11 +4,11 @@ and shipped a selector (`.list-item:hover`) that matched nothing."""
 import os
 
 from textual.widgets import Label, ListView
+from tui_probe import bg_is_default, fg_is_blue
 
 from motion_pipeline import font_index
 from motion_pipeline.font_index import BUNDLED_DIR
 from motion_pipeline.tui.app import MenuApp
-from tui_probe import bg_is_default, fg_is_blue
 
 _MONT_BOLD = os.path.join(BUNDLED_DIR, 'Montserrat', 'Montserrat-Bold.ttf')
 

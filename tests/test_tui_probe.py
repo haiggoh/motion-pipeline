@@ -1,7 +1,6 @@
 """Positive controls for tests/tui_probe.py — a probe that cannot fail proves nothing."""
 from textual.app import App
 from textual.widgets import Static
-
 from tui_probe import bg_is_default, fg_is_blue, on_screen
 
 

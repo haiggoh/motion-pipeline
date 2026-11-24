@@ -33,6 +33,6 @@ def test_no_external_api_calls_in_tests():
                 continue
             text = open(os.path.join(dirpath, f)).read()
             for pat in BANNED:
-                if re.search(pat, text, re.I):
+                if re.search(pat, text, re.IGNORECASE):
                     offenders.append(f'{rel}: /{pat}/')
     assert not offenders, 'tests must not call provider APIs outside the rate limiter: ' + '; '.join(offenders)

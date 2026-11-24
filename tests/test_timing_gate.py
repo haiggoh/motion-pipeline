@@ -2,8 +2,6 @@
 import json
 import os
 
-import pytest
-
 from motion_pipeline import align, project, transcript
 from motion_pipeline.scheme import save_scheme
 

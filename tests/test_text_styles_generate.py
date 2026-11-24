@@ -11,9 +11,10 @@ import re
 import subprocess
 
 import pytest
-
 from projfix import ROOT, make_project
-from motion_pipeline import generate, project as project_mod, text_styles
+
+from motion_pipeline import generate, text_styles
+from motion_pipeline import project as project_mod
 
 VENV_PY = os.path.join(ROOT, '.venv', 'bin', 'python')
 GOLDEN = os.path.join(ROOT, 'tests', 'fixtures', 'golden_slide_up')
@@ -68,7 +69,7 @@ def test_every_style_spans_match_granularity(tmp_path, name):
         if st.granularity == 'word':
             assert len(span_ids) == len(set(span_ids)), f'{name}/{page}: word id spanned twice'
             assert 'data-k=' not in html
-            lines = re.findall(r'<div class="line".*?</div>', html, re.S)
+            lines = re.findall(r'<div class="line".*?</div>', html, re.DOTALL)
             multi = any(len(SPAN_ID.findall(ln)) > 1 for ln in lines)
             assert (not multi) or ('</span> <span' in html), f'{name}/{page}: word spans are space-joined'
         else:

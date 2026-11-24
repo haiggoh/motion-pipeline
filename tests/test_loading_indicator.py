@@ -23,7 +23,6 @@ async def test_launch_shows_loader_immediately(tmp_path):
 
 @pytest.mark.asyncio
 async def test_op_over_100ms_shows_loader_where_content_lands(tmp_path):
-    from textual.containers import Vertical
     project.save(str(tmp_path), project.default_project('demo'))
     app = MenuApp()
     app.project_dir = str(tmp_path)
@@ -55,7 +54,6 @@ async def test_fast_op_never_shows_loader(tmp_path):
     async with app.run_test(size=(80, 24)) as pilot:
         scr = app.screen
         await pilot.pause(0.5)
-        from textual.containers import Vertical
         box = scr.start_loading()
         await pilot.pause(0.05)      # op finishes in 50 ms < 100 ms delay
         scr.stop_loading()

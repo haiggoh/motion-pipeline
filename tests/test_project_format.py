@@ -5,10 +5,10 @@ writes nothing. Asserts what lands ON DISK and what the user SEES, never source 
 import json
 
 from textual.widgets import Checkbox, Input, Select, Static
+from tui_probe import choose, on_screen
 
 from motion_pipeline import project as project_mod
 from motion_pipeline.tui.app import MenuApp
-from tui_probe import choose, on_screen
 
 
 async def _open_project_screen(pilot, app):

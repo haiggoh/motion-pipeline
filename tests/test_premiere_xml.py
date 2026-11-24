@@ -86,8 +86,11 @@ def test_sequence_xml_reads_in_otio(tmp_path):
 
 def test_remux_rewrites_sequence(tmp_path):
     """render_cli writes <variant>_sequence.xml after a render and rewrites it on remux."""
+    from test_audio_mux import (
+        _fake_renders,  # mov master + scenes + render_info fixture
+    )
+
     from motion_pipeline import render_cli
-    from test_audio_mux import _fake_renders  # mov master + scenes + render_info fixture
     d, out = _fake_renders(tmp_path)
     rc = render_cli.remux(d)
     assert rc == 0

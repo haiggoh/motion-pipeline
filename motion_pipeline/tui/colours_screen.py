@@ -8,6 +8,7 @@ variant picker: a variant is an OVERLAY (<project>/variants/<name>.json holding 
 colours that differ from the base), so it stays in sync with every other project change.
 """
 import os
+from typing import ClassVar
 
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Checkbox, Input, Label, Select, Static
@@ -27,8 +28,7 @@ class PasteHexInput(Input):
 
     def _on_paste(self, event) -> None:
         text = (event.text or '').strip()
-        if text.startswith('#'):
-            text = text[1:]
+        text = text.removeprefix('#')
         text = text.lower()
         if len(text) in (3, 6) and all(c in '0123456789abcdef' for c in text):
             event.prevent_default()
@@ -45,7 +45,7 @@ def scheme_path(project_dir):
 
 class ColoursScreen(SubmenuScreen):
     TITLE = 'CI colours'
-    ACTIONS = [('derive', 'Derive & preview'), ('save', 'Save colours'),
+    ACTIONS: ClassVar[list] = [('derive', 'Derive & preview'), ('save', 'Save colours'),
                ('fix', 'Fix contrast'), ('force', 'Save anyway (ignore contrast)')]
     CSS = '#actions { margin: 0; }'   # the two contrast actions cost rows; keep 80x24 fitting
 

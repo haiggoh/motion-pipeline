@@ -21,7 +21,7 @@ def test_version_surfaces_agree():
         'pyproject.toml': tomllib.load(open(os.path.join(ROOT, 'pyproject.toml'), 'rb'))['project']['version'],
         'motion_pipeline/__init__.py': _init_version(),
         'CHANGELOG top': re.search(r'^##[ \t]+\[?v?([0-9]+\.[0-9]+\.[0-9]+)\]?',
-                                   open(os.path.join(ROOT, 'CHANGELOG.md')).read(), re.M).group(1),
+                                   open(os.path.join(ROOT, 'CHANGELOG.md')).read(), re.MULTILINE).group(1),
     }
     assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', versions['VERSION']), versions
     assert all(versions.values()), versions
@@ -30,6 +30,6 @@ def test_version_surfaces_agree():
 
 def _init_version():
     src = open(os.path.join(ROOT, 'motion_pipeline', '__init__.py')).read()
-    ms = re.findall(r'^__version__\s*=\s*"([^"]+)"', src, re.M)
+    ms = re.findall(r'^__version__\s*=\s*"([^"]+)"', src, re.MULTILINE)
     assert len(ms) == 1, f'want exactly one __version__ assignment, got {ms}'
     return ms[0]

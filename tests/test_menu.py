@@ -1,9 +1,9 @@
 """Task 5 TUI tests: all screens mount; worker progress + responsiveness + cancellation."""
 import pytest
-from textual.widgets import Button, RichLog, Static
-
+from textual.widgets import RichLog, Static
 from tui_probe import choose
-from motion_pipeline.tui.app import MenuApp, STEPS
+
+from motion_pipeline.tui.app import STEPS, MenuApp
 
 
 @pytest.mark.asyncio
@@ -24,7 +24,6 @@ async def test_all_menu_screens_mount():
 async def test_worker_streams_progress_and_stays_responsive_and_cancellable(tmp_path):
     """Cancel must STOP the render process (v0.1-0.4: worker.cancel() on a thread worker left
     the subprocess running), not just stop the log."""
-    import asyncio
     import os
     pidfile = tmp_path / 'pid'
     cmd = ['bash', '-c', f'echo $$ > {pidfile}; for i in $(seq 1 40); do echo line$i; sleep 0.1; done']
@@ -58,6 +57,7 @@ async def test_graphics_gate_refreshes_on_resume_and_says_why(tmp_path):
     """Task 5 (A5c): the graphics row is re-evaluated when the menu resumes (not only at
     compose), and while disabled its label carries the reason."""
     import os
+
     from test_timing_gate import mk
     d, p = mk(tmp_path / 'p')          # fresh timings -> gate open
     app = MenuApp()

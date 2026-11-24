@@ -12,9 +12,10 @@ import shutil
 import subprocess
 
 import pytest
-
 from projfix import ROOT, make_project
-from motion_pipeline import generate, project as project_mod, text_styles
+
+from motion_pipeline import generate, text_styles
+from motion_pipeline import project as project_mod
 
 pytestmark = [pytest.mark.slow,
               pytest.mark.skipif(shutil.which('hyperframes') is None,

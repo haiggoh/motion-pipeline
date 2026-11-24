@@ -42,7 +42,7 @@ def load_manifest(project_dir, words):
         except json.JSONDecodeError as e:
             raise ValueError(f'{MANIFEST}: not valid JSON ({e})') from e
     if not isinstance(m, dict) or not isinstance(m.get('graphics'), list):
-        raise ValueError(f'{MANIFEST}: want {{"graphics": [...]}}')
+        raise TypeError(f'{MANIFEST}: want {{"graphics": [...]}}')
     sections = {w['section'] for w in words}
     word_section = {w['id']: w['section'] for w in words}
     seen, out = set(), []
@@ -72,7 +72,7 @@ def load_manifest(project_dir, words):
             for si, s in enumerate(shapes):
                 swhere = f'{where} shape {si}'
                 if not isinstance(s, dict):
-                    raise ValueError(f'{swhere}: must be an object')
+                    raise TypeError(f'{swhere}: must be an object')
                 stype = s.get('type')
                 if stype not in SHAPE_TYPES:
                     raise ValueError(f'{swhere}: unknown shape type {stype!r} — want one of '
@@ -87,10 +87,10 @@ def load_manifest(project_dir, words):
                 elif isinstance(at, (int, float)) and not isinstance(at, bool):
                     at = float(at)
                 else:
-                    raise ValueError(f'{swhere}: at must be a word id, a "#section" or seconds, got {at!r}')
+                    raise TypeError(f'{swhere}: at must be a word id, a "#section" or seconds, got {at!r}')
                 props = s.get('props', {})
                 if not isinstance(props, dict):
-                    raise ValueError(f'{swhere}: props must be an object')
+                    raise TypeError(f'{swhere}: props must be an object')
                 anchor = s.get('anchor')
                 if anchor is not None and not isinstance(anchor, str):
                     raise ValueError(f'{swhere}: anchor must be a string (element name)')
@@ -117,13 +117,13 @@ def load_manifest(project_dir, words):
         if isinstance(sfx, dict):
             sfx = [sfx]  # a single object normalises to a one-item list
         if not isinstance(sfx, list):
-            raise ValueError(f'{where}: sfx must be a list of cue objects')
+            raise TypeError(f'{where}: sfx must be a list of cue objects')
         licences = _licence_files(project_dir)
         cues = []
         for ci, cue in enumerate(sfx):
             cwhere = f'{where} sfx cue {ci}'
             if not isinstance(cue, dict):
-                raise ValueError(f'{cwhere}: cue must be an object')
+                raise TypeError(f'{cwhere}: cue must be an object')
             cf = cue.get('file')
             if not isinstance(cf, str) or os.path.isabs(cf) or '..' in cf.split('/'):
                 raise ValueError(f'{cwhere}: file must be a relative path inside {DIR}/')

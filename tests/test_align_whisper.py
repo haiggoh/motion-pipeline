@@ -6,8 +6,7 @@ import os
 
 import pytest
 
-from motion_pipeline import align
-from motion_pipeline import align_whisper
+from motion_pipeline import align, align_whisper
 
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixtures',
                        'whisper_ojf_sample.json')

@@ -52,7 +52,7 @@ def test_scene_timing_is_section_relative(tmp_path):
     assert [s['name'] for s in scenes] == ['Zeta', 'Alpha']
     s1 = scenes[1]
     html = pages(d)['scene_01_alpha.html']
-    emb = json.loads(re.search(r'const T = (\{.*?\});', html, re.S).group(1))
+    emb = json.loads(re.search(r'const T = (\{.*?\});', html, re.DOTALL).group(1))
     first_word = tr['words'][[w['section'] for w in tr['words']].index('Alpha')]['id']
     assert abs(emb[first_word]['start']) < 1 / 25, '2nd scene first word starts at ~0 (scene-relative)'
     root = re.search(r'data-duration="([\d.]+)"', html).group(1)
@@ -105,7 +105,7 @@ def test_lines_dim_when_next_line_starts(tmp_path):
     generate.generate(d)
     html = pages(d)['scene_00_s.html']
     assert "tl.to(document.querySelectorAll('.line[data-line=\"0\"] span')" in html
-    from motion_pipeline.scheme import resolve_variant, derive_palette
+    from motion_pipeline.scheme import derive_palette, resolve_variant
     pal = derive_palette(resolve_variant(d, 'default'))
     # Task 22 page API dumps every palette key into the page, so the dim colour is asserted
     # against the palette VALUE (the old "'secondary' not in html" guard is superseded)

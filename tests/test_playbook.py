@@ -5,9 +5,10 @@ AGENTS.md lists it as menu-owned."""
 import json
 import os
 
+from projfix import make_project
+
 from motion_pipeline import generate, playbook
 from motion_pipeline.scheme import derive_palette, resolve_variant
-from projfix import make_project
 
 
 def test_playbook_has_live_facts(tmp_path):

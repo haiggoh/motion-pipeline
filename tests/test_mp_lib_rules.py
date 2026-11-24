@@ -11,7 +11,6 @@ import shutil
 import subprocess
 
 import pytest
-
 from projfix import ROOT
 
 MP_LIB = os.path.join(ROOT, 'motion_pipeline', 'graphics', 'mp_lib.js')

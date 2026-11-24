@@ -10,11 +10,11 @@ import sys
 import zipfile
 
 import pytest
+from projfix import ROOT, make_project
+from tui_probe import on_screen
 
 from motion_pipeline import align, render_cli, transcript
 from motion_pipeline.tui.app import MenuApp
-from projfix import ROOT, make_project
-from tui_probe import on_screen
 
 PY = sys.executable
 
@@ -165,8 +165,9 @@ def test_prepares_inputs_generates_and_hands_off_to_render_scene(tmp_path):
 
 
 def test_full_mode_iterates_every_variant(tmp_path):
-    from motion_pipeline import scheme
     from projfix import DARK
+
+    from motion_pipeline import scheme
     pd = make_project(tmp_path / 'p')
     scheme.save_variant(pd, 'warm', dict(DARK, accent='#ff6a00'))
     p = json.load(open(os.path.join(pd, 'project.json'))); p['variants'] = ['default', 'warm']
@@ -382,5 +383,5 @@ def test_ensure_toolchain_bins_downloads_into_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(render_cli.subprocess, 'run', fake_run)
     bins = render_cli._ensure_toolchain_bins()
     assert any(b.endswith(os.path.join('node', f'v{render_cli.NODE_PIN}', 'bin')) for b in bins)
-    ff_dir = [b for b in bins if 'ffmpeg' in b][0]
+    ff_dir = [b for b in bins if 'ffmpeg' in b][0]  # noqa: RUF015
     assert os.access(os.path.join(ff_dir, 'ffmpeg'), os.X_OK)

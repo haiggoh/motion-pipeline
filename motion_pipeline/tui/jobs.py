@@ -13,7 +13,7 @@ import subprocess
 
 class Job:
     def __init__(self):
-        self.proc: 'subprocess.Popen | None' = None
+        self.proc: subprocess.Popen | None = None
         self.worker = None
         self.cancelled = False
 

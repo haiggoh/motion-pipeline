@@ -4,11 +4,11 @@ import os
 
 import pytest
 from textual.widgets import Checkbox, Input, Label, ListView, Select, Static
+from tui_probe import choose
 
 from motion_pipeline import config, project, projects_list
 from motion_pipeline.tui.app import MenuApp
 from motion_pipeline.tui.project_screen import ProjectScreen
-from tui_probe import choose
 
 
 def mk(root, name, aspect='16:9', fps=60, **over):

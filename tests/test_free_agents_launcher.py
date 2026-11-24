@@ -30,8 +30,7 @@ def _mk_fa_root(root, inventory_rows=None, prefs=None, session_prefs=None):
     inv = os.path.join(bindir, 'remote-session.sh')
     with open(inv, 'w') as f:
         f.write('#!/bin/sh\nif [ "$1" = "--inventory" ]; then\n')
-        for r in (inventory_rows or []):
-            f.write('printf \'%s\\n\' ' + shlex.quote('\t'.join(r)) + '\n')
+        f.writelines('printf \'%s\\n\' ' + shlex.quote('\t'.join(r)) + '\n' for r in (inventory_rows or []))
         f.write('fi\n')
     os.chmod(inv, 0o755)
     cfg = os.path.join(root, 'config')

@@ -9,8 +9,12 @@ from textual import events
 from textual.widgets import Input
 
 from motion_pipeline.tui.app import MenuApp
-from motion_pipeline.tui.paths import (PathInput, VO_EXTS, normalize_dropped_path,
-                                      normalize_dropped_paths)
+from motion_pipeline.tui.paths import (
+    VO_EXTS,
+    PathInput,
+    normalize_dropped_path,
+    normalize_dropped_paths,
+)
 
 D = '/Volumes/Work/x'   # fixture prefix (not a real home dir)
 

@@ -10,12 +10,12 @@ import json
 import os
 
 import pytest
+from projfix import make_project
+from tui_probe import on_screen
 
 from motion_pipeline import project as project_mod
 from motion_pipeline import text_styles
-from motion_pipeline.tui.app import MenuApp, STEPS
-from projfix import make_project
-from tui_probe import on_screen
+from motion_pipeline.tui.app import STEPS, MenuApp
 
 
 def test_validate_accepts_known_and_rejects_unknown_text_style():

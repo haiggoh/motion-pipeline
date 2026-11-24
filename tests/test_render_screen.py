@@ -4,10 +4,10 @@ import os
 
 import pytest
 from textual.widgets import RichLog, Static
+from tui_probe import choose
 
 from motion_pipeline import project
 from motion_pipeline.tui.app import MenuApp
-from tui_probe import choose
 
 
 def mk(d, variants=('default',)):

@@ -19,6 +19,8 @@ import subprocess
 
 import numpy as np
 
+from .util import load_json, read_bytes
+
 FRAME_S = 0.010
 SR = 16000
 
@@ -100,7 +102,7 @@ def _assign_words(segs, nuclei, syl):
     nuclei_count = [sum(1 for p in nuclei if a <= p < b) for a, b in segs]
     INF = float('inf')
 
-    @functools.lru_cache(maxsize=None)
+    @functools.cache
     def dp(s, w):
         if s == S:
             return 0.0 if w == W else INF
@@ -147,7 +149,7 @@ def align(audio_path, transcript_model, source=None):
     # computed and then discarded — doubling part of the "computing timings" wait)
     # 1. decode is already mono 16 kHz; voice band:
     r = subprocess.run(['ffmpeg', '-v', 'error', '-i', audio_path, '-af', 'highpass=f=300,lowpass=f=3400',
-                        '-ac', '1', '-ar', str(SR), '-f', 'f32le', '-'], capture_output=True, timeout=120)
+                        '-ac', '1', '-ar', str(SR), '-f', 'f32le', '-'], capture_output=True, timeout=120, check=False)
     if r.returncode != 0:
         raise ValueError(f'cannot decode audio {audio_path}: {r.stderr.decode()[-200:]}')
     pcm = np.frombuffer(r.stdout, dtype=np.float32)
@@ -252,7 +254,7 @@ def align_auto(audio_path, transcript_model, project=None, progress=None):
         with tempfile.TemporaryDirectory() as td:
             wav = os.path.join(td, 'vo.wav')
             r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', audio_path, '-ar', '16000',
-                                '-ac', '1', wav], capture_output=True)
+                                '-ac', '1', wav], capture_output=True, check=False)
             if r.returncode != 0:
                 raise ValueError(f'cannot decode {audio_path} to 16k wav: {r.stderr.decode()[-200:]}')
             prompt = ' '.join(w['text'] for w in transcript_model['words'][:120])
@@ -289,11 +291,11 @@ def inputs_fingerprint(project_dir, p):
     import hashlib
     h = hashlib.sha256()
     tpath = os.path.join(project_dir, p.get('transcript') or 'transcript.txt')
-    h.update(open(tpath, 'rb').read() if os.path.isfile(tpath) else b'<missing>')
+    h.update(read_bytes(tpath) if os.path.isfile(tpath) else b'<missing>')
     vo = p.get('vo')
     if vo:
         vpath = vo if os.path.isabs(vo) else os.path.join(project_dir, vo)
-        h.update(open(vpath, 'rb').read() if os.path.isfile(vpath) else b'<missing-vo>')
+        h.update(read_bytes(vpath) if os.path.isfile(vpath) else b'<missing-vo>')
     else:
         h.update(b'no-vo')
     wpm_part = '' if vo else f"{p.get('wpm', 140)}|"   # B4: wpm is a measured indicator with a VO
@@ -307,7 +309,7 @@ def timing_is_fresh(project_dir, p=None):
     if not os.path.isfile(tp):
         return False
     try:
-        doc = json.load(open(tp))
+        doc = load_json(tp)
     except (OSError, json.JSONDecodeError):
         return False
     stored = doc.get('inputs')
@@ -328,7 +330,7 @@ def validate_timing(doc):
         if k not in doc:
             raise ValueError(f'timing JSON missing key {k!r}')
     if not isinstance(doc['sections'], dict):
-        raise ValueError("timing 'sections' must be an object {name: start_s}")
+        raise TypeError("timing 'sections' must be an object {name: start_s}")
     prev_end = 0.0
     for w in doc['words']:
         for k in ('id', 'word', 'start', 'end', 'confidence'):

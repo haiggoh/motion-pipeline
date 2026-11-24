@@ -5,12 +5,12 @@ import json
 import os
 
 import pytest
+from projfix import DARK, make_project
 from textual.widgets import Checkbox, Input, Select
+from tui_probe import choose
 
 from motion_pipeline import generate, scheme
 from motion_pipeline.tui.app import MenuApp
-from projfix import DARK, make_project
-from tui_probe import choose
 
 
 def test_overlay_changes_only_its_keys_and_follows_base_edits(tmp_path):

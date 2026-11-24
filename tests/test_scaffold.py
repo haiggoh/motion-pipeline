@@ -25,9 +25,10 @@ def test_unknown_flag_exit_2_with_usage_on_stderr():
 
 def test_version_matches_pyproject():
     import re
+
     import motion_pipeline
     pyproject = open(os.path.join(ROOT, 'pyproject.toml')).read()
-    m = re.search(r'^version = "([^"]+)"', pyproject, re.M)
+    m = re.search(r'^version = "([^"]+)"', pyproject, re.MULTILINE)
     assert m, 'pyproject has no version'
     assert motion_pipeline.__version__ == m.group(1), \
         f'__version__ {motion_pipeline.__version__} != pyproject {m.group(1)}'

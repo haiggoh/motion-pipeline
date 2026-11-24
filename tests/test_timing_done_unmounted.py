@@ -2,9 +2,9 @@
 graphics' while the timings job runs pops the InputsScreen; when the job then finishes,
 _on_timing_done ran on the unmounted screen and crashed with NoMatches '#timing-spinner'."""
 import pytest
+from test_inputs_screen import mk_project, open_inputs, save
 
 from motion_pipeline.tui.app import MenuApp
-from test_inputs_screen import mk_project, open_inputs, save
 
 
 @pytest.mark.asyncio

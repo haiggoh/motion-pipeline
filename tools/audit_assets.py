@@ -14,6 +14,8 @@ import re
 import subprocess
 import sys
 
+from motion_pipeline.util import read_text
+
 PATH_PATTERNS = [
     (re.compile(r'(?i)(logo|brand)[^/]*\.(png|svg|jpg|jpeg|mp3|wav|flac)$'), 'logo/brand asset file'),
     (re.compile(r'(?i)\.(mp3|flac|wav)$'), 'audio asset file (VO/SFX)'),
@@ -33,7 +35,7 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--root', default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     a = ap.parse_args(argv)
-    r = subprocess.run(['git', '-C', a.root, 'ls-files'], capture_output=True, text=True)
+    r = subprocess.run(['git', '-C', a.root, 'ls-files'], capture_output=True, text=True, check=False)
     if r.returncode != 0:
         print(f'audit_assets: not a git repo: {a.root}', file=sys.stderr)
         return 3
@@ -51,7 +53,7 @@ def main(argv=None):
         full = os.path.join(a.root, path)
         if os.path.isfile(full) and os.path.getsize(full) < 2_000_000:
             try:
-                text = open(full, errors='ignore').read()
+                text = read_text(full, errors='ignore')
             except OSError:
                 continue
             for pat, label in TEXT_PATTERNS:

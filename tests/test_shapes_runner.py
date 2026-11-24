@@ -11,8 +11,8 @@ import shutil
 import subprocess
 
 import pytest
-
 from projfix import ROOT, make_project
+
 from motion_pipeline import ai_layer, generate
 
 

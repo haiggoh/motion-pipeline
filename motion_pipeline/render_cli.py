@@ -29,6 +29,8 @@ import shutil
 import subprocess
 import sys
 
+from .util import load_json, read_text
+
 PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NODE_PIN = '24.19.0'
 CHROME_PIN = '156.0.8078.4'
@@ -95,7 +97,7 @@ def node_bin_dir():
         v = None
         try:
             v = subprocess.run([node, '--version'], capture_output=True, text=True,
-                               timeout=10).stdout.strip()
+                               timeout=10, check=False).stdout.strip()
             major = int(v.lstrip('v').split('.')[0])
         except Exception:
             major = 0
@@ -145,7 +147,7 @@ def _ensure_toolchain_bins():
     if not node_ok:
         url = NODE_TARBALL_URL.format(NODE_PIN=NODE_PIN)
         r = subprocess.run(['curl', '-fsSL', url, '-o', os.path.join(root, 'node.tgz')],
-                           capture_output=True, timeout=600)
+                           capture_output=True, timeout=600, check=False)
         if r.returncode != 0:
             raise Missing(f'node tarball download failed — run: brew install node ({r.stderr.decode()[-150:]})')
         with tarfile.open(os.path.join(root, 'node.tgz')) as tf:
@@ -153,11 +155,11 @@ def _ensure_toolchain_bins():
     if not ff_ok:
         url = FFMPEG_STATIC_URL.format(FFMPEG_PIN=FFMPEG_PIN)
         r = subprocess.run(['curl', '-fsSL', url, '-o', os.path.join(root, 'ffmpeg.zip')],
-                           capture_output=True, timeout=600)
+                           capture_output=True, timeout=600, check=False)
         if r.returncode != 0:
             raise Missing(f'ffmpeg static build download failed — run: brew install ffmpeg ({r.stderr.decode()[-150:]})')
         r = subprocess.run(['ditto', '-x', '-k', os.path.join(root, 'ffmpeg.zip'), root],
-                           capture_output=True, timeout=300)
+                           capture_output=True, timeout=300, check=False)
         if r.returncode != 0:
             raise Missing(f'cannot unzip the ffmpeg static build: {r.stderr.decode()[-150:]}')
         os.chmod(os.path.join(ff_dir, 'ffmpeg'), 0o755)   # zips don't carry the exec bit
@@ -231,7 +233,7 @@ def prepare_inputs(project_dir, progress=None):
     with open(os.path.join(project_dir, 'transcript_model.json'), 'w') as f:
         json.dump(model, f)
     if align.timing_is_fresh(project_dir, p):
-        timing = json.load(open(os.path.join(project_dir, 'timing.json')))
+        timing = load_json(os.path.join(project_dir, 'timing.json'))
         print('timing.json is current', flush=True)
     else:
         vo = p.get('vo')
@@ -258,9 +260,9 @@ def check_graphics(project_dir):
     from . import project as pm
     try:
         pm.load(project_dir)
-        timing = json.load(open(os.path.join(project_dir, 'timing.json'))) \
+        timing = load_json(os.path.join(project_dir, 'timing.json')) \
             if os.path.isfile(os.path.join(project_dir, 'timing.json')) else {'words': []}
-        model = json.load(open(os.path.join(project_dir, 'transcript_model.json'))) \
+        model = load_json(os.path.join(project_dir, 'transcript_model.json')) \
             if os.path.isfile(os.path.join(project_dir, 'transcript_model.json')) \
             else {'sections': [], 'words': timing.get('words', [])}
         entries = ai_layer.load_manifest(project_dir, model['words'])
@@ -314,10 +316,10 @@ def render_test(project_dir, section=None, from_s=None, to_s=None, draft=False, 
     from . import generate, project
     project.load(project_dir)  # validates the project, refuses foreign keys
     generate.generate(project_dir, 'default')
-    scenes = json.load(open(os.path.join(project_dir, 'src', 'scenes.json')))
+    scenes = load_json(os.path.join(project_dir, 'src', 'scenes.json'))
     scene = next((s for s in scenes if s['name'] == section), scenes[0] if scenes else None)
     if scene is None:
-        print(f'render-test: no scenes in src/scenes.json', file=sys.stderr)
+        print('render-test: no scenes in src/scenes.json', file=sys.stderr)
         return 3
     S = from_s if from_s is not None else scene['start']
     E = to_s if to_s is not None else scene['end']
@@ -325,7 +327,7 @@ def render_test(project_dir, section=None, from_s=None, to_s=None, draft=False, 
         print(f'render-test: empty span {S}-{E}', file=sys.stderr)
         return 2
     page_path = os.path.join(project_dir, 'src', scene['file'])
-    html = open(page_path).read()
+    html = read_text(page_path)
     dur = f'{E - S:.3f}'
     html = re.sub(r'data-duration="[\d.]+"', f'data-duration="{dur}"', html, count=1)
     inject = (f'<script>window.__test_span=[{S:.3f},{E:.3f}];'
@@ -347,9 +349,10 @@ def render_test(project_dir, section=None, from_s=None, to_s=None, draft=False, 
     import shutil as _sh
     _sh.copy(os.path.join(project_dir, 'project.json'), os.path.join(tmp_proj, 'project.json'))
     _sh.copytree(os.path.join(project_dir, 'src'), os.path.join(tmp_proj, 'src'), dirs_exist_ok=True)
-    open(os.path.join(tmp_proj, 'src', scene['file']), 'w').write(html)
-    open(os.path.join(tmp_proj, 'src', 'scenes.json'), 'w').write(json.dumps(
-        [dict(scene, start=S, end=E)]))
+    with open(os.path.join(tmp_proj, 'src', scene['file']), 'w') as _f:
+        _f.write(html)
+    with open(os.path.join(tmp_proj, 'src', 'scenes.json'), 'w') as _f:
+        _f.write(json.dumps([dict(scene, start=S, end=E)]))
     for f in ('transcript_model.json', 'timing.json'):
         src = os.path.join(project_dir, f)
         if os.path.isfile(src):
@@ -378,10 +381,10 @@ def remux(project_dir, variant=None, out=None):
     p = pm.load(project_dir)
     variant = variant or 'default'
     out = out or os.path.join(project_dir, 'renders', variant)
-    scenes = json.load(open(os.path.join(project_dir, 'src', 'scenes.json')))
+    scenes = load_json(os.path.join(project_dir, 'src', 'scenes.json'))
     info_path = os.path.join(out, 'render_info.json')
     if os.path.isfile(info_path):
-        old = json.load(open(info_path)).get('scenes')
+        old = load_json(info_path).get('scenes')
         now = [{'file': s['file'], 'start': s['start'], 'end': s['end']} for s in scenes]
         if old != now:
             print('remux refused: scene spans changed since the render — re-render needed (exit 3)',
@@ -390,8 +393,8 @@ def remux(project_dir, variant=None, out=None):
     vo = p.get('vo')
     if vo and not os.path.isabs(vo):
         vo = os.path.join(project_dir, vo)
-    timing = json.load(open(os.path.join(project_dir, 'timing.json')))
-    model = json.load(open(os.path.join(project_dir, 'transcript_model.json')))
+    timing = load_json(os.path.join(project_dir, 'timing.json'))
+    model = load_json(os.path.join(project_dir, 'transcript_model.json'))
     cues = audio_mux.sfx_cues(project_dir, timing, model)
     for s in scenes:
         mov = os.path.join(out, s['file'][:-5] + '.mov')
@@ -509,7 +512,7 @@ def render(project_dir, mode, variant=None, out=None, dry_run=False, full_master
         rc = subprocess.call(cmd, env=env)
         if rc:
             return rc
-        scenes = json.load(open(os.path.join(work, 'src', 'scenes.json')))
+        scenes = load_json(os.path.join(work, 'src', 'scenes.json'))
         audio_mux.write_timeline(os.path.join(vout, 'timeline.json'), scenes, p['fps'])
         _write_sequence(project_dir, p, vout, v)  # Task 15c: Premiere-importable FCP 7 XML
     return rc
@@ -521,7 +524,7 @@ def _write_sequence(project_dir, p, vout, variant):
     tl_path = os.path.join(vout, 'timeline.json')
     if not os.path.isfile(tl_path):
         return
-    scenes = json.load(open(tl_path))
+    scenes = load_json(tl_path)
     for s in scenes:
         s['file'] = os.path.join(vout, s['file'])  # absolute paths (Premiere relinks if moved)
     full = os.path.join(vout, f'{variant}_full.mov')
@@ -603,9 +606,8 @@ def main(argv=None):
             prepare_inputs(pd, progress=prog)  # transcript model + timing (writes them)
             prog('generate')
             generate.generate(pd, 'default')
-            import json as _json
-            timing = _json.load(open(os.path.join(os.path.abspath(a.project), 'timing.json')))
-            model = _json.load(open(os.path.join(os.path.abspath(a.project), 'transcript_model.json')))
+            timing = load_json(os.path.join(os.path.abspath(a.project), 'timing.json'))
+            model = load_json(os.path.join(os.path.abspath(a.project), 'transcript_model.json'))
             print(f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
                   f'engine {timing["method"]}', flush=True)
             return 0

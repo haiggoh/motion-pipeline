@@ -14,6 +14,8 @@ import html
 import json
 import os
 
+from .util import load_json, read_text
+
 ASPECT_FONT_SCALE = {'16:9': 1.0, '9:16': 0.62, '1:1': 0.72, '4:5': 0.68}
 VOWELS = 'aeiouyäöü'
 
@@ -147,7 +149,7 @@ def generate(project_path, variant='default', max_seconds=None):
     """Generate src/ for one project+variant (the variant's colour overlay applied to the base
     scheme — scheme.resolve_variant). Returns the list of written files."""
     from .scheme import resolve_variant
-    pj = json.load(open(os.path.join(project_path, 'project.json')))
+    pj = load_json(os.path.join(project_path, 'project.json'))
     from . import text_styles
     _style_name = pj.get('text_style', text_styles.DEFAULT)
     if _style_name not in text_styles.STYLES:
@@ -157,14 +159,14 @@ def generate(project_path, variant='default', max_seconds=None):
     style_css = style.css
     tween_js = style.tween_js()
     scheme = resolve_variant(project_path, variant)
-    timing = json.load(open(os.path.join(project_path, 'timing.json')))
-    tr = json.load(open(os.path.join(project_path, 'transcript_model.json')))
+    timing = load_json(os.path.join(project_path, 'timing.json'))
+    tr = load_json(os.path.join(project_path, 'transcript_model.json'))
     W, H = pj['resolution']
     aspect = pj['aspect']
-    from .scheme import derive_palette
-    from .fonts import font_gate, resolve_role_map
-    from .background import background_js
     from . import audio_mux  # Task 22: sfx cue list for the page API
+    from .background import background_js
+    from .fonts import font_gate, resolve_role_map
+    from .scheme import derive_palette
     palette = derive_palette(scheme)
     bg_js = background_js(palette, W, H)
     if not (pj.get('fonts') or {}):
@@ -201,8 +203,9 @@ def generate(project_path, variant='default', max_seconds=None):
     fonts_js_s = json.dumps(fonts_js)
     # AI-owned layer (ai_layer.py): validated BEFORE anything is written, copied into
     # src/ai_graphics/ (src/ is ours to rebuild; ai_graphics/ itself is only ever read)
-    from . import ai_layer
     import shutil as _sh
+
+    from . import ai_layer
     ai = ai_layer.load_manifest(project_path, tr['words'])
     ai_out = os.path.join(out_dir, 'ai_graphics')
     _sh.rmtree(ai_out, ignore_errors=True)
@@ -294,7 +297,7 @@ def generate(project_path, variant='default', max_seconds=None):
         mine = [g for g in ai if g['section'] == sec_name]
         ai_html = ''.join(
             f'<div class="ai-graphic ai-{g["layer"]}" data-ai-id="{g["id"]}" data-anchor="{g["element"]}">'
-            + (open(os.path.join(project_path, ai_layer.DIR, g['file'])).read()
+            + (read_text(os.path.join(project_path, ai_layer.DIR, g['file']))
                if (g.get('file') or '').endswith('.html') else '')
             + '</div>\n'
             for g in mine if (g.get('file') or '').endswith('.html') or 'shapes' in g)
@@ -323,7 +326,7 @@ def generate(project_path, variant='default', max_seconds=None):
                                               if 'word' in g['anchor'] else {})} for g in mine})
         # Task 22 page-API data (scene-relative)
         sections_js = json.dumps({s['name']: round(s['start'] - start, 3)
-                                  for s in json.load(open(os.path.join(project_path, 'src', 'scenes.json')))})
+                                  for s in load_json(os.path.join(project_path, 'src', 'scenes.json'))})
         sec_name_js = sec_name
         palette_js = json.dumps(palette)
         fonts_js2 = json.dumps({r: f'mp-{r}' for r in ('headline', 'label', 'body', 'emphasis')})

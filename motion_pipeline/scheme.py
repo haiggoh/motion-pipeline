@@ -122,7 +122,7 @@ def contrast(hex_a, hex_b):
 
 def validate_scheme(scheme):
     if not isinstance(scheme, dict):
-        raise ValueError('scheme must be a JSON object')
+        raise TypeError('scheme must be a JSON object')
     for k in INPUT_KEYS:
         if k not in scheme:
             raise ValueError(f'scheme missing key {k!r}')
@@ -344,7 +344,7 @@ def load_overlay(project_dir, name):
     with open(p) as f:
         ov = json.load(f)
     if not isinstance(ov, dict):
-        raise ValueError(f'{p}: want a JSON object of colour overrides')
+        raise TypeError(f'{p}: want a JSON object of colour overrides')
     bad = sorted(set(ov) - set(COLOUR_KEYS) - {'contrast_override'})
     if bad:
         raise ValueError(f'{p}: keys {bad} are not colour keys {list(COLOUR_KEYS)}')

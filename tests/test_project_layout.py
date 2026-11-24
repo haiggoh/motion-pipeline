@@ -11,12 +11,12 @@ import re
 import subprocess
 
 import pytest
+from projfix import ROOT, make_project
 from textual.widgets import Input
-
-from motion_pipeline import generate, project, scheme
-from motion_pipeline.tui.app import MenuApp
-from projfix import DARK, ROOT, make_project
 from tui_probe import choose
+
+from motion_pipeline import generate, project
+from motion_pipeline.tui.app import MenuApp
 
 
 def _pages(pd):
@@ -84,7 +84,7 @@ async def test_ai_graphics_wired_in_and_untouched_by_menu_edits(tmp_path):
     assert _digest(_tree(os.path.join(pd, 'ai_graphics'))) == before   # byte-identical
     scenes = json.load(open(os.path.join(pd, 'src', 'scenes.json')))  # Task 12: scene_<NN>_<slug>
     page = _pages(pd)[next(s['file'] for s in scenes if s['name'] == w['section'])]
-    assert f'data-ai-id="spark"' in page and f'data-anchor="el-{w["id"]}"' in page
+    assert 'data-ai-id="spark"' in page and f'data-anchor="el-{w["id"]}"' in page
     assert '<svg id="spark"' in page
     assert 'src="ai_graphics/pulse.js"' in page
     assert os.path.isfile(os.path.join(pd, 'src', 'ai_graphics', 'pulse.js'))

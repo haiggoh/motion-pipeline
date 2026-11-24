@@ -44,7 +44,7 @@ def default_project(name, aspect='16:9', fps=60, uhd=False):
 
 def validate(p):
     if not isinstance(p, dict):
-        raise ValueError('project.json must be a JSON object')
+        raise TypeError('project.json must be a JSON object')
     for k in REQUIRED_KEYS:
         if k not in p:
             raise ValueError(f'project.json missing key {k!r}')

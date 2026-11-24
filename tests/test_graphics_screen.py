@@ -7,12 +7,12 @@ import json
 import os
 
 import pytest
-
-from motion_pipeline import free_agents
-from motion_pipeline.tui.app import MenuApp, MenuScreen, STEPS
-from motion_pipeline.tui.graphics_screen import GraphicsScreen
 from projfix import make_project
 from tui_probe import choose
+
+from motion_pipeline import free_agents
+from motion_pipeline.tui.app import STEPS, MenuApp, MenuScreen
+from motion_pipeline.tui.graphics_screen import GraphicsScreen
 
 
 def test_step_list_has_graphics_before_render():

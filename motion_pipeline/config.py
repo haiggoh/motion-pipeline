@@ -35,7 +35,7 @@ def load() -> dict:
     with open(p) as f:
         cfg = json.load(f)
     if not isinstance(cfg, dict):
-        raise ValueError(f'{p}: want a JSON object, got {type(cfg).__name__}')
+        raise TypeError(f'{p}: want a JSON object, got {type(cfg).__name__}')
     return cfg
 
 

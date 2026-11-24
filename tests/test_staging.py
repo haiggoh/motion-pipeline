@@ -10,6 +10,7 @@ import re
 import subprocess
 
 from projfix import ROOT, make_project
+
 from motion_pipeline import generate
 
 VENV_BIN = os.path.join(ROOT, '.venv', 'bin')

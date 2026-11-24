@@ -6,13 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 from textual.widgets import Label, ListView, LoadingIndicator, Select, Static
-from motion_pipeline.tui.fonts_screen import CheckRow
+from tui_probe import choose
 
 from motion_pipeline import font_index, project
 from motion_pipeline.font_index import BUNDLED_DIR
 from motion_pipeline.tui.app import MenuApp
-from motion_pipeline.tui.fonts_screen import FontsScreen
-from tui_probe import choose
+from motion_pipeline.tui.fonts_screen import CheckRow, FontsScreen
 
 HELV = '/System/Library/Fonts/Helvetica.ttc'
 _REAL_SCAN = font_index.scan  # captured BEFORE any monkeypatch (else the fake recurses)

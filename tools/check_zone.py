@@ -8,14 +8,14 @@ usage:
 exit 0 = all clear, 1 = offenders listed on stdout, 2 = bad args, 3 = project error.
 """
 import argparse
-import json
 import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from motion_pipeline import generate, project, text_styles  # noqa: E402
+from motion_pipeline import generate, project, text_styles
+from motion_pipeline.util import load_json
 
 
 def main(argv=None):
@@ -32,7 +32,7 @@ def main(argv=None):
         raise ValueError(f"invalid text_style {_style_name!r} — want one of "
                          f"{sorted(text_styles.STYLES)} (key 'text_style')")
     style = text_styles.STYLES[_style_name]  # zone gate sees the style's real geometry
-    tr = json.load(open(os.path.join(a.project, 'transcript_model.json')))
+    tr = load_json(os.path.join(a.project, 'transcript_model.json'))
     W, H = p['resolution']
     from motion_pipeline.generate import ASPECT_FONT_SCALE
     font_px = int(H / 12 * ASPECT_FONT_SCALE.get(p['aspect'], 1.0))

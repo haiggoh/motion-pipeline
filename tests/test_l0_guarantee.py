@@ -12,8 +12,8 @@ import os
 import re
 
 import pytest
-
 from projfix import make_project
+
 from motion_pipeline import generate, project, text_styles
 
 SPAN_RE = re.compile(r'<span [^>]*data-id="([^"]+)"(?: data-k="(\d+)")?')

@@ -106,7 +106,7 @@ def normalise_fonts(cfg, project_dir=''):
     Faces are looked up by family+weight (bundled set or <project>/fonts/); unresolvable ->
     ValueError naming the role, family and weight, with the available faces listed."""
     if not isinstance(cfg, dict):
-        raise ValueError('fonts config must be a JSON object')
+        raise TypeError('fonts config must be a JSON object')
     roles = cfg.get('roles')
     if isinstance(roles, dict) and roles and all(isinstance(v, dict) for v in roles.values()):
         return {'roles': roles}
@@ -124,7 +124,7 @@ def normalise_fonts(cfg, project_dir=''):
         if hit is None:
             avail = ', '.join(f'{label} ({w2})' for w2, label, *_ in sorted(available)) or 'none'
             raise ValueError(f"font gate: role {role!r} wants {family} {w} — available: {avail}")
-        weight, label, file_ref, index, licence = hit
+        weight, _label, file_ref, index, licence = hit
         out['roles'][role] = {'family': family, 'weight': weight, 'file': file_ref,
                               'index': index, 'licence': licence}
     return out
@@ -157,7 +157,7 @@ def copy_client_faces(project_dir, roles):
     dst_dir = project_font_dir(project_dir)
     for role, r in roles.items():
         file = r['file']
-        if file.startswith('motion_pipeline/') or file.startswith('fonts/'):
+        if file.startswith(('motion_pipeline/', 'fonts/')):
             out[role] = dict(r)
             continue
         os.makedirs(dst_dir, exist_ok=True)

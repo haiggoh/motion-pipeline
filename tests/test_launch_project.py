@@ -6,10 +6,10 @@ we did not come from Home. Entered from Home later, the row is 'Back' again and 
 import json
 
 from textual.widgets import Input
+from tui_probe import choose
 
 from motion_pipeline.tui.app import MenuApp, MenuScreen
 from motion_pipeline.tui.project_screen import ProjectScreen
-from tui_probe import choose
 
 
 def _nav_row(scr):

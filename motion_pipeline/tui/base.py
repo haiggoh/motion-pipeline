@@ -6,12 +6,13 @@ inputs get a symmetric `round ansi_bright_black` frame, highlights are text-colo
 Menu grammar: numbers = actions, `b` = Back to main menu WITHOUT saving, `q` = Quit.
 """
 import os
+from typing import ClassVar
 
 from textual.app import App
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.message import Message
+from textual.screen import Screen
 from textual.widgets import Input, Label, LoadingIndicator, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -214,7 +215,7 @@ class MenuAppBase(LoadingMixin, App):
     # `b`/`q` as priority bindings: a focused Input still receives typed letters (Textual's
     # Input.check_consume_key wins over single-key bindings — verified 2026-11-10: typing
     # "abc" into a path field keeps the screen and the value).
-    BINDINGS = [Binding('b', 'back', 'Back to main menu (no save)', show=False, priority=True),
+    BINDINGS: ClassVar[list] = [Binding('b', 'back', 'Back to main menu (no save)', show=False, priority=True),
                 Binding('q', 'quit_app', 'Quit', show=False, priority=True)]
 
     def __init__(self, **kwargs):
@@ -305,10 +306,10 @@ class SubmenuScreen(LoadingMixin, Screen):
     menu options first. Subclasses set TITLE + ACTIONS and implement on_action()."""
 
     TITLE = ''
-    ACTIONS: list = []
+    ACTIONS: ClassVar[list] = []
     BODY_FILL = False
     HINT = '↑↓ move · Enter/click select · 1-9 action · b/esc back (no save) · q quit'
-    BINDINGS = [Binding('escape', 'back', 'Back (no save)', show=False)]
+    BINDINGS: ClassVar[list] = [Binding('escape', 'back', 'Back (no save)', show=False)]
 
     def compose(self):
         with Vertical(classes='panel'):

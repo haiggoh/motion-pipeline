@@ -5,13 +5,13 @@ import subprocess
 
 import pytest
 from PIL import Image
+from tui_probe import choose
 
 from motion_pipeline import font_index, project
 from motion_pipeline.font_index import BUNDLED_DIR
 from motion_pipeline.font_preview import SAMPLE_TEXT, render_sample
 from motion_pipeline.tui.app import MenuApp
 from motion_pipeline.tui.fonts_screen import CheckRow, FontsScreen
-from tui_probe import choose
 
 _REAL_SCAN = font_index.scan
 MONT_BOLD = os.path.join(BUNDLED_DIR, 'Montserrat', 'Montserrat-Bold.ttf')

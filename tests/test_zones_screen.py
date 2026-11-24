@@ -5,10 +5,10 @@ import os
 
 import pytest
 from textual.widgets import Input, Label, ListView, Static
+from tui_probe import choose
 
 from motion_pipeline import project
 from motion_pipeline.tui.app import MenuApp
-from tui_probe import choose
 
 TRANSCRIPT = '# A\nalpha beta\n# B\ngamma delta\n# C\nepsilon zeta\n'
 

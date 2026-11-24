@@ -14,10 +14,10 @@ import subprocess
 import sys
 
 import pytest
+from projfix import ROOT, make_project
 
 from motion_pipeline import audio_mux, generate, render_cli
 from motion_pipeline.__main__ import main as mp_main
-from projfix import ROOT, make_project
 
 PY = sys.executable
 
@@ -81,7 +81,7 @@ def test_mp_at_resolves_word_section_and_number(tmp_path):
     scenes = json.load(open(os.path.join(pd, 'src', 'scenes.json')))
     scene = scenes[0]
     html = _pages(pd)[scene['file']]
-    m = re.search(r'<script>\n(// Task 22 page API.*?)</script>', html, re.S)
+    m = re.search(r'<script>\n(// Task 22 page API.*?)</script>', html, re.DOTALL)
     assert m, 'page-API script block not found in generated page'
     words = [w for w in json.load(open(os.path.join(pd, 'transcript_model.json')))['words']
              if w['section'] == scene['name']]

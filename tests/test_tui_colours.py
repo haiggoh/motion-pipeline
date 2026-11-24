@@ -3,10 +3,10 @@ import json
 
 import pytest
 from textual.widgets import Input, Static
-
 from tui_probe import choose
-from motion_pipeline.tui.app import MenuApp
+
 from motion_pipeline import scheme as scheme_mod
+from motion_pipeline.tui.app import MenuApp
 
 DARK = {'name': 'tui-demo', 'background_dark': '#0b1a4c', 'background_light': '#1251a6',
         'accent': '#ffb400', 'text': '#f5f7ff'}
@@ -121,7 +121,7 @@ async def test_colour_rows_labelled_swatches_visible_hex_fully_shown(tmp_path):
             sw = scr.query_one(f'#swatch-{k}', Static)
             assert on_screen(app, sw) and sw.region.width >= 4
             assert tuple(sw.styles.background.rgb) == sm._hex_to_srgb(DARK[k]) or \
-                '#%02x%02x%02x' % tuple(sw.styles.background.rgb) == DARK[k]
+                f'#{sw.styles.background.rgb[0]:02x}{sw.styles.background.rgb[1]:02x}{sw.styles.background.rgb[2]:02x}' == DARK[k]
             assert sw.styles.border_top[0] in ('', 'none'), f'{k}: filled swatch still framed'
             for f in ('h', 's', 'l'):
                 assert scr.query_one(f'#{f}-{k}', Input).value == str(dict(zip('hsl', sm.hex_to_hsl(DARK[k])))[f])
@@ -181,7 +181,6 @@ async def test_contrast_markers_actionable_message_and_fix_action(tmp_path):
 
 
 async def test_save_anyway_writes_override_and_later_save_clears_it(tmp_path):
-    sm = scheme_mod
     app = MenuApp()
     async with app.run_test(size=(80, 24)) as pilot:
         scr = await _open_colours_scheme(pilot, app, tmp_path, dict(FAIL_SCHEME))

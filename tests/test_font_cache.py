@@ -1,6 +1,8 @@
 """B3 (0.8.0 plan): font_index.scan() rewrote the cache file even when NOTHING changed —
 so a test pointing MP_FONT_CACHE at the tracked fixture tests/fixtures/font-index-mini.json
-got it overwritten with the real machine index (observed twice, 2026-11-22). scan() now
+got it overwritten with the real machine index (observed twice, 2026-11-22; the dead
+fixture file was removed in 0.8.2 — the menu test now builds a validating cache in tmp).
+scan() now
 saves only when the index actually changed. RED pre-fix: the mtime assertion fails."""
 import os
 

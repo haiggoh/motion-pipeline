@@ -5,10 +5,10 @@ import os
 
 import pytest
 from textual.widgets import Input, Select, Static
-
-from motion_pipeline import align, project, transcript
-from motion_pipeline.tui.app import MenuApp
 from tui_probe import choose
+
+from motion_pipeline import align, project
+from motion_pipeline.tui.app import MenuApp
 
 
 def mk_project(d, **over):
@@ -144,8 +144,10 @@ async def test_save_with_docx_transcript_reports_sections_and_words(tmp_path):
     """Task 15 (B4) delivery level: a .docx transcript set in the field saves through the REAL
     prepare-only job and the status reports 'N sections, M words'."""
     import shutil
-    from motion_pipeline.scheme import save_scheme
+
     from projfix import DARK
+
+    from motion_pipeline.scheme import save_scheme
     d = mk_project(tmp_path / 'proj', fonts={'family': 'Montserrat'})
     save_scheme(os.path.join(d, 'scheme.json'), DARK)
     docx = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -268,8 +270,9 @@ async def test_timings_job_shows_spinner_and_bar_then_hides_them(tmp_path):
     and advance on 'progress:' lines; on finish they hide and the log/status show the result."""
     from textual.widgets import LoadingIndicator, ProgressBar, RichLog
     d = mk_project(tmp_path / 'proj', fonts={'family': 'Montserrat'})
-    from motion_pipeline.scheme import save_scheme
     from projfix import DARK
+
+    from motion_pipeline.scheme import save_scheme
     save_scheme(os.path.join(d, 'scheme.json'), DARK)
     helper = tmp_path / 'fake_prepare.sh'
     helper.write_text(

@@ -6,13 +6,13 @@ project.json is listed with its error (dimmed), never hidden (Task 3).
 """
 import os
 import shutil
+from typing import ClassVar
 
 from textual.containers import Horizontal
 from textual.widgets import Checkbox, Input, Label, ListItem, ListView, Select, Static
 
-from .. import config
+from .. import config, projects_list
 from .. import project as project_mod
-from .. import projects_list
 from .base import ActionMenu, SubmenuScreen
 from .paths import PathInput
 
@@ -25,7 +25,7 @@ SAMPLE_DIR = os.path.join(config.PKG_ROOT, 'samples', 'globe')
 
 class ProjectScreen(SubmenuScreen):
     TITLE = 'New / load project'
-    ACTIONS = [('create', 'Create new project'), ('sample', 'Create from sample'),
+    ACTIONS: ClassVar[list] = [('create', 'Create new project'), ('sample', 'Create from sample'),
                ('load', 'Load from directory'), ('format', 'Apply format'),
                ('root', 'Save projects folder')]
     BODY_FILL = True

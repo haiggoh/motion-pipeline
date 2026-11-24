@@ -5,19 +5,17 @@ inputs (transcript/VO), render. Long jobs run via jobs.run_command as workers wi
 in a Log — the menu stays responsive and jobs can be cancelled (G2).
 """
 import os
+from typing import ClassVar
 
-from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Label, Log, Static
+from textual.widgets import Label, Static
 
+from ..util import load_json
+from .ansi_image import render_ansi_image
 from .base import ActionMenu, MenuAppBase, SubmenuScreen
-from .paths import PathInput, TRANSCRIPT_EXTS, VO_EXTS
 from .jobs import run_command
-
-
-
-from .ansi_image import render_ansi_image  # noqa: F401  (moved in Task 10; re-exported for existing imports)
+from .paths import TRANSCRIPT_EXTS, VO_EXTS, PathInput
 
 STEPS = [
     ('project', 'New / load project'),
@@ -95,7 +93,7 @@ class _RenderScreenBase(SubmenuScreen):
     """Shared by the background test and the full render: output dir field, actions
     (run / cancel / open in Finder), then — BELOW the actions — the log, status, link, image."""
 
-    ACTIONS = [('run', 'Run'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
+    ACTIONS: ClassVar[list] = [('run', 'Run'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
                ('setup', 'Install render toolchain')]
     OUT_PLACEHOLDER = '<project>/renders/default'
 
@@ -126,10 +124,11 @@ class _RenderScreenBase(SubmenuScreen):
         if pd:
             try:
                 from textual.widgets import Checkbox
+
                 from .. import project as project_mod
                 self.query_one('#full-master', Checkbox).value = \
                     bool(project_mod.load(pd).get('full_master', False))
-            except Exception:
+            except Exception:  # noqa: S110 — deliberate: an unreadable project.json falls back to defaults here
                 pass
 
     def outdir(self):
@@ -150,6 +149,7 @@ class _RenderScreenBase(SubmenuScreen):
             if self._job_running:
                 return  # one job at a time
             from textual.widgets import Checkbox
+
             from .. import project as project_mod
             pd = self.require_project()
             if os.path.isfile(os.path.join(pd, 'project.json')):
@@ -216,7 +216,9 @@ class _RenderScreenBase(SubmenuScreen):
     def _on_setup_done(self, rc):
         if not self.query('#actions'):
             return                     # job-done on a removed screen (B2)
-        from textual.widgets import RichLog   # B1: was used unimported in this method (ruff F821)
+        from textual.widgets import (
+            RichLog,  # B1: was used unimported in this method (ruff F821)
+        )
         self._job_running = False
         menu = self.query_one('#actions', ActionMenu)
         menu.set_enabled('run', True)
@@ -270,7 +272,7 @@ class BgTestScreen(_RenderScreenBase):
     """Background test — runs the SAME render path as the full render (anti-goal)."""
 
     TITLE = 'Background test render (same code path as the full render)'
-    ACTIONS = [('run', 'Run test render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
+    ACTIONS: ClassVar[list] = [('run', 'Run test render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
                ('setup', 'Install render toolchain')]
 
     def command(self):
@@ -326,7 +328,7 @@ class _ProgressLog:
 
 class InputsScreen(SubmenuScreen):
     TITLE = 'Transcript + voiceover'
-    ACTIONS = [('save', 'Save inputs + compute timings'),
+    ACTIONS: ClassVar[list] = [('save', 'Save inputs + compute timings'),
                ('retry-model', 'Retry speech model download')]   # Task 18 (B4): model installs itself
     CSS = '#actions { margin: 0; }'  # fit 80x24 with the engine-status line (Task 17)
     CSS += '#timing-log { display: none; height: 3; min-height: 1; }'  # shown when a timings job starts; 80x24 layout test decides
@@ -424,7 +426,7 @@ class InputsScreen(SubmenuScreen):
 
     def _update_wpm_indicator(self):
         """Once a measured timing exists, the indicator shows 'measured N wpm'."""
-        import json
+
         from textual.widgets import Static
         if not self.query('#wpm-indicator'):   # also guards unmounted screens
             return
@@ -432,7 +434,7 @@ class InputsScreen(SubmenuScreen):
         if not pd:
             return
         try:
-            timing = json.load(open(os.path.join(pd, 'timing.json')))
+            timing = load_json(os.path.join(pd, 'timing.json'))
         except (OSError, ValueError):
             return
         from .. import align
@@ -460,13 +462,13 @@ class InputsScreen(SubmenuScreen):
         """Task 5 (A5): the prepare-only job is observed via run_command's on_finish (called
         on the UI thread). rc 0 -> report the saved counts; else surface the named error
         line from the job log (e.g. 'missing dependency: transcript …')."""
-        import json as _json
+
         from textual.widgets import RichLog
         pd = getattr(self.app, 'project_dir', None)
         if rc == 0 and pd:
             try:
-                timing = _json.load(open(os.path.join(pd, 'timing.json')))
-                model = _json.load(open(os.path.join(pd, 'transcript_model.json')))
+                timing = load_json(os.path.join(pd, 'timing.json'))
+                model = load_json(os.path.join(pd, 'transcript_model.json'))
                 self.query_one('#status', Static).update(
                     f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
                     f'engine {timing["method"]}')
@@ -561,7 +563,7 @@ class InputsScreen(SubmenuScreen):
 
 class RenderScreen(_RenderScreenBase):
     TITLE = 'Full render (all variants)'
-    ACTIONS = [('run', 'Render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
+    ACTIONS: ClassVar[list] = [('run', 'Render'), ('cancel', 'Cancel'), ('open', 'Open output in Finder'),
                ('setup', 'Install render toolchain'), ('remux', 'Re-mux audio (no re-render)')]
     OUT_PLACEHOLDER = '<project>/renders/<variant>'
 
@@ -590,7 +592,6 @@ class FirstRunScreen(SubmenuScreen):
     the installed package — Homebrew replaces it on every upgrade."""
 
     def compose(self):
-        from textual.widgets import Input
 
         from .. import config
         with Vertical(classes='panel'):
@@ -639,7 +640,7 @@ class FirstRunScreen(SubmenuScreen):
 
 
 class MenuApp(MenuAppBase):
-    SCREENS = {}  # filled in on_mount to avoid import cycles
+    SCREENS: ClassVar[dict] = {}  # filled in on_mount to avoid import cycles
 
     def graphics_step_enabled(self):
         """Task 21 gate: the 'Add motion graphics' step needs fresh saved timings."""

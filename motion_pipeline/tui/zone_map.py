@@ -42,10 +42,8 @@ def render_frame_map(width_px, height_px, zones, cols, rows, selected=None):
         zy0 = max(0, min(h - 1, int(y / height_px * h)))
         zx1 = max(0, min(w - 1, int((x + zw) / width_px * w)))
         zy1 = max(0, min(h - 1, int((y + zh) / height_px * h)))
-        if zx1 < zx0:
-            zx1 = zx0
-        if zy1 < zy0:
-            zy1 = zy0
+        zx1 = max(zx1, zx0)
+        zy1 = max(zy1, zy0)
         for x in range(zx0, zx1 + 1):
             put(x, zy0, _H, sel); put(x, zy1, _H, sel)
         for y in range(zy0, zy1 + 1):

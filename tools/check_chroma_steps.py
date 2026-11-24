@@ -29,7 +29,7 @@ def ffprobe_dims(video):
     r = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0",
          "-show_entries", "stream=width,height", "-of", "csv=p=0", video],
-        capture_output=True, text=True)
+        capture_output=True, text=True, check=False)
     if r.returncode != 0:
         die(f"ffprobe failed for {video}: {r.stderr.strip()}", 3)
     try:
@@ -46,7 +46,7 @@ def decode_cb(video, frame, w, h):
     r = subprocess.run(
         ["ffmpeg", "-v", "error", "-i", video, "-vf", vf, "-f", "rawvideo",
          "-pix_fmt", "yuv422p10le", "-"],
-        capture_output=True)
+        capture_output=True, check=False)
     expect = (w * h + 2 * (w // 2) * h) * 2
     if r.returncode != 0 or len(r.stdout) != expect:
         die(f"decode failed for {video} frame {frame} (rc={r.returncode}, {len(r.stdout)} bytes, want {expect}): {r.stderr.decode(errors='replace').strip()}", 3)
