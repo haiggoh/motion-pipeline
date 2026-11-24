@@ -58,6 +58,11 @@ def cache_file() -> str:
     return os.path.join(os.path.expanduser('~'), '.cache', 'motion-pipeline', 'font-index.json')
 
 
+# Bump whenever _scan_file's output changes for the SAME file: cache entries from another parser
+# version are rescanned (0.8.3: the 0.8.2 parser cached wrong TTC weights under a valid key).
+PARSER_VERSION = 2
+
+
 def read_os2_weight(path: str, index: int = 0) -> int | None:
     """OS/2 usWeightClass: TTC header ('ttcf') -> face offset, then offset table -> table
     directory -> 'OS/2' -> uint16 at byte 4 of the table. None when the file has no OS/2.
@@ -191,11 +196,13 @@ def scan(dirs: list[str] | None = None, cache_path: str | None = None,
             continue
         key = (st.st_mtime_ns, st.st_size)
         entry = cache.get(path)
-        if isinstance(entry, dict) and entry.get('mtime_ns') == key[0] and entry.get('size') == key[1]:
+        if (isinstance(entry, dict) and entry.get('mtime_ns') == key[0] and entry.get('size') == key[1]
+                and entry.get('parser') == PARSER_VERSION):
             faces = [Face(**f) for f in entry['faces']]
         else:
             faces = _scan_file(path, bundled)
-        fresh[path] = {'mtime_ns': key[0], 'size': key[1], 'faces': [dict(f) for f in faces]}
+        fresh[path] = {'mtime_ns': key[0], 'size': key[1], 'parser': PARSER_VERSION,
+                       'faces': [dict(f) for f in faces]}
         out.extend(faces)
         if progress is not None:
             progress(i, total)
