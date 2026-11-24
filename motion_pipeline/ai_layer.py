@@ -30,9 +30,11 @@ LAYERS = ('above', 'below')
 SHAPE_TYPES = ('el', 'enter', 'exit', 'drawOn', 'float', 'inZone')
 
 
-def load_manifest(project_dir, words):
+def load_manifest(project_dir, words, extra_names=None):
     """Validated manifest entries ([] when there is no manifest). `words` = transcript model
-    words (dicts with id + section) used to resolve word anchors to their section."""
+    words (dicts with id + section) used to resolve word anchors to their section.
+    `extra_names` = additional valid anchor names (0.8.3: generated PAGE names — validation
+    accepts chapter AND page names; a chapter anchor resolves to its first page)."""
     path = os.path.join(project_dir, MANIFEST)
     if not os.path.isfile(path):
         return []
@@ -43,7 +45,7 @@ def load_manifest(project_dir, words):
             raise ValueError(f'{MANIFEST}: not valid JSON ({e})') from e
     if not isinstance(m, dict) or not isinstance(m.get('graphics'), list):
         raise TypeError(f'{MANIFEST}: want {{"graphics": [...]}}')
-    sections = {w['section'] for w in words}
+    sections = {w['section'] for w in words} | set(extra_names or [])
     word_section = {w['id']: w['section'] for w in words}
     seen, out = set(), []
     for g in m['graphics']:

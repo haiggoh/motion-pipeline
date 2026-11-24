@@ -86,27 +86,59 @@ def test_typewriter_deterministic_with_fixed_seed(tmp_path):
         'the documented per-style seed constant must be in the tween JS'
 
 
-def _proj(sub, style_name, zones):
-    """Build a saved project (no generate — check_zone recomputes the layout itself)."""
+def _long_proj(sub, style_name, zones):
+    """A saved project whose 'Welcome' chapter is a long heading-less-body text (forces
+    pagination), with the given text_style and zones."""
+    from motion_pipeline import align, transcript
     pd = make_project(str(sub / 'proj'))
     p = project_mod.load(pd)
     p['text_style'] = style_name
     p['zones'] = zones
+    text = ' '.join(f'Sentence number {i} has six short words here.' for i in range(60))
+    tr = transcript.parse('# Welcome\n' + text + '\n')
+    with open(os.path.join(pd, 'transcript_model.json'), 'w') as f:
+        json.dump(tr, f)
+    align.save_timing(os.path.join(pd, 'timing.json'), align.estimate_timings(tr, wpm=140))
     project_mod.save(pd, p)
     return pd
 
 
+def _run_gate(pd):
+    return subprocess.run([VENV_PY, os.path.join(ROOT, 'tools', 'check_zone.py'),
+                           '--project', pd], capture_output=True, text=True)
+
+
 def test_zone_gate_uses_style_layout(tmp_path):
-    """One-word-center puts every word on its own line -> a tall narrow block at the left;
-    a left-side zone overlaps it -> check_zone must exit 1. With the default layout the same
-    zone is avoidable (the wide block moves up) -> exit 0 (the mutation goes RED)."""
+    """D4: the zone gate plans pages with the project's style layout (shared plan_pages).
+    one-word-center puts every word on its own line -> far more pages than the wide default
+    layout for the same long text + zone, and both gates pass (pages avoid the zone)."""
     zone = {'section': 'Welcome', 'rect': [100, 500, 600, 400]}
-    pd = _proj(tmp_path, 'one-word-center', [zone])
-    r = subprocess.run([VENV_PY, os.path.join(ROOT, 'tools', 'check_zone.py'),
-                        '--project', pd], capture_output=True, text=True)
-    assert r.returncode == 1 and 'OFFENDER' in r.stdout, (r.returncode, r.stdout, r.stderr[-400:])
-    # same project, default style: the wide block moves above the zone -> all clear
-    pd2 = _proj(tmp_path / 'd', 'slide-up', [zone])
-    r2 = subprocess.run([VENV_PY, os.path.join(ROOT, 'tools', 'check_zone.py'),
-                         '--project', pd2], capture_output=True, text=True)
+    pd = _long_proj(tmp_path / 'owc', 'one-word-center', [zone])
+    r = _run_gate(pd)
+    assert r.returncode == 0 and 'zones OK' in r.stdout, (r.returncode, r.stdout, r.stderr[-400:])
+    generate.generate(pd)
+    scenes = json.load(open(os.path.join(pd, 'src', 'scenes.json')))
+    assert len(scenes) >= 2
+    first = open(os.path.join(pd, 'src', scenes[0]['file'])).read()
+    lines = re.findall(r'<div class="line".*?</div>', first, re.DOTALL)
+    assert lines and all(len(SPAN_ID.findall(ln)) == 1 for ln in lines)  # one word per line
+    owc_pages = len(scenes)
+    pd2 = _long_proj(tmp_path / 'su', 'slide-up', [zone])
+    r2 = _run_gate(pd2)
     assert r2.returncode == 0, (r2.returncode, r2.stdout, r2.stderr[-400:])
+    generate.generate(pd2)
+    su_pages = len(json.load(open(os.path.join(pd2, 'src', 'scenes.json'))))
+    # the shared planner consumes the style's layout (one word per line -> many more pages
+    # than the wide default layout); the gate plans with the same function (D4)
+    assert owc_pages > su_pages + 2, (owc_pages, su_pages)
+
+
+def test_zone_gate_full_frame_zone_is_offender(tmp_path):
+    """A zone covering the whole frame: no page can fit -> the gate reports OFFENDER, exit 1
+    (the same error generate raises). Mutation guard: ignoring zones exits 0 -> RED."""
+    p0 = project_mod.default_project('x')
+    W, H = p0['resolution']
+    zone = {'section': 'Welcome', 'rect': [0, 0, W, H], 'aspect': p0['aspect']}
+    pd = _long_proj(tmp_path / 'ff', 'slide-up', [zone])
+    r = _run_gate(pd)
+    assert r.returncode == 1 and 'OFFENDER' in r.stdout, (r.returncode, r.stdout, r.stderr[-400:])

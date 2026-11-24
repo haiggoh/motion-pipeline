@@ -14,6 +14,7 @@ import html
 import json
 import os
 
+from . import paginate
 from .util import load_json, read_text
 
 ASPECT_FONT_SCALE = {'16:9': 1.0, '9:16': 0.62, '1:1': 0.72, '4:5': 0.68}
@@ -107,28 +108,30 @@ def section_slug(name: str, taken: set) -> str:
     return f'{s}-{i}'
 
 
-def scene_spans(timing, model, fps, tail=1.6):
-    """[{"index", "name", "slug", "start", "end"}] — scene 0 starts at 0.0, scene k at its
-    first word's start; each scene ends where the next starts; the last ends at the last
-    word's end + tail; all frame-aligned (P3). (Task 12)"""
+def page_spans(timing, pages, fps, tail=1.6):
+    """[{"index","name","slug","start","end","chapter","words","font_px","paginated"}] over the
+    planned pages (0.8.3 pagination, D1'): scene 0 starts at 0.0, scene k at its first timed
+    word's start; each scene ends where the next starts; the last ends at the last word's end +
+    tail; all frame-aligned (P3). A non-paginated page keeps the chapter's name (D2)."""
     times = {w['id']: w for w in timing['words']}
-    abs_end = max((times[w['id']]['end'] for w in model['words'] if w['id'] in times),
+    abs_end = max((times[w['id']]['end'] for pg in pages for w in pg['words'] if w['id'] in times),
                   default=0.0)
     spans = []
-    taken = set()
-    for sec in model['sections']:
-        ws = [w for w in model['words'] if w['section'] == sec['name'] and w['id'] in times]
+    for pg in pages:
+        ws = [w for w in pg['words'] if w['id'] in times]
         if not ws:
             continue
         start = 0.0 if not spans else times[ws[0]['id']]['start']
-        slug = section_slug(sec['name'], taken)
-        taken.add(slug)
-        spans.append({'index': len(spans), 'name': sec['name'], 'slug': slug, 'start': start})
+        spans.append({'index': len(spans), 'name': pg['name'], 'slug': pg['slug'], 'start': start,
+                      'chapter': pg['chapter'], 'words': pg['words'], 'font_px': pg['font_px'],
+                      'paginated': pg['paginated']})
     out = []
     for k, s in enumerate(spans):
         end = spans[k + 1]['start'] if k + 1 < len(spans) else abs_end + tail
         out.append({'index': s['index'], 'name': s['name'], 'slug': s['slug'],
-                    'start': round(s['start'] * fps) / fps, 'end': round(end * fps) / fps})
+                    'start': round(s['start'] * fps) / fps, 'end': round(end * fps) / fps,
+                    'chapter': s['chapter'], 'words': s['words'], 'font_px': s['font_px'],
+                    'paginated': s['paginated']})
     return out
 
 
@@ -212,12 +215,46 @@ def generate(project_path, variant='default', max_seconds=None):
         r['css_file'] = f'fonts/{dst_name}'
     font_css = '\n'.join(face_css)
     fonts_js_s = json.dumps(fonts_js)
+    element_ids = {}
+    written = []
+    # Task 12 scene model: scenes.json drives the render order; pages are scene_<NN>_<slug>.html
+    # with scene-relative timings, a registered paused timeline and dimming.
+    # 0.8.3 (D1'/D4): pages are planned per chapter by the SHARED paginate.plan_pages —
+    # tools/check_zone.py plans the same pages, so the zone gate sees what the renderer emits.
+    times = {w['id']: w for w in timing['words']}
+    taken = set()
+    all_pages = []
+    for sec in tr['sections']:
+        ws = [w for w in tr['words'] if w['section'] == sec['name']]
+        if not ws:
+            continue
+        zs_c = [z for z in zones if z['section'] == sec['name']]
+        all_pages.extend(paginate.plan_pages(sec['name'], ws, style, W, H, font_px, zs_c,
+                                             aspect, taken))
+    scenes = page_spans(timing, all_pages, pj['fps'])
+    if max_seconds is not None:  # test_frames mode: cap every scene (render_cli passes 60/fps)
+        scenes = [dict(s, end=min(s['end'], s['start'] + max_seconds)) for s in scenes]
+    scenes_json = []
+    for i, s in enumerate(scenes):
+        e = {'index': s['index'], 'name': s['name'], 'slug': s['slug'], 'start': s['start'],
+             'end': s['end'], 'file': f"scene_{i:02d}_{s['slug']}.html"}
+        if s['paginated']:
+            # D1': a paginated chapter's page records its chapter + word-id range
+            e['chapter'] = s['chapter']
+            e['words'] = [s['words'][0]['id'], s['words'][-1]['id']]
+        scenes_json.append(e)
+    with open(os.path.join(out_dir, 'scenes.json'), 'w') as f:
+        json.dump(scenes_json, f, indent=2)
+        f.write('\n')
+    written.append('src/scenes.json')
     # AI-owned layer (ai_layer.py): validated BEFORE anything is written, copied into
     # src/ai_graphics/ (src/ is ours to rebuild; ai_graphics/ itself is only ever read)
     import shutil as _sh
 
     from . import ai_layer
-    ai = ai_layer.load_manifest(project_path, tr['words'])
+    # pages are valid anchor names too (D1': validation accepts chapter AND page names)
+    ai = ai_layer.load_manifest(project_path, tr['words'],
+                                extra_names=[s['name'] for s in scenes])
     ai_out = os.path.join(out_dir, 'ai_graphics')
     _sh.rmtree(ai_out, ignore_errors=True)
     for g in ai:
@@ -226,8 +263,6 @@ def generate(project_path, variant='default', max_seconds=None):
         dst = os.path.join(ai_out, g['file'])
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         _sh.copy2(os.path.join(project_path, ai_layer.DIR, g['file']), dst)
-    element_ids = {}
-    written = []
     graphics_html = ''
     for g in pj.get('graphics', []):
         if g == 'globe':
@@ -247,36 +282,25 @@ def generate(project_path, variant='default', max_seconds=None):
                 'const gt = () => G.draw(performance.now() / 1000 * 12); '
                 'if (window.gsap && gsap.ticker) { gsap.ticker.add(gt); } '
                 'else { const loop = () => { gt(); requestAnimationFrame(loop); }; loop(); }</script>\n')
-    # Task 12 scene model: scenes.json drives the render order; pages are scene_<NN>_<slug>.html
-    # with scene-relative timings, a registered paused timeline and dimming.
-    times = {w['id']: w for w in timing['words']}
-    scenes = scene_spans(timing, tr, pj['fps'])
-    if max_seconds is not None:  # test_frames mode: cap every scene (render_cli passes 60/fps)
-        scenes = [dict(s, end=min(s['end'], s['start'] + max_seconds)) for s in scenes]
-    scenes_json = [dict(s, file=f"scene_{i:02d}_{s['slug']}.html") for i, s in enumerate(scenes)]
-    with open(os.path.join(out_dir, 'scenes.json'), 'w') as f:
-        json.dump(scenes_json, f, indent=2)
-        f.write('\n')
-    written.append('src/scenes.json')
     for sp in scenes:
         sec_name = sp['name']
+        chapter = sp['chapter']
         slug = sp['slug']
         start, end = sp['start'], sp['end']
-        words = [w for w in tr['words'] if w['section'] == sec_name]
+        words = sp['words']
         rel = {w['id']: {'start': times[w['id']]['start'] - start,
                          'end': times[w['id']]['end'] - start} for w in words}
-        zs = [z for z in zones if z['section'] == sec_name]
-        # fit: shrink font by 0.9 until the block fits 0.9*H and avoids the zones (floor 0.5x)
-        f_px = font_px
-        while True:
-            lines = style.layout(words, max(8, int(W * 0.84 / (f_px * 0.52))), f_px)
-            lh = int(f_px * 1.25)
-            if _avoids_zones(lines, W, H, f_px, lh, zs):
-                break
-            if f_px <= max(1, font_px // 2):
-                raise ValueError(f'section "{sec_name}" does not fit one frame at {aspect} — '
-                                 'split it with a # heading or move the zone')
-            f_px = max(1, int(f_px * 0.9))
+        # D1': a chapter's zones apply to all its pages (page-named zones too)
+        zs = [z for z in zones if z['section'] == chapter or z['section'] == sec_name]
+        # fit: the page's planned font — the legacy shrink-loop result for a single-page
+        # chapter (D2 byte-identity), the base font for a paginated page; plan_pages
+        # already guaranteed the fit, this is the safety net that keeps the error named
+        f_px = sp['font_px']
+        lines = style.layout(words, max(8, int(W * 0.84 / (f_px * 0.52))), f_px)
+        lh = int(f_px * 1.25)
+        if not _avoids_zones(lines, W, H, f_px, lh, zs):
+            raise ValueError(f'section "{sec_name}" does not fit one frame at {aspect} — '
+                             'split it with a # heading or move the zone')
         x, y = place_text_block(lines, W, H, f_px, lh, zs)
         # DOM: one absolutely positioned line per layout line; words html-escaped; hyphenation
         # piece k>0 gets id el-<id>-<k+1>; element_ids maps the word id to the FIRST piece id
@@ -303,9 +327,12 @@ def generate(project_path, variant='default', max_seconds=None):
                              f'font-size:{f_px}px">{sep.join(spans)}</div>')
         card_id = f'card-{slug}'  # ids only from slugs (Task 12) — never the raw section name
         element_ids[sec_name] = card_id
+        if sp['paginated']:
+            element_ids.setdefault(chapter, card_id)  # chapter -> its first page's card (D1')
         tj = json.dumps({w['id']: rel[w['id']] for w in words})  # scene-relative (Task 12)
         duration = end - start
-        mine = [g for g in ai if g['section'] == sec_name]
+        # D1': chapter-anchored graphics render on every page of the chapter
+        mine = [g for g in ai if g['section'] == sec_name or g['section'] == chapter]
         ai_html = ''.join(
             f'<div class="ai-graphic ai-{g["layer"]}" data-ai-id="{g["id"]}" data-anchor="{g["element"]}">'
             + (read_text(os.path.join(project_path, ai_layer.DIR, g['file']))
@@ -334,10 +361,18 @@ def generate(project_path, variant='default', max_seconds=None):
             ''.join(f".ai-{lyr}{{z-index:{1 if lyr == 'below' else 3}}}\n" for lyr in layers)
         ai_anchors = json.dumps({g['id']: {'element': g['element'], 'layer': g['layer'],
                                            **({'start': rel[g['anchor']['word']]['start']}
-                                              if 'word' in g['anchor'] else {})} for g in mine})
-        # Task 22 page-API data (scene-relative)
-        sections_js = json.dumps({s['name']: round(s['start'] - start, 3)
-                                  for s in load_json(os.path.join(project_path, 'src', 'scenes.json'))})
+                                              if 'word' in g['anchor']
+                                              and g['anchor']['word'] in rel else {})}
+                                for g in mine})
+        # Task 22 page-API data (scene-relative). D1': SECTIONS maps page names AND chapter
+        # names (a chapter resolves to its FIRST page's start)
+        smap = {}
+        for s2 in scenes_json:
+            smap[s2['name']] = round(s2['start'] - start, 3)
+            ch = s2.get('chapter')
+            if ch is not None and ch not in smap:
+                smap[ch] = round(s2['start'] - start, 3)
+        sections_js = json.dumps(smap)
         sec_name_js = sec_name
         palette_js = json.dumps(palette)
         fonts_js2 = json.dumps({r: f'mp-{r}' for r in ('headline', 'label', 'body', 'emphasis')})

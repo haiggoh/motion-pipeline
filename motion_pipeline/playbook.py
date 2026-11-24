@@ -33,11 +33,20 @@ def write_playbook(project_dir):
     tr_path = os.path.join(project_dir, 'transcript_model.json')
     words = load_json(tr_path)['words'] if os.path.isfile(tr_path) else []
     rows = []
+    by_id = {w['id']: i for i, w in enumerate(words)}
     for s in scenes:
-        ws = [w for w in words if w.get('section') == s['name']]
+        if s.get('words'):
+            # 0.8.3 (D1'): a paginated page — match words by the entry's [first, last] range
+            i0, i1 = by_id[s['words'][0]], by_id[s['words'][1]]
+            ws = words[i0:i1 + 1]
+        else:
+            ws = [w for w in words if w.get('section') == s['name']]
         first = ws[0]['id'] if ws else '-'
         last = ws[-1]['id'] if ws else '-'
-        rows.append(f"- `{s['file']}` — section `{s['name']}`: {s['start']:.2f}s–{s['end']:.2f}s "
+        ch = s.get('chapter')
+        label = (f"page `{s['name']}` of chapter `{ch}`" if ch and ch != s['name']
+                 else f"section `{s['name']}`")
+        rows.append(f"- `{s['file']}` — {label}: {s['start']:.2f}s–{s['end']:.2f}s "
                     f"({s['end'] - s['start']:.2f}s), first word `{first}`, last `{last}`")
     scene_table = '\n'.join(rows) or '(no scenes yet — save timings in step 5 first)'
     zones = project_mod.active_zones(p)

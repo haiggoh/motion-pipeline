@@ -14,7 +14,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from motion_pipeline import generate, project, text_styles
+from motion_pipeline import generate, paginate, project, text_styles
 from motion_pipeline.util import load_json
 
 
@@ -36,21 +36,34 @@ def main(argv=None):
     W, H = p['resolution']
     from motion_pipeline.generate import ASPECT_FONT_SCALE
     font_px = int(H / 12 * ASPECT_FONT_SCALE.get(p['aspect'], 1.0))
-    line_h = int(font_px * 1.25)
     bad = 0
+    taken = set()
+    zones = project.active_zones(p)
     for sec in tr['sections']:
         words = [w for w in tr['words'] if w['section'] == sec['name']]
         if not words:
             continue
-        lines = style.layout(words, max(8, int(W * 0.84 / (font_px * 0.52))), font_px)
-        zs = [z for z in project.active_zones(p) if z['section'] == sec['name']]
-        x, y = generate.place_text_block(lines, W, H, font_px, line_h, zs)
-        max_w = max(len(''.join(pc for _, pc, _ in ln)) for ln in lines)
-        block = (x, y, int(max_w * font_px * 0.52), len(lines) * line_h)
-        for z in zs:
-            if generate._rects_intersect(block, z['rect']):
-                print(f'OFFENDER scene={sec["name"]} block={block} zone={z}')
-                bad += 1
+        # 0.8.3 (D4): plan the SAME pages the generator plans (shared paginate.plan_pages)
+        zs_c = [z for z in zones if z['section'] == sec['name']]
+        try:
+            pages = paginate.plan_pages(sec['name'], words, style, W, H, font_px, zs_c,
+                                        p['aspect'], taken)
+        except ValueError as e:
+            print(f'OFFENDER scene={sec["name"]}: {e}')   # unfittable even paginated
+            bad += 1
+            continue
+        for pg in pages:
+            zs = zs_c + [z for z in zones if z['section'] == pg['name']]
+            f_px = pg['font_px']
+            line_h = int(f_px * 1.25)
+            lines = style.layout(pg['words'], max(8, int(W * 0.84 / (f_px * 0.52))), f_px)
+            x, y = generate.place_text_block(lines, W, H, f_px, line_h, zs)
+            max_w = max(len(''.join(pc for _, pc, _ in ln)) for ln in lines)
+            block = (x, y, int(max_w * f_px * 0.52), len(lines) * line_h)
+            for z in zs:
+                if generate._rects_intersect(block, z['rect']):
+                    print(f'OFFENDER scene={pg["name"]} block={block} zone={z}')
+                    bad += 1
     if bad:
         return 1
     print('zones OK')
