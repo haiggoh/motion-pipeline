@@ -95,6 +95,54 @@ def read_os2_weight(path: str, index: int = 0) -> int | None:
         return None
 
 
+def is_collection(path: str) -> bool:
+    try:
+        with open(path, 'rb') as f:
+            return f.read(4) == b'ttcf'
+    except OSError:
+        return False
+
+
+def face_extension(path: str, index: int) -> str:
+    """'.otf' when face `index` of a collection is CFF-flavoured ('OTTO'), else '.ttf'."""
+    with open(path, 'rb') as f:
+        f.seek(12 + 4 * index)
+        off = struct.unpack('>I', f.read(4))[0]
+        f.seek(off)
+        return '.otf' if f.read(4) == b'OTTO' else '.ttf'
+
+
+def extract_face(path: str, index: int, out_path: str) -> str:
+    """Write face `index` of a .ttc/.otc as a standalone .ttf/.otf: a browser's @font-face cannot
+    select a face inside a collection (0.8.3 bug 1). Copies the face's table directory and table
+    bytes verbatim with rewritten offsets (4-byte aligned) — no glyph is touched. Returns out_path.
+    Raises ValueError naming the file when it is not a collection or the index is out of range."""
+    with open(path, 'rb') as f:
+        data = f.read()
+    if data[:4] != b'ttcf':
+        raise ValueError(f'not a font collection: {path}')
+    n = struct.unpack('>I', data[8:12])[0]
+    if not 0 <= index < n:
+        raise ValueError(f'face index {index} out of range 0..{n - 1}: {path}')
+    off = struct.unpack('>I', data[12 + 4 * index:16 + 4 * index])[0]
+    head = data[off:off + 12]                         # sfntVersion, numTables, search fields
+    num_tables = struct.unpack('>H', head[4:6])[0]
+    records = [struct.unpack('>4sIII', data[off + 12 + 16 * k:off + 28 + 16 * k])
+               for k in range(num_tables)]
+    pos = 12 + 16 * num_tables
+    directory, body = [], []
+    for tag, checksum, toff, length in records:
+        directory.append(struct.pack('>4sIII', tag, checksum, pos, length))
+        chunk = data[toff:toff + length]
+        chunk += b'\0' * (-len(chunk) % 4)
+        body.append(chunk)
+        pos += len(chunk)
+    os.makedirs(os.path.dirname(out_path) or '.', exist_ok=True)
+    with open(out_path, 'wb') as f:
+        f.write(head + b''.join(directory) + b''.join(body))
+    return out_path
+
+
 # style-name words -> CSS weight, checked longest-first so 'semibold' wins over 'bold'
 _STYLE_WEIGHTS = (('hairline', 100), ('ultralight', 200), ('extralight', 200), ('thin', 100),
                   ('semibold', 600), ('demibold', 600), ('extrabold', 800), ('ultrabold', 800),

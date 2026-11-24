@@ -180,19 +180,35 @@ class FontsScreen(SubmenuScreen):
             self.query_one('#status', Static).update(
                 'no client fonts — using bundled Montserrat (OFL); pick fonts to override')
         for role, r in cfg['roles'].items():
-            self._set_role_family(role, r['family'], r['weight'])
+            self._set_role_family(role, r['family'], r['weight'], saved=r)
 
-    def _set_role_family(self, role, family, weight=None):
+    @staticmethod
+    def _face_key(face):
+        """Select value = the face's identity, never its weight: faces of one .ttc share a file
+        and may share a weight (Bold / Condensed Bold) — a weight key collapsed them (0.8.3)."""
+        return f"{face['path']}#{face['index']}"
+
+    def _face_for_key(self, family, key):
+        return next((f for f in self._all.get(family, []) if self._face_key(f) == key), None)
+
+    def _set_role_family(self, role, family, weight=None, saved=None):
         self._role_family[role] = family
         faces = [f for f in self._all.get(family, []) if not f['italic']]
         sel = self.query_one(f'#role-{role}-weight', Select)
         # Select options are (prompt, value) tuples in Textual 8
-        sel.set_options([(font_index.weight_label(f), f['weight']) for f in faces])
-        if weight is not None and any(f['weight'] == weight for f in faces):
-            sel.value = weight
-        elif faces:
+        sel.set_options([(font_index.weight_label(f), self._face_key(f)) for f in faces])
+        pick = None
+        if saved:   # a saved face: same file name + index first (copied client faces live in fonts/)
+            base = os.path.basename(str(saved.get('file') or ''))
+            pick = next((f for f in faces if os.path.basename(f['path']) == base
+                         and f['index'] == saved.get('index', 0)), None)
+        if pick is None and weight is not None:
+            pick = next((f for f in faces if f['weight'] == weight), None)
+        if pick is None and faces:
             default_w = fonts_mod.DEFAULT_WEIGHTS[role]
-            sel.value = default_w if any(f['weight'] == default_w for f in faces) else faces[0]['weight']
+            pick = next((f for f in faces if f['weight'] == default_w), faces[0])
+        if pick is not None:
+            sel.value = self._face_key(pick)
         label = f'{family} · {font_index.weight_label(faces[0])}' if faces else family
         self.query_one(f'#role-{role}-family', Static).update(label)
 
@@ -258,11 +274,9 @@ class FontsScreen(SubmenuScreen):
             fam = self._role_family.get(role)
             if not fam:
                 continue
-            w = self.query_one(f'#role-{role}-weight', Select).value
-            faces = [f for f in self._all.get(fam, []) if not f['italic'] and (w is None or f['weight'] == w)]
-            if not faces:
+            face = self._face_for_key(fam, self.query_one(f'#role-{role}-weight', Select).value)
+            if face is None:
                 continue
-            face = next((f for f in faces if f['bundled']), faces[0])
             lines.append((text, face['path'], face['index'], self.PX_BY_ROLE[role]))
         return lines
 
@@ -323,12 +337,11 @@ class FontsScreen(SubmenuScreen):
                 fam = self._role_family[role] or self._selected
                 if not fam:
                     raise ValueError(f'role {role!r} has no family — pick a font in the list first')
-                w = self.query_one(f'#role-{role}-weight', Select).value
-                faces = [f for f in self._all.get(fam, []) if not f['italic'] and f['weight'] == w]
-                if not faces:
-                    raise ValueError(f'font gate: no face {fam} {w} — pick a weight from the list')
-                face = next((f for f in faces if f['bundled']), faces[0])
-                roles[role] = {'family': fam, 'weight': w, 'index': face['index'],
+                key = self.query_one(f'#role-{role}-weight', Select).value
+                face = self._face_for_key(fam, key)
+                if face is None:
+                    raise ValueError(f'font gate: no {fam} face picked for {role} — pick a weight from the list')
+                roles[role] = {'family': fam, 'weight': face['weight'], 'index': face['index'],
                                'file': bundled_ref(face['path']) if face['bundled'] else face['path']}
             p = project_mod.load(pdir)
             cfg = {'roles': fonts_mod.copy_client_faces(pdir, roles)}  # P5: copy client faces at SAVE

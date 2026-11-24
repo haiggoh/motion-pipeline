@@ -14,6 +14,7 @@ import html
 import json
 import os
 
+from . import font_index
 from .util import load_json, read_text
 
 ASPECT_FONT_SCALE = {'16:9': 1.0, '9:16': 0.62, '1:1': 0.72, '4:5': 0.68}
@@ -193,8 +194,15 @@ def generate(project_path, variant='default', max_seconds=None):
     for role in ('headline', 'label', 'body', 'emphasis'):
         r = roles[role]
         base = os.path.basename(r['file'])
-        dst_name = f'{role}-{base}'
-        _sh_fonts.copy(r['file'], os.path.join(fonts_out, dst_name))
+        if font_index.is_collection(r['file']):
+            # 0.8.3: @font-face cannot pick a face inside a .ttc — stage the chosen face alone
+            stem = os.path.splitext(base)[0]
+            ext = font_index.face_extension(r['file'], r.get('index', 0))
+            dst_name = f"{role}-{stem}-{r.get('index', 0)}{ext}"
+            font_index.extract_face(r['file'], r.get('index', 0), os.path.join(fonts_out, dst_name))
+        else:
+            dst_name = f'{role}-{base}'
+            _sh_fonts.copy(r['file'], os.path.join(fonts_out, dst_name))
         face_css.append(f"@font-face{{font-family:'mp-{role}';src:url('fonts/{dst_name}');"
                         f"font-weight:{r['weight']};font-style:normal}}")
         fonts_js.append({'role': role, 'w': r['weight'], 'file': f'fonts/{dst_name}'})

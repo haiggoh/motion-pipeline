@@ -120,9 +120,12 @@ async def test_screen_prefills_saved_roles(tmp_path, monkeypatch):
         scr = app.screen
         await wait_scan(pilot, scr)
         assert 'Montserrat' in str(scr.query_one('#role-headline-family', Static).render())
-        assert scr.query_one('#role-headline-weight', Select).value == 700
+        # 0.8.3: the Select's value is the face identity (path#index); assert the PICKED face
+        head = scr._face_for_key('Montserrat', scr.query_one('#role-headline-weight', Select).value)
+        assert head is not None and head['weight'] == 700, head
         assert 'Inter' in str(scr.query_one('#role-body-family', Static).render())
-        assert scr.query_one('#role-body-weight', Select).value == 400
+        body = scr._face_for_key('Inter', scr.query_one('#role-body-weight', Select).value)
+        assert body is not None and body['weight'] == 400, body
 
 
 @pytest.mark.asyncio
