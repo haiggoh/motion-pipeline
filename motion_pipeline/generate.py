@@ -14,7 +14,6 @@ import html
 import json
 import os
 
-from . import font_index
 from .util import load_json, read_text
 
 ASPECT_FONT_SCALE = {'16:9': 1.0, '9:16': 0.62, '1:1': 0.72, '4:5': 0.68}
@@ -187,6 +186,10 @@ def generate(project_path, variant='default', max_seconds=None):
     os.makedirs(out_dir, exist_ok=True)
     # Task 11: embed each role's face into src/fonts/ and alias it mp-<role> (P6)
     import shutil as _sh_fonts
+
+    # lazy: font_index imports Pillow, and tools/check_zone.py imports this module under a
+    # plain python3 without Pillow (0.8.3 gate regression when this import sat at the top)
+    from . import font_index
     fonts_out = os.path.join(out_dir, 'fonts')
     os.makedirs(fonts_out, exist_ok=True)
     face_css = []
