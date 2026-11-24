@@ -209,8 +209,20 @@ class FontsScreen(SubmenuScreen):
             pick = next((f for f in faces if f['weight'] == default_w), faces[0])
         if pick is not None:
             sel.value = self._face_key(pick)
-        label = f'{family} · {font_index.weight_label(faces[0])}' if faces else family
+        self._update_role_label(role, pick)
+
+    def _update_role_label(self, role, face):
+        """The role row names the PICKED face (0.8.3: it showed the family's first face, so the
+        row kept saying 'Regular' after the user chose Bold)."""
+        family = self._role_family.get(role) or ''
+        label = f'{family} · {font_index.weight_label(face)}' if face else family
         self.query_one(f'#role-{role}-family', Static).update(label)
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        sid = event.select.id or ''
+        if sid.startswith('role-') and sid.endswith('-weight'):
+            role = sid.removeprefix('role-').removesuffix('-weight')
+            self._update_role_label(role, self._face_for_key(self._role_family.get(role), event.value))
 
     def _refresh_list(self, query):
         lv = self.query_one('#fonts', ListView)

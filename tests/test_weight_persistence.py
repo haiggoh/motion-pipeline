@@ -87,6 +87,32 @@ async def test_setting_one_role_to_bold_sticks(tmp_path, ttc_fonts):
         assert _shown(scr2, 'label').startswith('Regular ('), _shown(scr2, 'label')
 
 
+async def test_role_label_shows_the_picked_weight(tmp_path, ttc_fonts):
+    """Screenshot finding (0.8.3): the role row's label kept saying 'Regular (400)' while its
+    dropdown said 'Bold (700)' — the label always showed the family's FIRST face."""
+    from textual.widgets import Static
+    pd = str(tmp_path / 'proj')
+    project_mod.save(pd, project_mod.default_project('p'))
+    app = MenuApp()
+    app.project_dir = pd
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        scr = await _open_fonts(app, pilot)
+        scr._set_role_family('headline', 'Montserrat')
+        def label():
+            return str(scr.query_one('#role-headline-family', Static).render())
+        # the headline DEFAULT is Bold, so each pick must visibly MOVE the label (mutation-proof)
+        _pick(scr, 'headline', 'Regular')
+        await pilot.pause()
+        assert 'Regular (400)' in label(), label()
+        _pick(scr, 'headline', 'Condensed Bold')
+        await pilot.pause()
+        assert 'Condensed Bold (700)' in label(), label()
+        _pick(scr, 'headline', 'Bold')
+        await pilot.pause()
+        assert label().endswith('· Bold (700)'), label()
+
+
 async def test_same_weight_faces_stay_distinct(tmp_path, ttc_fonts):
     """Bold and Condensed Bold are both 700: picking Condensed Bold must save ITS face."""
     pd = str(tmp_path / 'proj')
