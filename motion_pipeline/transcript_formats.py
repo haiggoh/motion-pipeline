@@ -2,9 +2,11 @@
 transcript markup ('# ' sections, '*emphasis*', blank-line paragraphs) (spec B4).
 
 .txt plain UTF-8 · .md maps headings/bold/italic · .docx via stdlib zip+XML (Heading-styled
-paragraphs -> sections, bold/italic runs -> emphasis) · .rtf/.doc via macOS textutil (plain
-text; headings are not recovered — noted in the screen's label) · .pdf via pypdf (lazy import,
-named error when missing). The source file is never written.
+paragraphs -> chapters; formatting-contrast headings D5 -> '# ' chapters; emphasis D6 is
+relative to the dominant body formatting, so an all-bold body is not all-emphasised) ·
+.rtf/.doc via macOS textutil (plain text; headings are not recovered — noted in the screen's
+label) · .pdf via pypdf (lazy import, named error when missing). The source file is never
+written.
 """
 import os
 import re
@@ -51,16 +53,14 @@ def _md_to_markup(text):
     return '\n'.join(out) + '\n'
 
 
-def _docx_to_markup(path):
-    with zipfile.ZipFile(path) as z:
-        xml = z.read('word/document.xml')
-    root = ET.fromstring(xml)
+def _docx_paragraphs(root):
+    """Non-empty paragraphs as dicts: {text, style, runs} — runs = [(text, bold, italic,
+    size_halfpoints|None)]."""
     paras = []
     for p in root.iter(_W + 'p'):
         style_el = p.find(f'{_W}pPr/{_W}pStyle')
         style = style_el.get(_W + 'val') if style_el is not None else ''
-        # run text with bold/italic marking: *word* per word (repo emphasis is per word)
-        parts = []
+        runs = []
         for r in p.findall(_W + 'r'):
             text = ''.join(t.text or '' for t in r.findall(_W + 't'))
             if not text:
@@ -68,17 +68,84 @@ def _docx_to_markup(path):
             rpr = r.find(_W + 'rPr')
             bold = rpr is not None and rpr.find(_W + 'b') is not None
             italic = rpr is not None and rpr.find(_W + 'i') is not None
-            if bold or italic:
-                text = re.sub(r'\S+', lambda m: '*' + m.group(0) + '*', text)
-            parts.append(text)
-        line = ''.join(parts).strip()
-        if not line:
-            continue
-        if style in _HEADING_STYLES:
-            paras.append('# ' + line)
+            sz = rpr.find(_W + 'sz') if rpr is not None else None
+            size = int(sz.get(_W + 'val')) if sz is not None else None
+            runs.append((text, bold, italic, size))
+        text = ''.join(t for t, *_ in runs).strip()
+        if text:
+            paras.append({'text': text, 'style': style, 'runs': runs})
+    return paras
+
+
+def _mode(values, default):
+    from collections import Counter
+    vals = list(values)
+    return Counter(vals).most_common(1)[0][0] if vals else default
+
+
+def _para_traits(p):
+    """(all_bold, modal_run_size, all_caps) — the formatting a paragraph carries."""
+    runs = p['runs']
+    bold = bool(runs) and all(b for _, b, _, _ in runs)
+    sizes = [s for _, _, _, s in runs if s is not None]
+    return bold, _mode(sizes, None), p['text'].isupper()
+
+
+def _dominant_traits(paras):
+    """The DOMINANT body formatting (mode over non-heading paragraphs): (bold, size, caps)."""
+    bodies = [p for p in paras if p['style'] not in _HEADING_STYLES]
+    if not bodies:
+        return (False, None, False)
+    traits = [_para_traits(p) for p in bodies]
+    return (_mode([t[0] for t in traits], False),
+            _mode([t[1] for t in traits], None),
+            _mode([t[2] for t in traits], False))
+
+
+def _is_heading(p, dom, has_body_after):
+    """D5: a paragraph is a chapter heading when its pStyle says so, OR it is short (<= 8
+    words), does not end in . ! ? , is followed by body text, and its formatting DIFFERS
+    from the dominant body formatting (bold flag, run size w:sz, or all-caps). A trailing
+    short line with no body after it is not a heading."""
+    if p['style'] in _HEADING_STYLES:
+        return True
+    if not has_body_after:
+        return False
+    if len(p['text'].split()) > 8:
+        return False
+    if p['text'][-1] in '.,!?':
+        return False
+    return _para_traits(p) != dom
+
+
+def _mark_runs(runs, dom):
+    """D6: emphasis relative to the dominant body — a run is *emphasised* only when it
+    DEVIATES from the dominant formatting (bold flag, italic, or a non-dominant size).
+    Bold that IS the body formatting is not emphasis (the real docx is all-bold body)."""
+    dom_b, dom_s, _ = dom
+    parts = []
+    for text, bold, italic, size in runs:
+        deviates = bold != dom_b or italic or (size is not None and size != dom_s)
+        if deviates:
+            text = re.sub(r'\S+', lambda m: '*' + m.group(0) + '*', text)
+        parts.append(text)
+    return ''.join(parts).strip()
+
+
+def _docx_to_markup(path):
+    with zipfile.ZipFile(path) as z:
+        xml = z.read('word/document.xml')
+    root = ET.fromstring(xml)
+    paras = _docx_paragraphs(root)
+    dom = _dominant_traits(paras)
+    out = []
+    for i, p in enumerate(paras):
+        has_body_after = any(q['text'] for q in paras[i + 1:])
+        if _is_heading(p, dom, has_body_after):
+            out.append('# ' + p['text'])   # chapter names are plain text
         else:
-            paras.append(line)
-    return '\n\n'.join(paras) + '\n'
+            out.append(_mark_runs(p['runs'], dom))
+    return '\n\n'.join(out) + '\n'
 
 
 def _textutil(path):
