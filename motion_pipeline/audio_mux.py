@@ -38,9 +38,11 @@ def sfx_cues(project_dir, timing, model):
         scenes = {}
         for s in load_json(sp):
             scenes[s['name']] = s
-            ch = s.get('chapter')   # 0.8.3: a chapter anchor resolves to its FIRST page
-            if ch is not None and ch not in scenes:
-                scenes[ch] = s
+            # 0.8.3: a chapter/topic/root anchor resolves to its FIRST page
+            for key in ('chapter', 'root'):
+                ch = s.get(key)
+                if ch is not None and ch not in scenes:
+                    scenes[ch] = s
     last_end = max((w['end'] for w in timing['words']), default=0.0)
     out = []
     for g in ai_layer.load_manifest(project_dir, words):

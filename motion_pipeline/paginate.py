@@ -79,6 +79,70 @@ def _paginate_chapter(chapter, words, style, W, H, font_px, zones, aspect):
     return pages
 
 
+def _content_tokens(words):
+    """Content words of a page, in order, deduped — stopwords shared with language_detect
+    (D8), so de and en both work. Deterministic, dependency-free."""
+    from . import language_detect
+    stop = language_detect._STOP['en'] | language_detect._STOP['de']
+    out, seen = [], set()
+    for w in words:
+        for t in language_detect._WORD.findall(w['text'].lower()):
+            if len(t) >= 3 and t not in stop and t not in seen:
+                seen.add(t)
+                out.append(t)
+    return out
+
+
+def _groups(n, bounds):
+    groups, start = [], 0
+    for b in sorted(bounds):
+        groups.append(list(range(start, b + 1)))
+        start = b + 1
+    groups.append(list(range(start, n)))
+    return groups
+
+
+def topic_chapters(chapter, pages):
+    """D7: group the pages of one heading-less chapter into topic chapters — TextTiling-style
+    lexical cohesion: cosine over adjacent pages' content-word sets, boundary at dips below
+    mean - 0.5*std (deepest first, min 2 pages per group, boundaries only between pages).
+    Returns one topic name per page (len == len(pages)); a single group keeps the chapter's
+    own name (source 'single'). Names = first 3 content words of the group's first page."""
+    n = len(pages)
+    if n < 2:
+        return [chapter] * n
+    vecs = [set(_content_tokens(pg['words'])) for pg in pages]
+
+    def cos(a, b):
+        if not a or not b:
+            return 0.0
+        return len(a & b) / (len(a) * len(b)) ** 0.5
+
+    sims = [cos(vecs[i], vecs[i + 1]) for i in range(n - 1)]
+    m = sum(sims) / len(sims)
+    sd = (sum((s - m) ** 2 for s in sims) / len(sims)) ** 0.5
+    thr = m - 0.5 * sd
+    cands = sorted((i for i, s in enumerate(sims) if s < thr), key=lambda i: (sims[i], i))
+    bounds = set()
+    for i in cands:                       # deepest dips first; keep min 2 pages per group
+        trial = bounds | {i}
+        if all(len(g) >= 2 for g in _groups(n, trial)):
+            bounds = trial
+    groups = _groups(n, bounds)
+    if len(groups) <= 1:
+        return [chapter] * n              # source 'single'
+    names, taken = [], set()
+    for g in groups:
+        base = ' '.join(_content_tokens(pages[g[0]]['words'])[:3])
+        name, k = base, 2
+        while name in taken:
+            name = f'{base} {k}'
+            k += 1
+        taken.add(name)
+        names.extend([name] * len(g))
+    return names
+
+
 def plan_pages(chapter, words, style, W, H, font_px, zones, aspect, taken):
     """Plan the pages of one chapter. Returns [{'chapter', 'name', 'slug', 'words', 'font_px',
     'paginated'}] in render order; names/slugs come from the shared `taken` set. A chapter

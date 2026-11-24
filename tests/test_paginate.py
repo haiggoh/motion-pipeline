@@ -1,10 +1,14 @@
-"""Task 6c (D1'/D2/D3/D4): pagination — a chapter that cannot fit one frame splits into
+"""Task 6c/6d (D1'/D2/D3/D4/D7): pagination — a chapter that cannot fit one frame splits into
 pages '<chapter> 1..N', planned by motion_pipeline/paginate.plan_pages and shared by generate
 and tools/check_zone.py. Byte-identity (D2): a chapter that fits is ONE page with its own
-name and no new scenes.json fields.
+name and no new scenes.json fields. 6d: the single heading-less 'default' chapter with >= 3
+pages is grouped into topic chapters (D7) recorded in scenes.json 'chapter' ('root' keeps
+the transcript chapter; its zones still apply to all pages).
 """
 import json
 import os
+import re
+from collections import Counter
 
 import pytest
 from test_scenes import mk, scenes_json
@@ -97,16 +101,9 @@ def test_unfittable_still_raises_naming_chapter(tmp_path):
         generate.generate(d)
 
 
-def test_pages_avoid_chapter_zones(tmp_path):
-    """D1' delivery-level: a chapter's zones apply to ALL its pages — every rendered .line
-    box of every page stays clear of the chapter zone rect."""
-    import re
-    zone = {'section': 'default', 'rect': [100, 700, 1700, 300], 'aspect': '16:9'}
-    d, tr, timing = mk(tmp_path / 'p', _long_text(60), zones=[zone])
-    generate.generate(d)
-    scenes = scenes_json(d)
-    assert len(scenes) >= 2
-    zx, zy, zw, zh = zone['rect']
+def _assert_pages_avoid_zone(d, scenes, zone_rect):
+    """Every generated page's rendered text block stays clear of the zone rect."""
+    zx, zy, zw, zh = zone_rect
     style = text_styles.STYLES[project.load(d).get('text_style', text_styles.DEFAULT)]
     for s in scenes:
         html = open(os.path.join(d, 'src', s['file'])).read()
@@ -121,6 +118,17 @@ def test_pages_avoid_chapter_zones(tmp_path):
         block = (x, y, int(max_w * fs * 0.52), len(lines) * int(fs * 1.25))
         assert not (block[0] < zx + zw and block[0] + block[2] > zx
                     and block[1] < zy + zh and block[1] + block[3] > zy), (s['name'], block)
+
+
+def test_pages_avoid_chapter_zones(tmp_path):
+    """D1' delivery-level: a chapter's zones apply to ALL its pages — every rendered text
+    block of every page stays clear of the chapter zone rect."""
+    zone = {'section': 'default', 'rect': [100, 700, 1700, 300], 'aspect': '16:9'}
+    d, tr, timing = mk(tmp_path / 'p', _long_text(60), zones=[zone])
+    generate.generate(d)
+    scenes = scenes_json(d)
+    assert len(scenes) >= 2
+    _assert_pages_avoid_zone(d, scenes, zone['rect'])
 
 
 @pytest.mark.parametrize('style_name', ['slide-up', 'one-word-center'])
@@ -166,3 +174,67 @@ def test_plan_pages_unit_split_points():
     k = paginate._split_point(chunk, style, 1920, 1080, 90, [])
     # any fitting prefix is accepted; clause candidates come first in the candidate order
     assert k == 3 or 1 <= k <= 5
+
+
+TOPIC_A = ' '.join(f'Alpha briefing sentence {i} covers rockets orbits and fuel systems.'
+                   for i in range(30))
+TOPIC_B = ' '.join(f'Beta kitchen note {i} covers recipes baking bread and ovens.'
+                   for i in range(30))
+
+
+def test_topic_chapters_split_two_topics(tmp_path):
+    """D7: two clearly different topics, no headings -> the paginated 'default' chapter is
+    grouped into 2 topic chapters at the page boundary between them, each >= 2 pages,
+    recorded in scenes.json 'chapter' with 'root' = 'default'."""
+    d, tr, timing = mk(tmp_path / 'p', TOPIC_A + ' ' + TOPIC_B + '\n')
+    generate.generate(d)
+    scenes = scenes_json(d)
+    assert len(scenes) >= 3, len(scenes)
+    assert all(s.get('root') == 'default' for s in scenes)
+    counts = Counter(s['chapter'] for s in scenes)
+    assert len(counts) == 2, counts
+    assert all(c >= 2 for c in counts.values()), counts   # min 2 pages per chapter
+    # the split is at the A/B boundary: the first page containing B-words starts topic B
+    b_pages = [s for s in scenes
+               if any(t in ('recipes', 'kitchens', 'baking') for w in _page_words(d, s)
+                      for t in w['text'].lower().split())]
+    assert b_pages and b_pages[0]['chapter'] != scenes[0]['chapter']
+    # SECTIONS in the page JS maps page names, topic names AND the root chapter
+    html = open(os.path.join(d, 'src', scenes[0]['file'])).read()
+    smap = json.loads(re.search(r'const SECTIONS = (\{.*?\});', html).group(1))
+    assert scenes[0]['name'] in smap and 'default' in smap
+    assert all(ch in smap for ch in counts)
+
+
+def test_topic_chapters_uniform_text_stays_single(tmp_path):
+    """D7: uniform text -> no cohesion dip -> ONE chapter, recorded as 'default' (source
+    'single'), root 'default'."""
+    d, tr, timing = mk(tmp_path / 'p', _long_text(60))
+    generate.generate(d)
+    scenes = scenes_json(d)
+    assert len(scenes) >= 3
+    assert all(s['chapter'] == 'default' and s.get('root') == 'default' for s in scenes), scenes
+
+
+def test_zones_of_default_apply_to_topic_pages(tmp_path):
+    """D1'+D7: a zone anchored to 'default' applies to every page of every topic chapter."""
+    zone = {'section': 'default', 'rect': [100, 700, 1700, 300], 'aspect': '16:9'}
+    d, tr, timing = mk(tmp_path / 'p', TOPIC_A + ' ' + TOPIC_B + '\n', zones=[zone])
+    generate.generate(d)
+    scenes = scenes_json(d)
+    assert len(Counter(s['chapter'] for s in scenes)) == 2
+    _assert_pages_avoid_zone(d, scenes, zone['rect'])
+
+
+def test_topic_chapters_unit():
+    """Unit: disjoint vocabularies -> 2 groups; shared vocabulary -> 1 group."""
+    def pg(text):
+        return {'words': [{'id': f'w{i}', 'text': t, 'section': 'default',
+                           'emphasized': False, 'line': 1}
+                          for i, t in enumerate(text.split())]}
+    a = [pg(f'Alpha rockets orbits fuel {i} mission control launch.') for i in range(4)]
+    b = [pg(f'Beta recipes baking bread ovens kitchen {i} dinner party.') for i in range(4)]
+    names = paginate.topic_chapters('default', a + b)
+    assert len(set(names)) == 2 and len(names) == 8, names
+    uni = [pg('Same words repeat here every single page today.') for _ in range(5)]
+    assert len(set(paginate.topic_chapters('default', uni))) == 1

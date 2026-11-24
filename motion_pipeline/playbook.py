@@ -44,8 +44,11 @@ def write_playbook(project_dir):
         first = ws[0]['id'] if ws else '-'
         last = ws[-1]['id'] if ws else '-'
         ch = s.get('chapter')
+        root = s.get('root')
         label = (f"page `{s['name']}` of chapter `{ch}`" if ch and ch != s['name']
                  else f"section `{s['name']}`")
+        if root and root != ch:
+            label += f" (transcript chapter `{root}`)"
         rows.append(f"- `{s['file']}` — {label}: {s['start']:.2f}s–{s['end']:.2f}s "
                     f"({s['end'] - s['start']:.2f}s), first word `{first}`, last `{last}`")
     scene_table = '\n'.join(rows) or '(no scenes yet — save timings in step 5 first)'
