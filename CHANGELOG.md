@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.4] — 2026-11-25 — render-script hardening + shapes-runner anchor fixes
+
+- `tools/render_scene.sh --dry-run` is plan-only now: it no longer creates the output or work
+  directories (and the disk guard is skipped); `render_cli` no longer writes timeline/sequence
+  artifacts on a dry run.
+- `--fresh` guards on the real masters (`*.mov`) instead of the pre-Task-15 `.mp4`, and its
+  cleanup now runs BEFORE the resume-refusal check, so a stale `render_info.json` can no longer
+  block the fresh run that would fix it. Masters are still never deleted.
+- `mp_lib.js` `MP.runShapes`: `inZone` resolves named `anchor` targets like every other step;
+  an unknown `anchor` now fails with `MP_SHAPES_NO_ANCHOR <name>` and skips the step instead of
+  silently falling back to the current element; stale `props.at_off` comment corrected to
+  `props.at`.
+
 ## [0.8.3] — 2026-11-25 — the four 0.8.2 defects fixed + chapters/pages transcript structure
 
 Fixes (user-reported on 0.8.2 testing):
