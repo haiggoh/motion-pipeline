@@ -608,8 +608,9 @@ def main(argv=None):
             generate.generate(pd, 'default')
             timing = load_json(os.path.join(os.path.abspath(a.project), 'timing.json'))
             model = load_json(os.path.join(os.path.abspath(a.project), 'transcript_model.json'))
-            print(f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
-                  f'engine {timing["method"]}', flush=True)
+            n_ch = len(model["sections"])
+            print(f'timings saved — {len(model["words"])} words, {n_ch} chapter'
+                  + ('s' if n_ch != 1 else '') + f', engine {timing["method"]}', flush=True)
             return 0
         if not a.project or not a.mode:
             ap.error('--project and --mode are required (or use --check / --check-graphics / --render-test / --prepare-only / --setup)')
