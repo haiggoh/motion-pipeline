@@ -45,7 +45,9 @@ def sfx_cues(project_dir, timing, model):
                     scenes[ch] = s
     last_end = max((w['end'] for w in timing['words']), default=0.0)
     out = []
-    for g in ai_layer.load_manifest(project_dir, words):
+    # 0.8.3: page/chapter/topic names from scenes.json are valid manifest anchor names too
+    extra = list(scenes.keys()) if scenes else []
+    for g in ai_layer.load_manifest(project_dir, words, extra_names=extra):
         for i, cue in enumerate(g.get('sfx') or []):
             if isinstance(cue, dict):
                 pass

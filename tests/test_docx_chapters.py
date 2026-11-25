@@ -105,3 +105,32 @@ def test_markup_emits_hash_headings(tmp_path):
     markup = to_markup(p)
     assert '\n\n# Part One\n\n' in markup and '\n\n# Part Two\n\n' in markup
     assert '*' not in markup  # chapter names are plain; body is not emphasised
+
+
+def test_caps_is_the_sole_contrast(tmp_path):
+    """D5: a non-bold (CAPS) short line against a non-bold lowercase body — the all-caps trait
+    ALONE makes it a heading (RED if isupper() is removed from the traits)."""
+    paras = [
+        {'text': 'Body paragraph one with enough plain lowercase words to count as body text here.'},
+        {'text': '(SOME HEADING)'},
+        {'text': 'Body paragraph two with enough plain lowercase words to count as body text now.'},
+    ]
+    model = transcript.load(build_docx(str(tmp_path / 'caps.docx'), paras))
+    assert [s['name'] for s in model['sections']] == ['Intro', '(SOME HEADING)']
+
+
+def test_d6_italic_and_size_runs_deviate(tmp_path):
+    """D6: an italic run or a larger-size run INSIDE a plain body paragraph deviates from the
+    dominant formatting and is emphasised; its neighbours are not (RED if italic/size are
+    dropped from the deviation check)."""
+    paras = [
+        {'runs': [('plain words here ', False, False, None),
+                  ('italics', False, True, None),
+                  (' and more plain words ', False, False, None),
+                  ('bigger', False, False, 48),
+                  (' tail words here.', False, False, None)]},
+        {'text': 'Second body paragraph with plenty of plain words to anchor the dominant style.'},
+    ]
+    model = transcript.load(build_docx(str(tmp_path / 'dev.docx'), paras))
+    emph = [w['text'] for w in model['words'] if w['emphasized']]
+    assert emph == ['italics', 'bigger'], emph

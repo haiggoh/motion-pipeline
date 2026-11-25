@@ -92,13 +92,16 @@ def _para_traits(p):
 
 
 def _dominant_traits(paras):
-    """The DOMINANT body formatting (mode over non-heading paragraphs): (bold, size, caps)."""
+    """The DOMINANT body formatting over non-heading paragraphs: (bold, size, caps). The size
+    mode is taken over ALL body run sizes (None included) — a single deviating run inside one
+    paragraph must not become the dominant size itself."""
     bodies = [p for p in paras if p['style'] not in _HEADING_STYLES]
     if not bodies:
         return (False, None, False)
     traits = [_para_traits(p) for p in bodies]
+    run_sizes = [r[3] for p in bodies for r in p['runs']]
     return (_mode([t[0] for t in traits], False),
-            _mode([t[1] for t in traits], None),
+            _mode(run_sizes, None),
             _mode([t[2] for t in traits], False))
 
 

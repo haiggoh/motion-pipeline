@@ -171,13 +171,33 @@ def test_plan_pages_unit_split_points():
     chunks = paginate._sentence_chunks(words)
     assert [[w['text'] for w in c] for c in chunks] == [['One.'], ['Two,', 'three.'],
                                                         ['Four;', 'five.']]
-    # clause boundary nearest the middle is preferred over a plain word boundary
-    chunk = [{'id': f'w{i}', 'text': f'word{i},' if i == 2 else f'word{i}', 'section': 'd',
+    # clause boundary is preferred over the word boundary nearest the middle: chunk of 6
+    # words with a clause mark after word 1 (k=2) -> mid = 3, but k must be EXACTLY 2
+    # (a word-first candidate order would return 3)
+    chunk = [{'id': f'w{i}', 'text': f'word{i},' if i == 1 else f'word{i}', 'section': 'd',
               'emphasized': False, 'line': 1} for i in range(6)]
     style = text_styles.STYLES['slide-up']
-    k = paginate._split_point(chunk, style, 1920, 1080, 90, [])
-    # any fitting prefix is accepted; clause candidates come first in the candidate order
-    assert k == 3 or 1 <= k <= 5
+    assert paginate._split_point(chunk, style, 1920, 1080, 90, []) == 2
+    # em-dash is a clause mark too
+    chunk2 = [{'id': f'w{i}', 'text': f'word{i}—' if i == 1 else f'word{i}', 'section': 'd',
+               'emphasized': False, 'line': 1} for i in range(6)]
+    assert paginate._split_point(chunk2, style, 1920, 1080, 90, []) == 2
+    # clause mark exactly at the middle -> k == 3
+    chunk3 = [{'id': f'w{i}', 'text': f'word{i},' if i == 2 else f'word{i}', 'section': 'd',
+               'emphasized': False, 'line': 1} for i in range(6)]
+    assert paginate._split_point(chunk3, style, 1920, 1080, 90, []) == 3
+    # a chunk that fits nowhere yields None (single word cannot be placed)
+    assert paginate._split_point(chunk, style, 200, 100, 90, []) is None
+
+
+def test_sentence_chunks_break_at_paragraph_gap():
+    """D3: a chunk also breaks at a paragraph gap (line jump >= 2)."""
+    words = [{'id': 'w0', 'text': 'alpha', 'section': 'd', 'emphasized': False, 'line': 1},
+             {'id': 'w1', 'text': 'beta', 'section': 'd', 'emphasized': False, 'line': 1},
+             {'id': 'w2', 'text': 'gamma', 'section': 'd', 'emphasized': False, 'line': 3},
+             {'id': 'w3', 'text': 'delta', 'section': 'd', 'emphasized': False, 'line': 3}]
+    chunks = paginate._sentence_chunks(words)
+    assert [[w['id'] for w in c] for c in chunks] == [['w0', 'w1'], ['w2', 'w3']]
 
 
 TOPIC_A = ' '.join(f'Alpha briefing sentence {i} covers rockets orbits and fuel systems.'
@@ -203,11 +223,18 @@ def test_topic_chapters_split_two_topics(tmp_path):
                if any(t in ('recipes', 'kitchens', 'baking') for w in _page_words(d, s)
                       for t in w['text'].lower().split())]
     assert b_pages and b_pages[0]['chapter'] != scenes[0]['chapter']
-    # SECTIONS in the page JS maps page names, topic names AND the root chapter
+    # SECTIONS in the page JS maps page names, topic names AND the root chapter — and a
+    # chapter/topic maps to its FIRST page's start (value, not just presence)
     html = open(os.path.join(d, 'src', scenes[0]['file'])).read()
     smap = json.loads(re.search(r'const SECTIONS = (\{.*?\});', html).group(1))
     assert scenes[0]['name'] in smap and 'default' in smap
-    assert all(ch in smap for ch in counts)
+    base = scenes[0]['start']
+    for s in scenes:
+        assert smap[s['name']] == round(s['start'] - base, 3), s['name']
+        for key in ('chapter', 'root'):
+            if s.get(key):
+                first = next(x for x in scenes if x.get(key) == s[key])
+                assert smap[s[key]] == round(first['start'] - base, 3), (s[key], smap[s[key]])
 
 
 def test_topic_chapters_uniform_text_stays_single(tmp_path):
@@ -242,6 +269,84 @@ def test_topic_chapters_unit():
     assert len(set(names)) == 2 and len(names) == 8, names
     uni = [pg('Same words repeat here every single page today.') for _ in range(5)]
     assert len(set(paginate.topic_chapters('default', uni))) == 1
+
+
+def test_topic_chapters_min_two_pages_per_chapter():
+    """D7 min-2-pages: a single oddball page between two topic blocks must be merged into a
+    neighbouring topic, never form a 1-page chapter (RED when the guard is deleted)."""
+    def pg(text):
+        return {'words': [{'id': f'w{i}', 'text': t, 'section': 'default',
+                           'emphasized': False, 'line': 1}
+                          for i, t in enumerate(text.split())]}
+    a = [pg('Alpha rockets orbits fuel mission control launch.') for _ in range(2)]
+    odd = [pg('Zebra xylophone quixotic jazz vibes tonight.')]
+    b = [pg('Beta recipes baking bread ovens kitchen dinner.') for _ in range(3)]
+    names = paginate.topic_chapters('default', a + odd + b)
+    counts = Counter(names)
+    assert len(counts) == 2 and all(c >= 2 for c in counts.values()), counts
+
+
+def test_topic_chapters_deterministic():
+    """D7: same input -> identical output (tie-breaks included)."""
+    def pg(text):
+        return {'words': [{'id': f'w{i}', 'text': t, 'section': 'default',
+                           'emphasized': False, 'line': 1}
+                          for i, t in enumerate(text.split())]}
+    pages = [pg(f'Alpha rockets orbits fuel mission {i}.') for i in range(3)] + \
+            [pg(f'Beta recipes baking bread ovens {i}.') for i in range(3)]
+    assert paginate.topic_chapters('default', pages) == paginate.topic_chapters('default', pages)
+
+
+def test_fits_only_after_shrink_stays_one_page(tmp_path):
+    """D2: a chapter that fits only after the legacy shrink loop stays ONE page with the
+    shrunk font (RED if the legacy loop is deleted and it paginates at base instead)."""
+    d, tr, timing = mk(tmp_path / 'p', '# S\n' + 'wort ' * 120 + '\n')
+    generate.generate(d)
+    scenes = scenes_json(d)
+    assert len(scenes) == 1 and scenes[0]['name'] == 'S', scenes
+    assert set(scenes[0].keys()) == {'index', 'name', 'slug', 'start', 'end', 'file'}
+    html = open(os.path.join(d, 'src', scenes[0]['file'])).read()
+    fs = int(re.search(r'class="line"[^>]*font-size:(\d+)px', html).group(1))
+    assert fs < 90, fs   # shrunk below the 16:9 base font
+
+
+def test_topic_chapters_only_for_headingless_default(tmp_path):
+    """D7 'default only': a NAMED chapter (# Overview) with two topics and >= 3 pages is NOT
+    topic-grouped — its pages keep chapter == 'Overview' (RED if the guard is deleted)."""
+    d, tr, timing = mk(tmp_path / 'p', '# Overview\n' + TOPIC_A + ' ' + TOPIC_B + '\n')
+    generate.generate(d)
+    scenes = scenes_json(d)
+    assert len(scenes) >= 3, len(scenes)
+    assert all(s.get('root') == 'Overview' and s['chapter'] == 'Overview' for s in scenes), \
+        [s.get('chapter') for s in scenes]
+
+
+def test_ai_graphics_anchored_to_page_and_chapter(tmp_path):
+    """D1'/6e delivery: a paginated project + manifest with a graphic anchored to page
+    'default 2' lands in exactly that page's HTML; one anchored to chapter 'default' lands in
+    EVERY page's HTML."""
+    d, tr, timing = mk(tmp_path / 'p', _long_text(60))
+    ag = os.path.join(d, 'ai_graphics')
+    os.makedirs(ag)
+    open(os.path.join(ag, 'page.html'), 'w').write('<div id="pageg"></div>')
+    open(os.path.join(ag, 'chap.html'), 'w').write('<div id="chapg"></div>')
+    with open(os.path.join(ag, 'manifest.json'), 'w') as f:
+        json.dump({'graphics': [
+            {'id': 'pageg', 'file': 'page.html', 'anchor': {'section': 'default 2'},
+             'layer': 'above'},
+            {'id': 'chapg', 'file': 'chap.html', 'anchor': {'section': 'default'},
+             'layer': 'above'},
+        ]}, f)
+    generate.generate(d)
+    scenes = scenes_json(d)
+    assert len(scenes) >= 2
+    per_page = {}
+    for s in scenes:
+        html = open(os.path.join(d, 'src', s['file'])).read()
+        per_page[s['name']] = ('data-ai-id="pageg"' in html, 'data-ai-id="chapg"' in html)
+    assert per_page['default 2'] == (True, True)
+    assert per_page['default 1'] == (False, True)
+    assert all(chap for _, chap in per_page.values())   # chapter graphic on EVERY page
 
 
 def test_delivery_prepare_only_docx_chapters_and_pages(tmp_path):
