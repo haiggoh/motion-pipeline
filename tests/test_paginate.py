@@ -235,6 +235,12 @@ def test_topic_chapters_split_two_topics(tmp_path):
             if s.get(key):
                 first = next(x for x in scenes if x.get(key) == s[key])
                 assert smap[s[key]] == round(first['start'] - base, 3), (s[key], smap[s[key]])
+    # a LATER page's SECTIONS: the chapter still resolves to its FIRST page, relative to
+    # that page's own start (negative offset), not to 0
+    html2 = open(os.path.join(d, 'src', scenes[1]['file'])).read()
+    smap2 = json.loads(re.search(r'const SECTIONS = (\{.*?\});', html2).group(1))
+    assert smap2[scenes[0]['chapter']] == round(scenes[0]['start'] - scenes[1]['start'], 3)
+    assert smap2[scenes[1]['name']] == 0.0
 
 
 def test_topic_chapters_uniform_text_stays_single(tmp_path):
@@ -347,6 +353,9 @@ def test_ai_graphics_anchored_to_page_and_chapter(tmp_path):
     assert per_page['default 2'] == (True, True)
     assert per_page['default 1'] == (False, True)
     assert all(chap for _, chap in per_page.values())   # chapter graphic on EVERY page
+    # element_ids maps the chapter to its FIRST page's card (setdefault, not last)
+    eids = json.load(open(os.path.join(d, 'src', 'element_ids.json')))
+    assert eids['default'] == f"card-{scenes[0]['slug']}", eids.get('default')
 
 
 def test_delivery_prepare_only_docx_chapters_and_pages(tmp_path):
