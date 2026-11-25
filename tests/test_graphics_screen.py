@@ -48,7 +48,8 @@ async def test_instructions_show_live_counts_and_path_and_playbook_regenerated(t
         await pilot.pause()
         text = str(app.screen.query_one('#instructions').render())
         tr = json.load(open(os.path.join(pd, 'transcript_model.json')))
-        assert f'{len(tr["words"])} words' in text and f'{len(tr["sections"])} sections' in text
+        # 0.8.3: sections are called chapters (D1'); pages appear once a generate has run
+        assert f'{len(tr["words"])} words' in text and f'{len(tr["sections"])} chapters' in text
         assert 'MOTION_GRAPHICS_PLAYBOOK.md' in text and pd in text
         assert os.path.isfile(os.path.join(pd, 'MOTION_GRAPHICS_PLAYBOOK.md'))  # regenerated on visit
         # free-agents absent: no Selects, the install hint + manual route instead

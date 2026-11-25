@@ -39,8 +39,9 @@ Add files ONLY inside `ai_graphics/`:
 
 Every scene page defines `window.MP` BEFORE any ai_graphics script runs:
 - `MP.tl` IS the scene's registered paused timeline — add your tweens to it, never create your own.
-- `MP.at('w12')` = that word's scene-relative start (seconds); `MP.at('#Intro')` = section start;
-  `MP.at(2.5)` = 2.5 s. `MP.at(ref, offset)` adds offset.
+- `MP.at('w12')` = that word's scene-relative start (seconds); `MP.at('#Intro')` = chapter start
+  (its FIRST page's start — chapters may span several pages); a page name like `'#default 2'`
+  addresses that page directly; `MP.at(2.5)` = 2.5 s. `MP.at(ref, offset)` adds offset.
 - `MP.timings`, `MP.anchors`, `MP.scene` ({name, slug, start, end, duration}), `MP.frame`
   ({W, H, fps, aspect}), `MP.palette` (hex per key), `MP.fonts` ({role: 'mp-<role>'}),
   `MP.zones` ([[x,y,w,h], ...] active zones of THIS scene), `MP.sfx` (read-only cue list).
@@ -74,8 +75,18 @@ the L1 helpers `el/enter/exit/drawOn/float/inZone`) — the generic runner `MP.r
 places every tween at the absolute position you name. Ship a `.js` script only for one-off
 complex motion the block cannot express.
 
-Scene table (scene, section, start, end, duration, first/last word id):
+Scene table (scene, chapter/page, start, end, duration, first/last word id):
 {scene_table}
+
+## Chapters vs pages (0.8.3)
+
+The transcript's sections are CHAPTERS (a `#` heading in the markup, or a formatting-detected
+headline in a .docx). A chapter too big for one frame is split at GENERATE time into PAGES
+`<chapter> 1..N` (packed at the base font size, split at sentence ends) — pages drive the text
+animations; chapters drive motion graphics: a graphic anchored to a chapter (`#Chapter`) renders
+on every page of that chapter and `MP.at('#Chapter')` is the chapter's first page. A chapter's
+keep-out zones apply to all its pages. The single heading-less chapter may be grouped into topic
+chapters (scenes.json `chapter`/`root`).
 
 Word ids live in `timing.json` (`words[].id`) and `src/element_ids.json` (published element ids).
 

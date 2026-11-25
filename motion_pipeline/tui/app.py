@@ -504,8 +504,14 @@ class InputsScreen(SubmenuScreen):
             try:
                 timing = load_json(os.path.join(pd, 'timing.json'))
                 model = load_json(os.path.join(pd, 'transcript_model.json'))
+                from .. import project as project_mod
+                ch, pg, src = project_mod.chapter_page_counts(pd)
+                ch = ch if ch is not None else len(model['sections'])
+                label = f'{ch} chapter' + ('s' if ch != 1 else '')
+                if pg:
+                    label += f' · {pg} pages (source {src})'
                 self.query_one('#status', Static).update(
-                    f'timings saved — {len(model["words"])} words, {len(model["sections"])} sections, '
+                    f'timings saved — {len(model["words"])} words, {label}, '
                     f'engine {timing["method"]}')
                 self.query_one('#error', Static).update('')
                 self._update_wpm_indicator()

@@ -179,6 +179,15 @@ class ZonesScreen(SubmenuScreen):
         except (ValueError, OSError):
             return None, 'transcript not readable — section not checked'
         names = [s['name'] for s in model['sections']]
+        sp = os.path.join(pd, 'src', 'scenes.json')
+        if os.path.isfile(sp):
+            # 0.8.3: generated page / topic-chapter names are valid zone anchors too
+            with open(sp) as f:
+                for s in json.load(f):
+                    names.append(s['name'])
+                    for key in ('chapter', 'root'):
+                        if s.get(key):
+                            names.append(s[key])
         if section not in names:
             return f"unknown section {section!r} — transcript has {names}", None
         return None, None

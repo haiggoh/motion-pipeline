@@ -65,8 +65,14 @@ class GraphicsScreen(SubmenuScreen):
         if n_words is None:
             text = '(no project open — pick one in step 0 first)'
         else:
+            from .. import project as project_mod
+            ch, pg, src = project_mod.chapter_page_counts(pd)
+            ch = ch if ch is not None else n_sections
+            label = f'{ch} chapter' + ('s' if ch != 1 else '')
+            if pg:
+                label += f' · {pg} pages (source {src})'
             text = (
-                f'1. Your timings are saved ({n_words} words, {n_sections} sections). Graphics '
+                f'1. Your timings are saved ({n_words} words, {label}). Graphics '
                 f'attach to them, so a new VO take re-times them automatically.\n'
                 f'2. Give your AI two things: this project folder ({show_path(str(pd))}) and the '
                 f'playbook {playbook.OUT_NAME} inside it.\n'

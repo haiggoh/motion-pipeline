@@ -103,6 +103,27 @@ def active_zones(p):
     return [z for z in p.get('zones', []) if z.get('aspect', p['aspect']) == p['aspect']]
 
 
+def chapter_page_counts(project_dir):
+    """(n_chapters, n_pages, source) for the TUI (0.8.3 D1'): chapters from
+    transcript_model.json; pages + source from src/scenes.json after a generate — source
+    'topic' when D7 topic chapters are present, else 'heading'. Pages/source are None before
+    the first generate."""
+    chapters = None
+    tmp = os.path.join(project_dir, 'transcript_model.json')
+    if os.path.isfile(tmp):
+        with open(tmp) as f:
+            chapters = len(json.load(f).get('sections', []))
+    pages = source = None
+    sp = os.path.join(project_dir, 'src', 'scenes.json')
+    if os.path.isfile(sp):
+        with open(sp) as f:
+            scenes = json.load(f)
+        pages = len(scenes)
+        source = ('topic' if any(s.get('chapter') and s['chapter'] != s.get('root', s['name'])
+                                 for s in scenes) else 'heading')
+    return chapters, pages, source
+
+
 def project_dir(root, name):
     return os.path.join(root, 'projects', name)
 

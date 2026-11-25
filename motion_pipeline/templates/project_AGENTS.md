@@ -26,9 +26,12 @@ parts the menu has to keep editing.
 ```
 
 - `id`: unique, lowercase letters/digits/`-`/`_`.
-- `anchor`: exactly ONE of `{"word": <word id>}` or `{"section": <section name>}` — never
+- `anchor`: exactly ONE of `{"word": <word id>}` or `{"section": <chapter/page name>}` — never
   seconds. Word ids and section card ids are listed in `src/element_ids.json` (after a
   generate); a new voiceover take re-times everything anchored this way automatically.
+  Sections are CHAPTERS; a big chapter is split into pages `<chapter> 1..N` at generate time —
+  a chapter anchor renders on every page of the chapter and resolves to its first page;
+  a page name (e.g. `"default 2"`) anchors that single page.
 - `layer`: `above` (default) or `below` the generated text.
 - `sfx` (optional, the AI stage declares them — the menu NEVER writes SFX): a LIST of cues,
   `"sfx": [{"file": "sfx/whoosh.wav", "offset": 0.0, "gain_db": -3.0}]` — `file` is relative

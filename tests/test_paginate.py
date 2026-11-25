@@ -8,9 +8,13 @@ the transcript chapter; its zones still apply to all pages).
 import json
 import os
 import re
+import subprocess
+import sys
 from collections import Counter
 
 import pytest
+from docx_fixture import build_docx
+from projfix import ROOT, make_project
 from test_scenes import mk, scenes_json
 
 from motion_pipeline import generate, paginate, project, text_styles
@@ -238,3 +242,53 @@ def test_topic_chapters_unit():
     assert len(set(names)) == 2 and len(names) == 8, names
     uni = [pg('Same words repeat here every single page today.') for _ in range(5)]
     assert len(set(paginate.topic_chapters('default', uni))) == 1
+
+
+def test_delivery_prepare_only_docx_chapters_and_pages(tmp_path):
+    """Shipped path (0.8.3 delivery test): a synthetic project whose transcript is a .docx —
+    one Heading1 chapter + a 400-word body — run through the REAL CLI
+    `render_cli --prepare-only` exits 0, and src/scenes.json lists > 1 page of that chapter
+    (root 'Overview'), i.e. the docx chapters flow through with no manual step."""
+    pd = make_project(str(tmp_path / 'proj'))
+    p = project.load(pd)
+    build_docx(os.path.join(pd, 'transcript.docx'),
+               [{'text': 'Overview', 'style': 'Heading1'},
+                {'text': _long_text(60)}])
+    p['transcript'] = 'transcript.docx'
+    project.save(pd, p)
+    env = dict(os.environ, PYTHONPATH=ROOT)
+    r = subprocess.run([sys.executable, '-m', 'motion_pipeline.render_cli',
+                        '--project', pd, '--prepare-only'],
+                       capture_output=True, text=True, cwd=ROOT, env=env)
+    assert r.returncode == 0, (r.returncode, r.stdout[-300:], r.stderr[-500:])
+    scenes = scenes_json(pd)
+    assert len(scenes) > 1, scenes
+    assert all(s.get('root') == 'Overview' and s['chapter'] == 'Overview' for s in scenes), scenes
+    assert [s['name'] for s in scenes] == [f'Overview {i + 1}' for i in range(len(scenes))]
+    ch, pg, src = project.chapter_page_counts(pd)
+    assert (ch, pg, src) == (1, len(scenes), 'heading'), (ch, pg, src)
+
+
+def test_ai_layer_accepts_chapter_and_page_names(tmp_path):
+    """D1'/6e: ai_layer validation accepts chapter AND page names (extra_names); unknown
+    names still raise."""
+    from motion_pipeline import ai_layer
+    d = str(tmp_path / 'proj')
+    os.makedirs(os.path.join(d, 'ai_graphics'))
+    open(os.path.join(d, 'ai_graphics', 'g.html'), 'w').write('<div></div>')
+    words = [{'id': 'w0', 'text': 'hello', 'section': 'default', 'emphasized': False}]
+
+    def manifest(section):
+        return {'graphics': [{'id': 'g1', 'file': 'g.html',
+                              'anchor': {'section': section}, 'layer': 'above'}]}
+
+    with open(os.path.join(d, 'ai_graphics', 'manifest.json'), 'w') as f:
+        json.dump(manifest('default 2'), f)
+    with pytest.raises(ValueError, match='unknown section'):
+        ai_layer.load_manifest(d, words)                      # page name not yet known
+    entries = ai_layer.load_manifest(d, words, extra_names=['default 1', 'default 2'])
+    assert entries[0]['section'] == 'default 2'
+    with open(os.path.join(d, 'ai_graphics', 'manifest.json'), 'w') as f:
+        json.dump(manifest('nope'), f)
+    with pytest.raises(ValueError, match='unknown section'):
+        ai_layer.load_manifest(d, words, extra_names=['default 2'])

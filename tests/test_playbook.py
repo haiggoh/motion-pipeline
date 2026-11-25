@@ -54,6 +54,19 @@ def test_playbook_sections_present(tmp_path):
         assert h in text, h
 
 
+def test_playbook_explains_chapters_vs_pages(tmp_path):
+    """0.8.3 (6e): the playbook explains chapters (motion graphics) vs pages (text animation),
+    '#chapter' anchors resolving to the chapter's first page, and page-name anchors."""
+    pd = make_project(tmp_path / 'p')
+    generate.generate(pd)
+    text = open(playbook.write_playbook(pd)).read()
+    assert '## Chapters vs pages (0.8.3)' in text
+    assert "MP.at('#Intro')` = chapter start" in text
+    assert "'#default 2'" in text
+    agents = open(os.path.join(pd, 'AGENTS.md')).read()
+    assert 'CHAPTERS' in agents and '`<chapter> 1..N`' in agents
+
+
 def test_playbook_has_zones_and_manifest_entries(tmp_path):
     pd = make_project(tmp_path / 'p')
     p = json.load(open(os.path.join(pd, 'project.json')))

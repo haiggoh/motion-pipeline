@@ -136,7 +136,7 @@ async def test_save_success_reports_timing_counts(tmp_path):
             lambda: 'timings saved' in str(scr.query_one('#status', Static).render()), pilot)
         status = str(scr.query_one('#status', Static).render())
         assert ok, f'status never updated: {status!r}'
-        assert 'timings saved — 2 words, 1 sections, engine estimated' in status, status
+        assert 'timings saved — 2 words, 1 chapter, engine estimated' in status, status
 
 
 @pytest.mark.asyncio
@@ -163,7 +163,8 @@ async def test_save_with_docx_transcript_reports_sections_and_words(tmp_path):
             tries=150)   # real prepare-only can take >10 s under load
         status = str(scr.query_one('#status', Static).render())
         assert ok, f'status: {status!r}'
-        assert '1 sections' in status and '7 words' in status, status   # docx: Intro + 7 words
+        # docx: Intro chapter + 7 words; after generate: 1 chapter · 1 pages (source heading)
+        assert '1 chapter · 1 pages (source heading)' in status and '7 words' in status, status
 
 
 # ---- Task 16 (B4): auto language default + measured wpm when a VO is set ----
