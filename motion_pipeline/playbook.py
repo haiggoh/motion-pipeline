@@ -35,11 +35,12 @@ def write_playbook(project_dir):
     rows = []
     by_id = {w['id']: i for i, w in enumerate(words)}
     for s in scenes:
-        if s.get('words'):
+        if s.get('words') and s['words'][0] in by_id and s['words'][1] in by_id:
             # 0.8.3 (D1'): a paginated page — match words by the entry's [first, last] range
             i0, i1 = by_id[s['words'][0]], by_id[s['words'][1]]
             ws = words[i0:i1 + 1]
         else:
+            # single-page scene, or a stale scenes.json whose word ids no longer exist
             ws = [w for w in words if w.get('section') == s['name']]
         first = ws[0]['id'] if ws else '-'
         last = ws[-1]['id'] if ws else '-'
