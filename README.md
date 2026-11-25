@@ -62,6 +62,17 @@ in a new Terminal window directly. AI graphics live in `ai_graphics/`, which the
 never touches; they reference generated text only via the stable element ids in
 `src/element_ids.json`, and everything time-based anchors to word ids / section names.
 
+## Transcript structure: chapters and pages
+
+A transcript's sections are **chapters** — a `# Chapter` line in `.txt`/`.md` markup, or a
+heading detected in a `.docx` (Heading/Title styles, or a short line whose bold/size/all-caps
+formatting differs from the dominant body text, e.g. `(CONSUMER INTELLIGENCE)` headlines in an
+all-bold document). A chapter too large for one frame is split at generate time into **pages**
+`<chapter> 1..N` (packed at the base font size, split at sentence ends) — pages drive the text
+animations, chapters drive motion graphics: a graphic anchored to `#Chapter` renders on every
+page of the chapter, and a chapter's keep-out zones apply to all its pages. The heading-less
+default chapter of a long transcript may be grouped into topic chapters automatically.
+
 ## Quickstart
 
 ```bash

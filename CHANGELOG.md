@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.8.3] — 2026-11-25 — the four 0.8.2 defects fixed + chapters/pages transcript structure
+
+Fixes (user-reported on 0.8.2 testing):
+- Status line keeps the WHOLE error line — a failed render's hint no longer loses the text
+  after a `#` (RichLog wrapped strips were the cause).
+- Font weight selection sticks: TTC faces report their real OS/2 weight (two parser bugs:
+  offset array at 12+4i, face directory at off+12), the picker is keyed by face identity
+  (`path#index`) and stages the chosen face standalone for @font-face, and the role row shows
+  the picked face's weight. NOTE: existing projects re-pick their fonts once — old saves hold
+  `weight 400, index 0`, which on a .ttc may have been the wrong face.
+- The font cache is rescanned once (parser version 2), so corrected weights replace stale
+  cached entries.
+- An oversized section no longer fails with `does not fit one frame`: chapters auto-split
+  into pages at generate time (see below).
+- Language field: a saved `de`/`en` that the loaded transcript clearly contradicts shows
+  Auto-detect with a visible note (project.json untouched until Save); the detector skips
+  cue labels like `(9er-TEILUNG)` and answers only with clear evidence.
+
+Chapters + pages (user spec): transcript sections are CHAPTERS. A `#` heading starts one;
+.docx files get chapter headings by FORMATTING CONTRAST (short lines whose bold/size/caps
+differ from the dominant body formatting — both the stated bold-headline pattern and the
+inverse all-bold-body + (CAPS)-headline pattern; pStyles still win). Emphasis is now relative
+to the dominant body (D6): an all-bold body is no longer rendered all-emphasised — this
+changes existing renders of all-bold docx files. A chapter too big for one frame is split into
+pages `<chapter> 1..N` at the base font size (sentence-boundary splits, clause punctuation for
+monster sentences), planned by the shared `motion_pipeline/paginate.py` used by both the
+generator and the zone gate; a chapter's zones apply to all its pages, `#Chapter` anchors
+resolve to the chapter's first page, and the single heading-less chapter with ≥ 3 pages is
+grouped into topic chapters. Anything that rendered before renders byte-identically.
+
 ## [0.8.2] — 2026-11-24 — lint-clean sweep + fixture hardening (user: /check-code on the whole codebase)
 
 - Whole-repo lint sweep: ruff 533 -> 0, shellcheck 7 -> 0, biome clean (vendor/ excluded from
