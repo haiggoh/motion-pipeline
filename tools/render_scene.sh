@@ -109,13 +109,52 @@ if [ $DRY = 0 ]; then   # 0.8.4: the disk guard sizes a real render — skip in 
   fi
 fi
 
+# 0.8.6: diagnostic report — $OUT/diagnostic.txt on success AND failure (EXIT trap), skipped on
+# dry-run (plan-only). DIAG_ERR carries the first error; DIAG_GATES accumulates gate results.
+DIAG_ERR=""
+DIAG_GATES=""
+diag() {  # $1 = "OK" | "FAILED rc=N <err>"
+  [ $DRY = 1 ] && return 0
+  "$PY" - "$OUT" "$PROJECT" "$VARIANT" "$MODE" "$FRAMES" "$1" "$DIAG_GATES" <<'PY' || true
+import datetime, json, os, subprocess, sys
+out, proj, variant, mode, frames, status, gates = sys.argv[1:8]
+def ver(args):
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=10)
+        t = (r.stdout or r.stderr).strip()
+        return t.splitlines()[-1] if t else 'missing'
+    except Exception:
+        return 'missing'
+tools = ', '.join(f'{k} {ver(v)}' for k, v in [('hyperframes', ['hyperframes', '--version']),
+                                                ('node', ['node', '--version']),
+                                                ('ffmpeg', ['ffmpeg', '-version']),
+                                                ('python', [sys.executable, '--version'])])
+lines = [f'diagnostic report — {datetime.datetime.now().isoformat(timespec="seconds")}',
+         f'project: {proj}', f'variant: {variant}  mode: {mode}  frames: {frames}',
+         f'status: {status}', f'tools: {tools}', f'gates: {gates or "none run"}']
+if os.path.isdir(out):
+    lines.append('artifacts: ' + (', '.join(sorted(f for f in os.listdir(out)
+                                                      if f.endswith(('.mov', '.mp4')))) or '(none)'))
+ri = os.path.join(out, 'render_info.json')
+if os.path.isfile(ri):
+    lines.append('render_info verify: ' + str(json.load(open(ri)).get('verify')))
+os.makedirs(out, exist_ok=True)
+with open(os.path.join(out, 'diagnostic.txt'), 'w') as f:
+    f.write('\n'.join(lines) + '\n')
+PY
+}
+# shellcheck disable=SC2154  # rc is assigned inside the trap string, evaluated at fire time
+trap 'rc=$?; [ $rc -ne 0 ] && diag "FAILED rc=$rc $DIAG_ERR"' EXIT
+
 # zone gate BEFORE any capture (Task 13): recomputes the layout; a failure stops before minutes
 # are spent. exit 6.
 if [ $DRY = 0 ] && [ $STAGE = 0 ]; then
   if ! "$PY" "$TOOLS/check_zone.py" --project "$PROJECT" --variant "$VARIANT"; then
     echo "zone gate: a text block intersects an active keep-out zone — see above (exit 6)" >&2
+    DIAG_ERR='zone gate: text block intersects an active keep-out zone'
     exit 6
   fi
+  DIAG_GATES='zone gate: OK'
 fi
 
 for scene in "${SCENES[@]}"; do
@@ -155,6 +194,7 @@ for scene in "${SCENES[@]}"; do
   # Task 11 font gate: a role face that did not load is logged by the page as MP_FONT_MISSING
   if grep -q 'MP_FONT_MISSING' "$work/render.log" 2>/dev/null; then
     missing="$(grep -o 'MP_FONT_MISSING .*' "$work/render.log" | head -1)"
+    DIAG_ERR="font gate: $missing"
     echo "font gate: $missing — the embedded face did not load (see $work/render.log)" >&2
     exit 5
   fi
@@ -216,9 +256,13 @@ PY
 )
     if [ -n "$overlap" ]; then
       echo "chroma gate skipped: strip overlaps zone/AI graphic ($overlap)"
+      DIAG_GATES="$DIAG_GATES; chroma $name: skipped (strip overlap)"
     elif ! "$PY" "$TOOLS/check_chroma_steps.py" --video "$OUT/$name.mov" --frame 0 --strip "$strip" --max-step 2.0; then
       echo "chroma gate FAILED for $name (strip $strip) — master kept in $OUT, render_info not VERIFIED (exit 6)" >&2
+      DIAG_ERR="chroma gate FAILED for $name"
       exit 6
+    else
+      DIAG_GATES="$DIAG_GATES; chroma $name: OK"
     fi
   fi
   rm -rf "$work"  # no video-only copy is ever kept (user 2026-11-16)
@@ -271,6 +315,7 @@ PY
 [ $DRY = 1 ] && { echo "[render_scene] dry run complete"; exit 0; }
 "$PY" "$TOOLS/render_info.py" finish --dir "$OUT" --verify VERIFIED >/dev/null
 echo "[render_scene] DONE $OUT"
+diag "OK"   # 0.8.6: write $OUT/diagnostic.txt on success too
 # 0.8.5 release UX: list the render's artifacts so the user can find master/preview/XML
 echo "[render_scene] artifacts in $OUT:"
 for f in "$OUT"/*.mov; do [ -e "$f" ] && echo "  master: $(basename "$f")"; done

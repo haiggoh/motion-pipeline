@@ -144,6 +144,45 @@ def test_clean_render_lists_artifacts_at_the_end(tmp_path):
     assert 'master: scene_00_s.mov' in r.stdout, r.stdout[-400:]
 
 
+# ---- 0.8.6: render diagnostic report (waypoint motion-pipeline-0-8-4 remainder) ----
+
+def test_clean_render_writes_diagnostic_report(tmp_path):
+    """After a successful render, $OUT/diagnostic.txt lists tool versions, gates, artifacts."""
+    p = make_project(tmp_path / 'diag')
+    b, _calls = make_bin(tmp_path)
+    r = run_render(p, bin_dir=b)
+    assert r.returncode == 0, (r.returncode, r.stderr[-400:])
+    diag = os.path.join(p, 'renders', 'default', 'diagnostic.txt')
+    assert os.path.isfile(diag), 'no diagnostic.txt written'
+    text = open(diag).read()
+    assert 'status: OK' in text
+    for tool in ('hyperframes', 'ffmpeg', 'node', 'python'):
+        assert tool in text, f'{tool} version missing from diagnostic.txt'
+    assert 'scene_00_s.mov' in text and 'zone gate: OK' in text, text[:400]
+
+
+def test_failed_render_diagnostic_names_the_first_error(tmp_path):
+    """A zone-gate failure (exit 6) still writes diagnostic.txt with status FAILED + the gate."""
+    p = make_project(tmp_path / 'diagf',
+                     zones=[{'section': 'S', 'rect': [0, 0, 1920, 880], 'aspect': '16:9'}])
+    b, _calls = make_bin(tmp_path)
+    r = run_render(p, bin_dir=b)
+    assert r.returncode == 6, (r.returncode, r.stderr[-300:])
+    diag = os.path.join(p, 'renders', 'default', 'diagnostic.txt')
+    assert os.path.isfile(diag), 'no diagnostic.txt on failure'
+    text = open(diag).read()
+    assert 'status: FAILED' in text and 'zone gate' in text, text[:400]
+
+
+def test_dry_run_writes_no_diagnostic(tmp_path):
+    """Dry-run stays plan-only: no diagnostic.txt either."""
+    p = make_project(tmp_path / 'diagd')
+    out = tmp_path / 'dry-out'
+    r = _run(p, ['--dry-run', '--out', str(out)])
+    assert r.returncode == 0
+    assert not os.path.exists(os.path.join(str(out), 'diagnostic.txt'))
+
+
 # ---- 0.8.4 hardening (waypoint motion-pipeline-0-8-4, observer items 2, verified at a185497) ----
 
 def _run(p, args, bin_dir=None):
