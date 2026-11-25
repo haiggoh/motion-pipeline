@@ -151,3 +151,65 @@ def test_runshapes_runner_in_node(tmp_path):
     )
     r = subprocess.run([node, '-e', probe], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-1500:]
+
+
+def _node_probe(tmp_path, body):
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('node not on PATH')
+    probe = (
+        'var errs = []; console.error = function (m) { errs.push(String(m)); };\n'
+        'var window = {MP: {tl: null, at: function (r, o) { return typeof r === "number" ? r + (o || 0) : 0; },'
+        ' timings: {}, zones: [[10, 20, 300, 100]]}};\n'
+        'var document = {createElement: function (t) { return {tag: t, style: {}, innerHTML: "", appendChild: function () {}}; },'
+        ' getElementById: function () { return {appendChild: function () {}}; }};\n'
+        'var gsap = {timeline: function () { var tl = {calls: [],'
+        ' to: function () { tl.calls.push(["to"].concat([].slice.call(arguments))); return tl; },'
+        ' fromTo: function () { tl.calls.push(["fromTo"].concat([].slice.call(arguments))); return tl; }};'
+        ' return tl; }};\n'
+        'window.MP.tl = gsap.timeline();\n'
+        'var assert = require("assert");\n'
+        + open(os.path.join(ROOT, 'motion_pipeline', 'graphics', 'mp_lib.js')).read() + '\n'
+        'var layer = {appendChild: function (e) {}};\n'
+        + body +
+        '\nconsole.log("ERRS:" + JSON.stringify(errs));\n'
+    )
+    return subprocess.run([node, '-e', probe], capture_output=True, text=True)
+
+
+def test_runshapes_inzone_uses_named_anchor(tmp_path):
+    """0.8.4: inZone resolves a named `anchor` target like every other step (was: only
+    p.targets/cur, so an anchored inZone silently did nothing)."""
+    r = _node_probe(tmp_path, (
+        'var inzone = []; var realInZone = window.MP.inZone;\n'
+        'window.MP.inZone = function (el, z) { inzone.push([el, z]); return realInZone(el, z); };\n'
+        'var made = window.MP.runShapes([\n'
+        '  {type: "el", at: 0, anchor: "box", props: {tag: "div"}},\n'
+        '  {type: "el", at: 0, props: {tag: "span"}},\n'   # cur is now made[1]
+        '  {type: "inZone", at: 0, anchor: "box", props: {zone: 0}},\n'
+        '], {layer: layer});\n'
+        'assert.strictEqual(made.length, 2);\n'
+        'assert.strictEqual(inzone.length, 1, "inZone must run once: " + inzone.length);\n'
+        'assert.strictEqual(inzone[0][0], made[0], "inZone must target the NAMED element, not cur");\n'
+        'assert.strictEqual(inzone[0][1], 0);\n'
+    ))
+    assert r.returncode == 0, r.stderr[-1500:]
+
+
+def test_runshapes_unknown_anchor_fails_named(tmp_path):
+    """0.8.4: an unknown `anchor` must fail with MP_SHAPES_NO_ANCHOR and skip the step —
+    never silently fall back to the current element."""
+    r = _node_probe(tmp_path, (
+        'var made = window.MP.runShapes([\n'
+        '  {type: "el", at: 0, anchor: "box", props: {tag: "div"}},\n'
+        '  {type: "enter", at: 1, anchor: "ghost", props: {d: 0.2}},\n'
+        '], {layer: layer});\n'
+        'assert.strictEqual(window.MP.tl.calls.length, 0, "no tween may land on the fallback target: " + window.MP.tl.calls.length);\n'
+    ))
+    assert r.returncode == 0, r.stderr[-1500:]
+    assert 'MP_SHAPES_NO_ANCHOR ghost' in r.stdout, r.stdout[-500:]
+
+
+def test_runshapes_comment_says_at_not_at_off():
+    src = open(os.path.join(ROOT, 'motion_pipeline', 'graphics', 'mp_lib.js')).read()
+    assert 'at_off' not in src, 'stale props.at_off reference in mp_lib.js'

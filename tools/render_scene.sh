@@ -57,10 +57,15 @@ if sys.argv[2] not in p.get('variants', []):
 PY
 
 OUT="${OUT:-$PROJECT/renders/$VARIANT}"   # --out DIR: custom render output directory
-mkdir -p "$OUT"
-if [ $DRY = 0 ] && [ $STAGE = 0 ]; then
-  command -v hyperframes >/dev/null 2>&1 || { echo "hyperframes not on PATH (source tools/env.sh)" >&2; exit 3; }
-  HFV="$(hyperframes --version 2>/dev/null | tail -1)"
+[ $DRY = 1 ] || mkdir -p "$OUT"   # 0.8.4: --dry-run prints the plan only — no filesystem changes
+
+# 0.8.4: --fresh runs FIRST (before the toolchain probe and the resume check) — its cleanup
+# removes a stale render_info.json, so the resume refusal can no longer block the fresh run
+# that would fix it. Masters are .mov since Task 15, so the guard checks *.mov (old .mp4
+# masters are still refused further below).
+if [ $FRESH = 1 ]; then
+  if ls "$OUT"/*.mov >/dev/null 2>&1; then echo "--fresh: masters exist in $OUT — move them away first (never deleted here)" >&2; exit 4; fi
+  [ $DRY = 1 ] || rm -rf "$OUT"/work_* "$OUT"/.work_* "$OUT"/.stage_* "$OUT"/chunks_* "$OUT"/.chunks_* "$OUT"/.raw_* "$OUT"/.pl_* "$OUT"/.concat_* "$OUT"/.render_*.log "$OUT/render_info.json"
 fi
 
 # resume refusal: an existing render_info.json without the intermediate marker (or with
@@ -68,9 +73,10 @@ fi
 if [ -f "$OUT/render_info.json" ] && [ $DRY = 0 ] && [ $STAGE = 0 ]; then
   "$PY" "$TOOLS/render_info.py" check --dir "$OUT" --rev "$VARIANT" --arm pinned --hf "${HFV:-0.8.31}" --intermediate "$INTERMEDIATE" || exit 4
 fi
-if [ $FRESH = 1 ]; then
-  if ls "$OUT"/*.mp4 >/dev/null 2>&1; then echo "--fresh: masters exist in $OUT — move them away first (never deleted here)" >&2; exit 4; fi
-  [ $DRY = 1 ] || rm -rf "$OUT"/work_* "$OUT"/.work_* "$OUT"/.stage_* "$OUT"/chunks_* "$OUT"/.chunks_* "$OUT"/.raw_* "$OUT"/.pl_* "$OUT"/.concat_* "$OUT"/.render_*.log "$OUT/render_info.json"
+
+if [ $DRY = 0 ] && [ $STAGE = 0 ]; then
+  command -v hyperframes >/dev/null 2>&1 || { echo "hyperframes not on PATH (source tools/env.sh)" >&2; exit 3; }
+  HFV="$(hyperframes --version 2>/dev/null | tail -1)"
 fi
 
 # Task 12: scene order comes from src/scenes.json (written by the generator), not the glob
@@ -94,11 +100,13 @@ frames = sum(max(1, math.ceil((s['end'] - s['start']) * p['fps']))
 print(max(1, int(frames * w * h * 1.4 / (1920 * 1080) * 2)))
 PY
 )
-free_kb=$(df -k "$OUT" | tail -1 | awk '{print $4}')
-need_kb=$(( need_mb * 1024 ))
-if [ "$free_kb" -lt "$need_kb" ]; then
-  echo "disk guard: free $(( free_kb / 1024 )) MB < needed $(( need_kb / 1024 )) MB for the intermediates — free space and retry" >&2
-  exit 3
+if [ $DRY = 0 ]; then   # 0.8.4: the disk guard sizes a real render — skip in dry-run ($OUT may not exist)
+  free_kb=$(df -k "$OUT" | tail -1 | awk '{print $4}')
+  need_kb=$(( need_mb * 1024 ))
+  if [ "$free_kb" -lt "$need_kb" ]; then
+    echo "disk guard: free $(( free_kb / 1024 )) MB < needed $(( need_kb / 1024 )) MB for the intermediates — free space and retry" >&2
+    exit 3
+  fi
 fi
 
 # zone gate BEFORE any capture (Task 13): recomputes the layout; a failure stops before minutes
@@ -112,10 +120,11 @@ fi
 
 for scene in "${SCENES[@]}"; do
   name="$(basename "$scene" .html)"
-  work="$OUT/work_$name"; rm -rf "$work"; mkdir -p "$work/frames"
+  work="$OUT/work_$name"
+  [ $DRY = 1 ] || { rm -rf "$work"; mkdir -p "$work/frames"; }   # 0.8.4: dry-run touches nothing
   echo "[render_scene] $name mode=$MODE frames=$FRAMES"
   if [ $DRY = 1 ]; then
-    echo "  would: hyperframes render $scene --format png-sequence -> $work/frames -> FFV1 bgr0 $work/raw.mkv -> master $OUT/$name.mp4 (yuv422p10le bt709)"
+    echo "  would: hyperframes render $scene --format png-sequence -> $work/frames -> FFV1 bgr0 $work/raw.mkv -> master $OUT/$name.mov (yuv422p10le bt709)"
     continue
   fi
   [ $STAGE = 1 ] || "$PY" "$TOOLS/render_info.py" start --dir "$OUT" --rev "$VARIANT" --colour blue --parts "$name" --arm pinned --hf "$HFV" --intermediate "$INTERMEDIATE" --content "$PROJECT" >/dev/null

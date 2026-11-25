@@ -512,6 +512,8 @@ def render(project_dir, mode, variant=None, out=None, dry_run=False, full_master
         rc = subprocess.call(cmd, env=env)
         if rc:
             return rc
+        if dry_run:
+            continue   # 0.8.4: a dry run writes NO artifacts (render_scene printed the plan only)
         scenes = load_json(os.path.join(work, 'src', 'scenes.json'))
         audio_mux.write_timeline(os.path.join(vout, 'timeline.json'), scenes, p['fps'])
         _write_sequence(project_dir, p, vout, v)  # Task 15c: Premiere-importable FCP 7 XML

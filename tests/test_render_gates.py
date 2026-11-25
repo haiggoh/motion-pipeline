@@ -132,3 +132,51 @@ def test_disk_guard_scales_with_duration(tmp_path):
     assert r.returncode == 3, (r.returncode, r.stderr[-400:])
     assert 'disk guard' in r.stderr
     assert open(calls).read().strip() == '', 'no render started'
+
+
+# ---- 0.8.4 hardening (waypoint motion-pipeline-0-8-4, observer items 2, verified at a185497) ----
+
+def _run(p, args, bin_dir=None):
+    env = dict(os.environ)
+    env['PATH'] = (bin_dir + ':' if bin_dir else '') + VENV_BIN + ':' + env['PATH']
+    cmd = ['bash', os.path.join(ROOT, 'tools', 'render_scene.sh'),
+           '--project', p, '--variant', 'default', '--mode', 'test'] + args
+    return subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+
+def test_dry_run_writes_nothing(tmp_path):
+    """--dry-run prints the plan only: the output dir (and work dirs) must NOT be created."""
+    p = make_project(tmp_path / 'dry')
+    out = tmp_path / 'fresh-out'          # does not exist yet
+    r = _run(p, ['--dry-run', '--out', str(out)])
+    assert r.returncode == 0, (r.returncode, r.stderr[-400:])
+    assert 'would:' in r.stdout
+    assert not out.exists(), 'dry-run created the output dir/work dirs'
+
+
+def test_fresh_refuses_when_mov_masters_exist(tmp_path):
+    """Masters are .mov since Task 15 — --fresh must guard on *.mov, never delete them."""
+    p = make_project(tmp_path / 'fr')
+    out = tmp_path / 'out'
+    out.mkdir()
+    (out / 'scene_00_s.mov').write_bytes(b'fake master')
+    r = _run(p, ['--fresh', '--out', str(out)])
+    assert r.returncode == 4 and 'masters exist' in r.stderr, (r.returncode, r.stderr[-300:])
+    assert (out / 'scene_00_s.mov').exists(), '--fresh deleted a master'
+
+
+def test_fresh_recovers_a_stale_resume_state(tmp_path):
+    """A render_info.json that fails the resume check blocks a plain run (exit 4) — but
+    --fresh cleans it first, so the fresh run gets past the resume refusal."""
+    p = make_project(tmp_path / 'res')
+    out = tmp_path / 'out'
+    out.mkdir()
+    (out / 'render_info.json').write_text('{"rev": "other-variant"}')   # incompatible
+    r_plain = _run(p, ['--out', str(out)])
+    assert r_plain.returncode == 4, (r_plain.returncode, r_plain.stderr[-200:])
+    b, _calls = make_bin(tmp_path)
+    r_fresh = _run(p, ['--fresh', '--out', str(out)], bin_dir=b)
+    assert r_fresh.returncode == 0, (r_fresh.returncode, r_fresh.stderr[-300:])
+    # the stale file was cleaned (not resumed into) — the fresh render rewrote it for 'default'
+    info = json.loads((out / 'render_info.json').read_text())
+    assert info.get('rev') == 'default', info
