@@ -45,7 +45,7 @@ SLIDE_UP = TextStyle(
     tween_js=lambda: (
         "for (const el of document.querySelectorAll('.line span')) {\n"
         "  const t = T[el.dataset.id];\n"
-        "  tl.to(el, {duration: 0.35, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'});\n"
+        "  tl.to(el, {duration: 0.35, y: '0%', opacity: 1, ease: 'power3.out'}, t.start);\n"
         "}"
     ),
 )
@@ -58,7 +58,7 @@ SENTENCE_PER_SCREEN = TextStyle(
     tween_js=lambda: (
         "for (const ln of document.querySelectorAll('.line')) {\n"
         "  const t = T[ln.querySelector('span').dataset.id];\n"
-        "  tl.to(ln, {duration: 0.5, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'});\n"
+        "  tl.to(ln, {duration: 0.5, y: '0%', opacity: 1, ease: 'power3.out'}, t.start);\n"
         "}"
     ),
 )
@@ -71,7 +71,7 @@ WORDS_APPEAR = TextStyle(
     tween_js=lambda: (
         "for (const el of document.querySelectorAll('.line span')) {\n"
         "  const t = T[el.dataset.id];\n"
-        "  tl.to(el, {duration: 0.25, opacity: 1, delay: t.start});\n"
+        "  tl.to(el, {duration: 0.25, opacity: 1}, t.start);\n"
         "}"
     ),
 )
@@ -84,7 +84,7 @@ ONE_WORD_CENTER = TextStyle(
     tween_js=lambda: (
         "for (const el of document.querySelectorAll('.line span')) {\n"
         "  const t = T[el.dataset.id];\n"
-        "  tl.to(el, {duration: 0.4, scale: 1, opacity: 1, delay: t.start, ease: 'back.out(1.6)'});\n"
+        "  tl.to(el, {duration: 0.4, scale: 1, opacity: 1, ease: 'back.out(1.6)'}, t.start);\n"
         "}"
     ),
 )
@@ -99,7 +99,7 @@ TYPEWRITER = TextStyle(
         "for (const el of document.querySelectorAll('.line span')) {\n"
         "  const t = T[el.dataset.id];\n"
         "  const k = el.dataset.k ? +el.dataset.k : 0;\n"
-        "  tl.to(el, {duration: 0.03, opacity: 1, delay: t.start + k * 0.04 + rnd() * 0.02});\n"
+        "  tl.to(el, {duration: 0.03, opacity: 1}, t.start + k * 0.04 + rnd() * 0.02);\n"
         "}"
     ),
 )

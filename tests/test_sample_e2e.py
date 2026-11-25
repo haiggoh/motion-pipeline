@@ -102,9 +102,10 @@ def test_real_test_render_and_chroma_gate(sample_project):
                            'stream=profile,pix_fmt,nb_read_frames', '-of', 'csv=p=0', master],
                           capture_output=True, text=True)
     assert 'High 4:2:2' in prof.stdout and 'yuv422p10le' in prof.stdout, prof.stdout
-    # chroma gate on the steepest background strip of frame 15 (scan the top 2/3 of the
-    # frame, left half — text block sits bottom-left; the banded/8-bit discriminant is
-    # proven at page level in test_background.py::test_banded_mode_fails_chroma_gate)
+    # chroma gate on the steepest background strip (scan the top strip y<140px — above every
+    # candidate text position (place_text_block starts at 0.15H=162) and the card title is
+    # gone by 2.0 s, so this region is content-free at ANY frame; 0.8.5 L0 moved word tweens
+    # to their true t.start, so words are already visible in the lower region at 2.0 s)
     import numpy as np
     # sample a frame that EXISTS in the trimmed master: the --frames window above is ~13
     # output frames at the sample's fps, so the old hardcoded n=15 read nothing (empty
@@ -118,10 +119,10 @@ def test_real_test_render_and_chroma_gate(sample_project):
     cb = buf[w * h:w * h + (w // 2) * h].reshape(h, w // 2).astype(float)
     best, best_x = 0.0, 0
     for x0 in range(0, 460, 20):
-        tot = float(np.abs(np.diff(cb[0:700, x0:x0 + 300].mean(axis=0))).sum())
+        tot = float(np.abs(np.diff(cb[0:140, x0:x0 + 300].mean(axis=0))).sum())
         if tot > best:
             best, best_x = tot, x0
-    strip = f'{best_x * 2},{best_x * 2 + 600},0,700'
+    strip = f'{best_x * 2},{best_x * 2 + 600},0,140'
     # the gate frame must exist in the TRIMMED master (the --frames window is ~13 frames at
     # the sample's fps — the old hardcoded 15 was past the end: "decode failed … 0 bytes").
     # Frame 0 of the trimmed output is already past the intro card (2.0 s > 1.6 s fade).

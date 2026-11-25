@@ -271,3 +271,7 @@ PY
 [ $DRY = 1 ] && { echo "[render_scene] dry run complete"; exit 0; }
 "$PY" "$TOOLS/render_info.py" finish --dir "$OUT" --verify VERIFIED >/dev/null
 echo "[render_scene] DONE $OUT"
+# 0.8.5 release UX: list the render's artifacts so the user can find master/preview/XML
+echo "[render_scene] artifacts in $OUT:"
+for f in "$OUT"/*.mov; do [ -e "$f" ] && echo "  master: $(basename "$f")"; done
+for f in "$OUT"/*_preview.mp4 "$OUT"/*_sequence.xml "$OUT"/timeline.json; do [ -e "$f" ] && echo "  $(basename "$f")"; done

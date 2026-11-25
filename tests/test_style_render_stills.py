@@ -75,3 +75,31 @@ def test_style_render_still(stills, name):
     if name != text_styles.DEFAULT:
         ref = a(stills[text_styles.DEFAULT][230])
         assert (f230 ^ ref).mean() > 1.0, f'{name}: landed frame equals slide-up — style not rendered'
+
+
+def test_short_test_render_shows_words(tmp_path):
+    """0.8.5 L0 T6: with positional tweens, a 60-frame test render (--frames 0-59, the
+    render-test cap) must show the words — frame 45 differs from frame 0 in the text
+    region. Pre-L0 this showed only the card (gsap appended the delay-carrying word
+    tweens after the card tweens)."""
+    import numpy as np
+    from PIL import Image
+
+    pd = make_project(str(tmp_path / 'proj'))
+    generate.generate(pd)
+    out = os.path.join(pd, 'renders', 'short')
+    r = subprocess.run(['bash', os.path.join(ROOT, 'tools', 'render_scene.sh'),
+                        '--project', pd, '--variant', 'default', '--mode', 'test',
+                        '--frames', '0-59', '--out', out],
+                       capture_output=True, text=True, timeout=900)
+    assert r.returncode == 0, (r.returncode, r.stderr[-600:])
+    master = os.path.join(out, next(f for f in os.listdir(out) if f.endswith('.mov')))
+    f0 = _frame(master, 0, str(tmp_path / 'f0.png'))
+    f45 = _frame(master, 45, str(tmp_path / 'f45.png'))
+
+    def a(p):
+        return np.asarray(Image.open(p).convert('RGB'), dtype=np.int16)
+
+    d0, d45 = a(f0), a(f45)
+    diff = (d0 ^ d45)[400:900, 100:1800].mean()   # text block region at 16:9
+    assert diff > 0.5, f'frame 45 == frame 0 in the text region (mean xor {diff}) — words not visible in a 60-frame render'

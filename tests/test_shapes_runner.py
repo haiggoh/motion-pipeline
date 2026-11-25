@@ -113,8 +113,8 @@ def test_generate_emits_runshapes_for_shapes_entry(tmp_path):
     assert 'MP.runShapes(' in pages, 'shapes entry must run via MP.runShapes'
     assert 'wshapes' in pages
     assert pages.index('src="mp_lib.js"') < pages.index('MP.runShapes(')
-    assert 'document.fonts.ready' in pages, \
-        'shapes script must arm after the page font gate (the page tweens use vars delay)'
+    assert 'document.fonts.ready' not in pages, \
+        '0.8.5 L0: page tweens are positional, so the shapes script must NOT wait on the font gate'
 
 
 def test_runshapes_runner_in_node(tmp_path):

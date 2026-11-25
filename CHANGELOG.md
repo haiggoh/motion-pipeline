@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.5] — 2026-11-25 — L0 page tweens to absolute gsap positions + render artifact listing
+
+- The page's own tweens (card in/out, the per-word style loop in all five text styles, the
+  dimming tweens) now go on the registered scene timeline at EXPLICIT ABSOLUTE positions
+  (gsap's positional argument) instead of vars `delay`, which gsap appended at the timeline
+  end — so append order no longer decides where words land, and a 60-frame test render
+  (--frames 0-59) now actually shows the words (verified by a new rendered-frame test:
+  frame 45 differs from frame 0 in the text region). Golden fixture regenerated deliberately
+  in its own commit — the diff is only `delay: X` -> positional `X` on the same tweens at the
+  same absolute times. The `document.fonts.ready` arming wrapper for declarative `shapes:`
+  entries is dropped (page tweens are positional now); a node probe pins order-independence.
+- `render_scene.sh` lists the render's artifacts (masters, preview, sequence XML, timeline)
+  after DONE.
+
 ## [0.8.4] — 2026-11-25 — render-script hardening + shapes-runner anchor fixes
 
 - `tools/render_scene.sh --dry-run` is plan-only now: it no longer creates the output or work

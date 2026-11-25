@@ -134,6 +134,16 @@ def test_disk_guard_scales_with_duration(tmp_path):
     assert open(calls).read().strip() == '', 'no render started'
 
 
+def test_clean_render_lists_artifacts_at_the_end(tmp_path):
+    """0.8.5 release UX: after DONE, the log lists the render's artifacts (masters etc.)."""
+    p = make_project(tmp_path / 'art')
+    b, _calls = make_bin(tmp_path)
+    r = run_render(p, bin_dir=b)
+    assert r.returncode == 0, (r.returncode, r.stderr[-400:])
+    assert 'DONE' in r.stdout and 'artifacts in' in r.stdout, r.stdout[-400:]
+    assert 'master: scene_00_s.mov' in r.stdout, r.stdout[-400:]
+
+
 # ---- 0.8.4 hardening (waypoint motion-pipeline-0-8-4, observer items 2, verified at a185497) ----
 
 def _run(p, args, bin_dir=None):

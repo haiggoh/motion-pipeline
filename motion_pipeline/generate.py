@@ -357,16 +357,12 @@ def generate(project_path, variant='default', max_seconds=None):
              f'data-anchor="{g["element"]}"></script>\n')
             if (g.get('file') or '').endswith('.js') else
             (f'<script data-ai-id="{g["id"]}" data-anchor="{g["element"]}">\n'
-             # arm AFTER the page's font-gated tweens (they use vars delay and would land
-             # after ours if we extended the timeline end first — the dogfood arming pattern)
-             f'(() => {{ let armed = false; const arm = () => {{ if (armed) return; armed = true;\n'
-             f'  MP.runShapes({json.dumps(g["shapes"])}, '
+             # 0.8.5 (L0): the page's own tweens are positional now, so no arming wrapper —
+             # run the shapes directly; MP and the timeline are defined above
+             f'MP.runShapes({json.dumps(g["shapes"])}, '
              f'{{ layer: document.querySelector(\'[data-ai-id="{g["id"]}"]\'), '
-             f'sceneName: {sec_name!r} }}); }};\n'
-             f'  if (document.fonts?.ready) document.fonts.ready.then(arm);\n'
-             f'  else if (document.readyState === "complete") arm();\n'
-             f'  else window.addEventListener("load", arm, {{ once: true }});\n'
-             f'}})();\n</script>\n')
+             f'sceneName: {sec_name!r} }});\n'
+             f'</script>\n')
             for g in mine if (g.get('file') or '').endswith('.js') or 'shapes' in g)
         layers = sorted({g['layer'] for g in mine
                          if (g.get('file') or '').endswith('.html') or 'shapes' in g})
@@ -401,7 +397,7 @@ def generate(project_path, variant='default', max_seconds=None):
         for li in range(len(lines) - 1):
             t0 = rel[lines[li + 1][0][0]['id']]['start']
             dim_js.append(f"tl.to(document.querySelectorAll('.line[data-line=\"{li}\"] span'), "
-                          f"{{color: '{palette['secondary_text']}', duration: 0.3, delay: {t0:.3f}}});")
+                          f"{{color: '{palette['secondary_text']}', duration: 0.3}}, {t0:.3f});")
         dim_js_s = '\n'.join(dim_js)
         page = f"""<!doctype html><html><head><meta charset="utf-8"><style>
 {font_css}
@@ -462,8 +458,8 @@ window.MP = {{
   }}
 {bg_js}
 const card = document.getElementById('{card_id}');
-tl.to(card, {{duration: 0.6, opacity: 1, ease: 'power2.out'}});
-tl.to(card, {{duration: 0.4, opacity: 0, delay: 1.2, ease: 'power2.in'}});
+tl.to(card, {{duration: 0.6, opacity: 1, ease: 'power2.out'}}, 0);
+tl.to(card, {{duration: 0.4, opacity: 0, ease: 'power2.in'}}, 1.2);
 {tween_js}
 {dim_js_s}
 }})();

@@ -121,13 +121,13 @@ function bgTick(){ paintBg(performance.now()/1000); }
 if (window.gsap && gsap.ticker) { gsap.ticker.add(bgTick); } else { const loop=()=>{ bgTick(); requestAnimationFrame(loop); }; loop(); }
 
 const card = document.getElementById('card-explore');
-tl.to(card, {duration: 0.6, opacity: 1, ease: 'power2.out'});
-tl.to(card, {duration: 0.4, opacity: 0, delay: 1.2, ease: 'power2.in'});
+tl.to(card, {duration: 0.6, opacity: 1, ease: 'power2.out'}, 0);
+tl.to(card, {duration: 0.4, opacity: 0, ease: 'power2.in'}, 1.2);
 for (const el of document.querySelectorAll('.line span')) {
   const t = T[el.dataset.id];
-  tl.to(el, {duration: 0.35, y: '0%', opacity: 1, delay: t.start, ease: 'power3.out'});
+  tl.to(el, {duration: 0.35, y: '0%', opacity: 1, ease: 'power3.out'}, t.start);
 }
-tl.to(document.querySelectorAll('.line[data-line="0"] span'), {color: '#a6b0c8', duration: 0.3, delay: 3.007});
+tl.to(document.querySelectorAll('.line[data-line="0"] span'), {color: '#a6b0c8', duration: 0.3}, 3.007);
 })();
 </script>
 </body></html>

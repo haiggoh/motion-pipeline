@@ -91,7 +91,7 @@ def test_reveal_onset_equals_word_start(d):
     for wid, t in emb.items():
         assert t['start'] == tmap[wid]['start']
         assert t['end'] == tmap[wid]['end']
-    assert 'delay: t.start' in intro
+    assert '}, t.start);' in intro  # 0.8.5 L0: word tweens at explicit absolute positions
 
 
 def test_emphasis_words_heavier(d):
