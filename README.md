@@ -73,7 +73,22 @@ animations, chapters drive motion graphics: a graphic anchored to `#Chapter` ren
 page of the chapter, and a chapter's keep-out zones apply to all its pages. The heading-less
 default chapter of a long transcript may be grouped into topic chapters automatically.
 
-## Quickstart
+## Install from Homebrew (recommended)
+
+```bash
+brew tap haiggoh/tap
+brew install motion-pipeline        # haiggoh/tap/motion-pipeline, e.g. 0.8.6
+motion-pipeline --version
+motion-pipeline --setup-render       # pinned render toolchain into the user cache (dry-run first with --dry-run)
+motion-pipeline                     # the interactive project menu (steps 0-7)
+```
+
+The tap formula is bumped automatically on every release (url + sha256 of the release asset),
+so `brew upgrade motion-pipeline` picks up new versions. The formula also appears in the
+get-haiggoh catalog (`catalog/related-tools.json`), so the get-haiggoh interactive menu lists
+motion-pipeline as a runnable entry once installed.
+
+## Quickstart (from a checkout)
 
 ```bash
 brew install fnm uv ffmpeg
