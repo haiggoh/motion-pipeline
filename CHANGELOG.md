@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.6] — 2026-11-26 — render diagnostic report
+
+- Every render now writes `renders/<variant>/diagnostic.txt` — timestamp, project/variant/mode/
+  frames, tool versions (hyperframes, node, ffmpeg, python), gate results (zone, per-scene
+  chroma, font), artifact list, render_info verify state, and on failure the FIRST error with
+  the exit code (written via an EXIT trap, so failed renders produce it too). Dry-run stays
+  plan-only and writes nothing, diagnostic included.
+
 ## [0.8.5] — 2026-11-25 — L0 page tweens to absolute gsap positions + render artifact listing
 
 - The page's own tweens (card in/out, the per-word style loop in all five text styles, the

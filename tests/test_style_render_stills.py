@@ -73,8 +73,10 @@ def test_style_render_still(stills, name):
     assert (f0 ^ f230).mean() > 0.5, f'{name}: landed frame == frame 0 — text never appeared (tween_js empty?)'
     assert (f0 ^ f120).mean() > 0.5 or (f120 ^ f230).mean() > 0.5, f'{name}: no visible motion'
     if name != text_styles.DEFAULT:
-        ref = a(stills[text_styles.DEFAULT][230])
-        assert (f230 ^ ref).mean() > 1.0, f'{name}: landed frame equals slide-up — style not rendered'
+        # 0.8.5 L0: tweens are positional now, so every style CONVERGES at the landed frame —
+        # style discrimination must be measured mid-animation (f120), not at f230
+        ref = a(stills[text_styles.DEFAULT][120])
+        assert (f120 ^ ref).mean() > 1.0, f'{name}: mid frame equals slide-up — style not rendered'
 
 
 def test_short_test_render_shows_words(tmp_path):
